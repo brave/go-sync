@@ -1,0 +1,78 @@
+{
+  "TableName": "client-entity-token-dev",
+  "KeySchema": [
+    {
+      "KeyType": "HASH",
+      "AttributeName": "ClientID"
+    },
+    {
+      "KeyType": "RANGE",
+      "AttributeName": "ID"
+    }
+  ],
+  "GlobalSecondaryIndexes": [
+    {
+      "IndexName": "ClientIDDataTypeMtimeIndex",
+      "KeySchema": [
+        {
+          "KeyType": "HASH",
+          "AttributeName": "ClientID"
+        },
+        {
+          "KeyType": "RANGE",
+          "AttributeName": "DataTypeMtime"
+        }
+      ],
+      "Projection": {
+        "ProjectionType": "INCLUDE",
+        "NonKeyAttributes": ["Folder"]
+      },
+      "ProvisionedThroughput": {
+        "ReadCapacityUnits": 1,
+        "WriteCapacityUnits": 1
+      }
+    },
+    {
+      "IndexName": "IDExpireAtIndex",
+      "KeySchema": [
+        {
+          "KeyType": "HASH",
+          "AttributeName": "ID"
+        },
+        {
+          "KeyType": "RANGE",
+          "AttributeName": "ExpireAt"
+        }
+      ],
+      "Projection": {
+        "ProjectionType": "KEYS_ONLY"
+      },
+      "ProvisionedThroughput": {
+        "ReadCapacityUnits": 1,
+        "WriteCapacityUnits": 1
+      }
+    }
+  ],
+  "AttributeDefinitions": [
+    {
+      "AttributeName": "ClientID",
+      "AttributeType": "S"
+    },
+    {
+      "AttributeName": "ID",
+      "AttributeType": "S"
+    },
+    {
+      "AttributeName": "DataTypeMtime",
+      "AttributeType": "S"
+    },
+    {
+      "AttributeName": "ExpireAt",
+      "AttributeType": "N"
+    }
+  ],
+  "ProvisionedThroughput": {
+    "ReadCapacityUnits": 1,
+    "WriteCapacityUnits": 1
+  }
+}
