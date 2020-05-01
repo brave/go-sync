@@ -1,0 +1,39 @@
+version: '3.4'
+
+networks:
+  sync:
+    driver: bridge
+
+services:
+  dev:
+    build:
+      context: .
+      target: builder
+    depends_on:
+      - dynamo-local
+    networks:
+      - sync
+    environment:
+      - AWS_ACCESS_KEY_ID=#
+      - AWS_SECRET_ACCESS_KEY=#
+  web:
+    build:
+      context: .
+      target: artifact
+    ports:
+      - "8295:8295"
+    depends_on:
+      - dynamo-local
+    networks:
+      - sync
+    environment:
+      - AWS_ACCESS_KEY_ID=#
+      - AWS_SECRET_ACCESS_KEY=#
+  dynamo-local:
+    build:
+      context: .
+      dockerfile: dynamo.Dockerfile
+    ports:
+      - "8000:8000"
+    networks:
+      - sync
