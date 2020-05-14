@@ -1,17 +1,14 @@
 package datastore
 
 import (
+	"os"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
 const (
-	// TODO: get it from env
-	// AWS config
-	region   string = "us-west-2"
-	endpoint string = "http://dynamo-local:8000"
-
 	// Strings for the primary key
 	pk     string = "ClientID"
 	projPk string = "ClientID, ID"
@@ -28,8 +25,8 @@ const (
 )
 
 var (
-	// Table is the name of the table in dynamoDB.
-	Table string = "client-entity-token-dev" // TODO: get it from env
+	// Table is the name of the table in dynamoDB, could be modified in tests.
+	Table string = os.Getenv("TABLE_NAME")
 )
 
 // PrimaryKey struct is used to represent the primary key of our table.
@@ -46,8 +43,8 @@ type Dynamo struct {
 // NewDynamo returns a dynamoDB client to be used.
 func NewDynamo() (*Dynamo, error) {
 	config := &aws.Config{
-		Region:   aws.String(region),
-		Endpoint: aws.String(endpoint),
+		Region:   aws.String(os.Getenv("AWS_REGION")),
+		Endpoint: aws.String(os.Getenv("AWS_ENDPOINT")),
 	}
 
 	sess, err := session.NewSession(config)

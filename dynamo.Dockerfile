@@ -7,6 +7,8 @@ RUN yum -y install awscli
 USER dynamodblocal
 ENV AWS_ACCESS_KEY_ID=#
 ENV AWS_SECRET_ACCESS_KEY=#
+ARG AWS_ENDPOINT=http://localhost:8000
+ARG AWS_REGION=us-west-2
 ARG DB_LOCATION
 ARG TABLE_NAME=client-entity-token-dev
 
@@ -15,7 +17,7 @@ RUN mkdir -p ${DB_LOCATION} && \
       java -jar DynamoDBLocal.jar -sharedDb -dbPath ${DB_LOCATION} & \
       DYNAMO_PID=$! && \
       aws dynamodb create-table --cli-input-json file://table.json \
-      --endpoint-url http://localhost:8000 --region us-west-2 && \
+      --endpoint-url ${AWS_ENDPOINT} --region ${AWS_REGION} && \
       kill $DYNAMO_PID
 
 FROM amazon/dynamodb-local:1.12.0
