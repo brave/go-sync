@@ -14,6 +14,9 @@ services:
     networks:
       - sync
     environment:
+      - SENTRY_DSN
+      - ENV=local
+      - DEBUG=1
       - AWS_ACCESS_KEY_ID=#
       - AWS_SECRET_ACCESS_KEY=#
   web:
@@ -27,6 +30,9 @@ services:
     networks:
       - sync
     environment:
+      - SENTRY_DSN
+      - ENV=local
+      - DEBUG=1
       - AWS_ACCESS_KEY_ID=#
       - AWS_SECRET_ACCESS_KEY=#
   dynamo-local:

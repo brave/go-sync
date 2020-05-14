@@ -76,6 +76,16 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 // StartServer starts the translate proxy server on port 8195
 func StartServer() {
 	serverCtx, logger := setupLogger(context.Background())
+
+	// Setup Sentry.
+	sentryDsn := os.Getenv("SENTRY_DSN")
+	if sentryDsn != "" {
+		err := sentry.Init(sentry.ClientOptions{Dsn: sentryDsn})
+		if err != nil {
+			logger.Panic().Err(err).Msg("Init sentry failed")
+		}
+	}
+
 	subLog := logger.Info().Str("prefix", "main")
 	subLog.Msg("Starting server")
 
