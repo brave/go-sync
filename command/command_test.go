@@ -426,6 +426,112 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_GUBatchSize() {
 	*command.MaxGUBatchSize = defaultServerGUBatchSize
 }
 
+func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
+	defaultMaxClientObjectQuota := *command.MaxClientObjectQuota
+	*command.MaxClientObjectQuota = 4
+
+	// Commit 2 items without exceed quota.
+	entries := []*sync_pb.SyncEntity{
+		getCommitEntity("id1_bookmark", 0, false, getBookmarkSpecifics()),
+		getCommitEntity("id2_bookmark", 0, false, getBookmarkSpecifics()),
+	}
+	msg := getClientToServerCommitMsg(entries)
+	rsp := &sync_pb.ClientToServerResponse{}
+
+	suite.Require().NoError(
+		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		"HandleClientToServerMessage should succeed")
+	assertCommonResponse(suite, rsp, true)
+	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
+	commitSuccess := sync_pb.CommitResponse_SUCCESS
+	serverIDs := []string{}
+	for _, entryRsp := range rsp.Commit.Entryresponse {
+		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
+		suite.Assert().Equal(int64(1), *entryRsp.Version)
+		serverIDs = append(serverIDs, *entryRsp.IdString)
+	}
+
+	// Commit 4 items to exceed quota by a half, 2 should return OVER_QUOTA.
+	entries = []*sync_pb.SyncEntity{
+		getCommitEntity("id3_bookmark", 0, false, getBookmarkSpecifics()),
+		getCommitEntity("id4_bookmark", 0, false, getBookmarkSpecifics()),
+		getCommitEntity("id5_bookmark", 0, false, getBookmarkSpecifics()),
+		getCommitEntity("id6_bookmark", 0, false, getBookmarkSpecifics()),
+	}
+	msg = getClientToServerCommitMsg(entries)
+	rsp = &sync_pb.ClientToServerResponse{}
+
+	suite.Require().NoError(
+		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		"HandleClientToServerMessage should succeed")
+	assertCommonResponse(suite, rsp, true)
+	suite.Assert().Equal(4, len(rsp.Commit.Entryresponse))
+	overQuota := sync_pb.CommitResponse_OVER_QUOTA
+	expectedEntryRsp := []sync_pb.CommitResponse_ResponseType{commitSuccess, commitSuccess, overQuota, overQuota}
+	expectedVersion := []*int64{aws.Int64(1), aws.Int64(1), nil, nil}
+	for i, entryRsp := range rsp.Commit.Entryresponse {
+		suite.Assert().Equal(expectedEntryRsp[i], *entryRsp.ResponseType)
+		suite.Assert().Equal(expectedVersion[i], entryRsp.Version)
+	}
+
+	// Commit 2 items again when quota is already exceed should get two OVER_QUOTA
+	entries = []*sync_pb.SyncEntity{
+		getCommitEntity("id7_bookmark", 0, false, getBookmarkSpecifics()),
+		getCommitEntity("id8_bookmark", 0, false, getBookmarkSpecifics()),
+	}
+	msg = getClientToServerCommitMsg(entries)
+	rsp = &sync_pb.ClientToServerResponse{}
+
+	suite.Require().NoError(
+		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		"HandleClientToServerMessage should succeed")
+	assertCommonResponse(suite, rsp, true)
+	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
+	for _, entryRsp := range rsp.Commit.Entryresponse {
+		suite.Assert().Equal(overQuota, *entryRsp.ResponseType)
+	}
+
+	// Commit updates to delete two previous inserted items.
+	entries = []*sync_pb.SyncEntity{
+		getCommitEntity(serverIDs[0], 1, true, getBookmarkSpecifics()),
+		getCommitEntity(serverIDs[1], 1, true, getBookmarkSpecifics()),
+	}
+	msg = getClientToServerCommitMsg(entries)
+	rsp = &sync_pb.ClientToServerResponse{}
+
+	suite.Require().NoError(
+		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		"HandleClientToServerMessage should succeed")
+	assertCommonResponse(suite, rsp, true)
+	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
+	for _, entryRsp := range rsp.Commit.Entryresponse {
+		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
+		suite.Assert().Equal(int64(2), *entryRsp.Version)
+	}
+
+	// Commit 4 items should have two success and two OVER_QUOTA.
+	entries = []*sync_pb.SyncEntity{
+		getCommitEntity("id7_bookmark", 0, false, getBookmarkSpecifics()),
+		getCommitEntity("id8_bookmark", 0, false, getBookmarkSpecifics()),
+		getCommitEntity("id9_bookmark", 0, false, getBookmarkSpecifics()),
+		getCommitEntity("id10_bookmark", 0, false, getBookmarkSpecifics()),
+	}
+	msg = getClientToServerCommitMsg(entries)
+	rsp = &sync_pb.ClientToServerResponse{}
+
+	suite.Require().NoError(
+		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		"HandleClientToServerMessage should succeed")
+	assertCommonResponse(suite, rsp, true)
+	suite.Assert().Equal(4, len(rsp.Commit.Entryresponse))
+	for i, entryRsp := range rsp.Commit.Entryresponse {
+		suite.Assert().Equal(expectedEntryRsp[i], *entryRsp.ResponseType)
+		suite.Assert().Equal(expectedVersion[i], entryRsp.Version)
+	}
+
+	*command.MaxClientObjectQuota = defaultMaxClientObjectQuota
+}
+
 func TestCommandTestSuite(t *testing.T) {
 	suite.Run(t, new(CommandTestSuite))
 }

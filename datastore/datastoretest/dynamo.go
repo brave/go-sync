@@ -148,3 +148,31 @@ func ScanTagItems(dynamo *datastore.Dynamo) ([]datastore.ServerClientUniqueTagIt
 
 	return tagItems, nil
 }
+
+// ScanClientItemCounts scans the dynamoDB table and returns all client item
+// counts.
+func ScanClientItemCounts(dynamo *datastore.Dynamo) ([]datastore.ClientItemCount, error) {
+	filter := expression.AttributeExists(expression.Name("ItemCount"))
+	expr, err := expression.NewBuilder().WithFilter(filter).Build()
+	if err != nil {
+		return nil, err
+	}
+
+	input := &dynamodb.ScanInput{
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		FilterExpression:          expr.Filter(),
+		TableName:                 aws.String(datastore.Table),
+	}
+	out, err := dynamo.Scan(input)
+	if err != nil {
+		return nil, err
+	}
+	clientItemCounts := []datastore.ClientItemCount{}
+	err = dynamodbattribute.UnmarshalListOfMaps(out.Items, &clientItemCounts)
+	if err != nil {
+		return nil, err
+	}
+
+	return clientItemCounts, nil
+}

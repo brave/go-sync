@@ -260,27 +260,31 @@ func (suite *SyncEntityTestSuite) TestUpdateSyncEntity() {
 	updateEntity1.Deleted = aws.Bool(true)
 	updateEntity1.DataTypeMtime = aws.String("123#23456789")
 	updateEntity1.Specifics = []byte{3, 4}
-	conflict, err := suite.dynamo.UpdateSyncEntity(&updateEntity1)
+	conflict, delete, err := suite.dynamo.UpdateSyncEntity(&updateEntity1)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().False(conflict, "Successful update should not have conflict")
+	suite.Assert().True(delete, "Delete operation should return false")
 
 	// Update with optional fields.
 	updateEntity2 := updateEntity1
 	updateEntity2.ID = "id2"
+	updateEntity2.Deleted = aws.Bool(false)
 	updateEntity2.UniquePosition = []byte{5, 6}
 	updateEntity2.ParentID = aws.String("parentID")
 	updateEntity2.OldParentID = aws.String("oldParentID")
 	updateEntity2.Name = aws.String("name")
 	updateEntity2.NonUniqueName = aws.String("non_unique_name")
-	conflict, err = suite.dynamo.UpdateSyncEntity(&updateEntity2)
+	conflict, delete, err = suite.dynamo.UpdateSyncEntity(&updateEntity2)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().False(conflict, "Successful update should not have conflict")
+	suite.Assert().False(delete, "Non-delete operation should return false")
 
 	// Update entity again with the same version as before (version mismatch)
 	// should return false.
-	conflict, err = suite.dynamo.UpdateSyncEntity(&updateEntity2)
+	conflict, delete, err = suite.dynamo.UpdateSyncEntity(&updateEntity2)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().True(conflict, "Update with the same version should return conflict")
+	suite.Assert().False(delete, "Conflict operation should return false for delete")
 
 	// Check sync entities are updated correctly in DB.
 	syncItems, err = datastoretest.ScanSyncEntities(suite.dynamo)
