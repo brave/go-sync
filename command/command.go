@@ -11,7 +11,9 @@ import (
 )
 
 var (
-	maxGUBatchSize int32 = 500 // Could be modified in tests.
+	// Could be modified in tests.
+	maxGUBatchSize       int32 = 500
+	maxClientObjectQuota int   = 50000
 )
 
 const (
@@ -116,59 +118,95 @@ func handleGetUpdatesRequest(guMsg *sync_pb.GetUpdatesMessage, guRsp *sync_pb.Ge
 }
 
 // handleCommitRequest handles the commit message and fills the commit response.
-// New sync entity is created and inserted into the database.
+// For each commit entry:
+//   - new sync entity is created and inserted into the database if version is 0.
+//   - existed sync entity will be updated if version is greater than 0.
 func handleCommitRequest(commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.CommitResponse, db datastore.Datastore, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
 	if commitMsg == nil {
 		return nil, fmt.Errorf("nil commitMsg is received")
 	}
 
 	errCode := sync_pb.SyncEnums_SUCCESS // default value, might be changed later
+	if commitMsg.Entries == nil {        // nothing to process
+		return &errCode, nil
+	}
+
+	itemCount, err := db.GetClientItemCount(clientID)
+	count := 0
+	if err != nil {
+		log.Error().Err(err).Msg("Get client's item count failed")
+		errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
+		return &errCode, nil
+	}
+
 	commitRsp.Entryresponse = make([]*sync_pb.CommitResponse_EntryResponse, len(commitMsg.Entries))
-	if commitMsg.Entries != nil {
-		for i, v := range commitMsg.Entries {
-			entryRsp := &sync_pb.CommitResponse_EntryResponse{}
-			commitRsp.Entryresponse[i] = entryRsp
-			entityToCommit, err := datastore.CreateDBSyncEntity(v, commitMsg.CacheGuid, clientID)
-			if err != nil { // Can't unmarshal & marshal the message from PB into DB format
-				rspType := sync_pb.CommitResponse_INVALID_MESSAGE
+	for i, v := range commitMsg.Entries {
+		entryRsp := &sync_pb.CommitResponse_EntryResponse{}
+		commitRsp.Entryresponse[i] = entryRsp
+
+		entityToCommit, err := datastore.CreateDBSyncEntity(v, commitMsg.CacheGuid, clientID)
+		if err != nil { // Can't unmarshal & marshal the message from PB into DB format
+			rspType := sync_pb.CommitResponse_INVALID_MESSAGE
+			entryRsp.ResponseType = &rspType
+			continue
+		}
+
+		*entityToCommit.Version++
+		if *entityToCommit.Version == 1 { // Create
+			if itemCount+count >= maxClientObjectQuota {
+				rspType := sync_pb.CommitResponse_OVER_QUOTA
 				entryRsp.ResponseType = &rspType
 				continue
 			}
 
-			*entityToCommit.Version++
-			if *entityToCommit.Version == 1 { // Create
-				err = db.InsertSyncEntity(entityToCommit)
-				if err != nil {
-					log.Error().Err(err).Msg("Insert sync entity failed")
-					rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
-					entryRsp.ResponseType = &rspType
-					continue
-				}
-			} else { // Update
-				conflict, err := db.UpdateSyncEntity(entityToCommit)
-				if err != nil {
-					log.Error().Err(err).Msg("Update sync entity failed")
-					rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
-					entryRsp.ResponseType = &rspType
-					continue
-				}
-				if conflict {
-					rspType := sync_pb.CommitResponse_CONFLICT
-					entryRsp.ResponseType = &rspType
-					continue
-				}
+			err = db.InsertSyncEntity(entityToCommit)
+			if err != nil {
+				log.Error().Err(err).Msg("Insert sync entity failed")
+				rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
+				entryRsp.ResponseType = &rspType
+				continue
 			}
-
-			// Prepare success response
-			rspType := sync_pb.CommitResponse_SUCCESS
-			entryRsp.ResponseType = &rspType
-			entryRsp.IdString = aws.String(entityToCommit.ID)
-			entryRsp.Version = entityToCommit.Version
-			entryRsp.ParentIdString = entityToCommit.ParentID
-			entryRsp.Name = entityToCommit.Name
-			entryRsp.NonUniqueName = entityToCommit.NonUniqueName
-			entryRsp.Mtime = entityToCommit.Mtime
+			count++
+		} else { // Update
+			conflict, delete, err := db.UpdateSyncEntity(entityToCommit)
+			if err != nil {
+				log.Error().Err(err).Msg("Update sync entity failed")
+				rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
+				entryRsp.ResponseType = &rspType
+				continue
+			}
+			if conflict {
+				rspType := sync_pb.CommitResponse_CONFLICT
+				entryRsp.ResponseType = &rspType
+				continue
+			}
+			if delete {
+				count--
+			}
 		}
+
+		// Prepare success response
+		rspType := sync_pb.CommitResponse_SUCCESS
+		entryRsp.ResponseType = &rspType
+		entryRsp.IdString = aws.String(entityToCommit.ID)
+		entryRsp.Version = entityToCommit.Version
+		entryRsp.ParentIdString = entityToCommit.ParentID
+		entryRsp.Name = entityToCommit.Name
+		entryRsp.NonUniqueName = entityToCommit.NonUniqueName
+		entryRsp.Mtime = entityToCommit.Mtime
+	}
+
+	err = db.UpdateClientItemCount(clientID, count)
+	if err != nil {
+		// We only impose a soft quota limit on the item count for each client, so
+		// we only log the error without further actions here. The reason of this
+		// is we do not want to pay the cost to ensure strong consistency on this
+		// value and we do not want to give up previous DB operations if we cannot
+		// update the count this time. In addition, we do not retry this operation
+		// either because it is acceptable to miss one time of this update and
+		// chances of failing to update the item count multiple times in a row for
+		// a single client is quite low.
+		log.Error().Err(err).Msg("Update client item count failed")
 	}
 	return &errCode, nil
 }

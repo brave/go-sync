@@ -244,11 +244,11 @@ func (dynamo *Dynamo) InsertSyncEntitiesWithServerTags(entities []*SyncEntity) e
 }
 
 // UpdateSyncEntity updates a sync item in dynamoDB.
-func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity) (bool, error) {
+func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity) (bool, bool, error) {
 	primaryKey := PrimaryKey{ClientID: entity.ClientID, ID: entity.ID}
 	key, err := dynamodbattribute.MarshalMap(primaryKey)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 
 	// condition to ensure to be update only and the version is matched.
@@ -282,7 +282,7 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity) (bool, error) {
 
 	expr, err := expression.NewBuilder().WithCondition(cond).WithUpdate(update).Build()
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 
 	input := &dynamodb.UpdateItemInput{
@@ -291,20 +291,28 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity) (bool, error) {
 		ExpressionAttributeValues: expr.Values(),
 		ConditionExpression:       expr.Condition(),
 		UpdateExpression:          expr.Update(),
+		ReturnValues:              aws.String(dynamodb.ReturnValueAllOld),
 		TableName:                 aws.String(Table),
 	}
 
-	_, err = dynamo.UpdateItem(input)
+	out, err := dynamo.UpdateItem(input)
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			// Return conflict if the write condition fails.
 			if aerr.Code() == dynamodb.ErrCodeConditionalCheckFailedException {
-				return true, nil
+				return true, false, nil
 			}
 		}
 	}
 
-	return false, err
+	// Unmarshal out.Attributes
+	oldEntity := &SyncEntity{}
+	err = dynamodbattribute.UnmarshalMap(out.Attributes, oldEntity)
+	if err != nil {
+		return false, false, err
+	}
+	delete := !*oldEntity.Deleted && *entity.Deleted
+	return false, delete, err
 }
 
 // GetUpdatesForType returns sync entities of a data type where it's mtime is
