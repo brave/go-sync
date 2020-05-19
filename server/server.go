@@ -8,9 +8,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/brave-experiments/sync-server/controller"
-	"github.com/brave-experiments/sync-server/datastore"
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave/go-sync/controller"
+	"github.com/brave/go-sync/datastore"
 	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"

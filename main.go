@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/brave-experiments/sync-server/server"
+	"github.com/brave/go-sync/server"
 )
 
 func main() {

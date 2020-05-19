@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-experiments/sync-server/datastore"
-	"github.com/brave-experiments/sync-server/utils"
+	"github.com/brave/go-sync/datastore"
+	"github.com/brave/go-sync/utils"
 	"github.com/satori/go.uuid"
 )
 

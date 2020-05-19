@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/brave-experiments/sync-server/datastore"
-	"github.com/brave-experiments/sync-server/datastore/datastoretest"
-	"github.com/brave-experiments/sync-server/sync_pb"
-	"github.com/brave-experiments/sync-server/utils"
+	"github.com/brave/go-sync/datastore"
+	"github.com/brave/go-sync/datastore/datastoretest"
+	"github.com/brave/go-sync/sync_pb"
+	"github.com/brave/go-sync/utils"
 	"github.com/golang/protobuf/proto"
 	"github.com/stretchr/testify/suite"
 )

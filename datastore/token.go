@@ -8,7 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/aws/aws-sdk-go/service/dynamodb/expression"
-	"github.com/brave-experiments/sync-server/utils"
+	"github.com/brave/go-sync/utils"
 )
 
 // ClientToken is a struct used to marshal and unmarshal client_token items in

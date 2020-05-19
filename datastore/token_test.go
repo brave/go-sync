@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-experiments/sync-server/datastore"
-	"github.com/brave-experiments/sync-server/datastore/datastoretest"
-	"github.com/brave-experiments/sync-server/utils"
+	"github.com/brave/go-sync/datastore"
+	"github.com/brave/go-sync/datastore/datastoretest"
+	"github.com/brave/go-sync/utils"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/suite"
 )

@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/brave-experiments/sync-server/utils"
+	"github.com/brave/go-sync/utils"
 )
 
 // Timestamp is a structure used for timestamp responses.

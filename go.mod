@@ -1,4 +1,4 @@
-module github.com/brave-experiments/sync-server
+module github.com/brave/go-sync
 
 go 1.14
 

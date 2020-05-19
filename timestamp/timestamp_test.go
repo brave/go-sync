@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/brave-experiments/sync-server/timestamp"
+	"github.com/brave/go-sync/timestamp"
 	"github.com/stretchr/testify/assert"
 )
 

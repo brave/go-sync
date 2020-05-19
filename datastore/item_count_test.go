@@ -4,8 +4,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/brave-experiments/sync-server/datastore"
-	"github.com/brave-experiments/sync-server/datastore/datastoretest"
+	"github.com/brave/go-sync/datastore"
+	"github.com/brave/go-sync/datastore/datastoretest"
 	"github.com/stretchr/testify/suite"
 )
 

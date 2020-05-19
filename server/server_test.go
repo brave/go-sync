@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/brave-experiments/sync-server/server"
+	"github.com/brave/go-sync/server"
 	"github.com/go-chi/chi"
 )
 

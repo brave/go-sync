@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/brave-experiments/sync-server/command"
-	"github.com/brave-experiments/sync-server/datastore"
-	"github.com/brave-experiments/sync-server/datastore/datastoretest"
+	"github.com/brave/go-sync/command"
+	"github.com/brave/go-sync/datastore"
+	"github.com/brave/go-sync/datastore/datastoretest"
 	"github.com/stretchr/testify/suite"
 )
 
