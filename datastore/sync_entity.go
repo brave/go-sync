@@ -258,8 +258,6 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity) (bool, bool, error) {
 
 	update := expression.Set(expression.Name("Version"), expression.Value(entity.Version))
 	update = update.Set(expression.Name("Mtime"), expression.Value(entity.Mtime))
-	update = update.Set(expression.Name("Deleted"), expression.Value(entity.Deleted))
-	update = update.Set(expression.Name("Folder"), expression.Value(entity.Folder))
 	update = update.Set(expression.Name("Specifics"), expression.Value(entity.Specifics))
 	update = update.Set(expression.Name("DataTypeMtime"), expression.Value(entity.DataTypeMtime))
 
@@ -278,6 +276,12 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity) (bool, bool, error) {
 	}
 	if entity.NonUniqueName != nil {
 		update = update.Set(expression.Name("NonUniqueName"), expression.Value(entity.NonUniqueName))
+	}
+	if entity.Deleted != nil {
+		update = update.Set(expression.Name("Deleted"), expression.Value(entity.Deleted))
+	}
+	if entity.Folder != nil {
+		update = update.Set(expression.Name("Folder"), expression.Value(entity.Folder))
 	}
 
 	expr, err := expression.NewBuilder().WithCondition(cond).WithUpdate(update).Build()
@@ -311,7 +315,14 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity) (bool, bool, error) {
 	if err != nil {
 		return false, false, err
 	}
-	delete := !*oldEntity.Deleted && *entity.Deleted
+	var delete bool
+	if entity.Deleted == nil { // No updates on Deleted this time.
+		delete = false
+	} else if oldEntity.Deleted == nil { // Consider it as Deleted = false.
+		delete = *entity.Deleted
+	} else {
+		delete = !*oldEntity.Deleted && *entity.Deleted
+	}
 	return false, delete, err
 }
 
@@ -467,6 +478,19 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 
 	dataTypeMtime := strconv.Itoa(dataType) + "#" + strconv.FormatInt(*now, 10)
 
+	// Set default values on Deleted and Folder attributes for new entities, the
+	// default values are specified by sync.proto protocol.
+	deleted := entity.Deleted
+	folder := entity.Folder
+	if *entity.Version == 0 {
+		if entity.Deleted == nil {
+			deleted = aws.Bool(false)
+		}
+		if entity.Folder == nil {
+			folder = aws.Bool(false)
+		}
+	}
+
 	return &SyncEntity{
 		ClientID:               clientID,
 		ID:                     id,
@@ -478,12 +502,12 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 		Name:                   entity.Name,
 		NonUniqueName:          entity.NonUniqueName,
 		ServerDefinedUniqueTag: entity.ServerDefinedUniqueTag,
-		Deleted:                entity.Deleted,
+		Deleted:                deleted,
 		OriginatorCacheGUID:    originatorCacheGUID,
 		OriginatorClientItemID: originatorClientItemID,
 		ClientDefinedUniqueTag: entity.ClientDefinedUniqueTag,
 		Specifics:              specifics,
-		Folder:                 entity.Folder,
+		Folder:                 folder,
 		UniquePosition:         uniquePosition,
 		DataType:               aws.Int(dataType),
 		DataTypeMtime:          aws.String(dataTypeMtime),
