@@ -62,6 +62,7 @@ type PasswordSpecificsData struct {
 	// Ignored for Android apps.
 	SslValid *bool `protobuf:"varint,9,opt,name=ssl_valid,json=sslValid" json:"ssl_valid,omitempty"`
 	// True for the last credential used for logging in on a given site.
+	// Deprecated in M81.
 	Preferred *bool `protobuf:"varint,10,opt,name=preferred" json:"preferred,omitempty"`
 	// Time when the credential was created. Amount of microseconds since 1601.
 	DateCreated *int64 `protobuf:"varint,11,opt,name=date_created,json=dateCreated" json:"date_created,omitempty"`
