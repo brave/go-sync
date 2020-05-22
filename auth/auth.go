@@ -2,6 +2,8 @@ package auth
 
 import (
 	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -12,7 +14,6 @@ import (
 
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/utils"
-	"github.com/satori/go.uuid"
 )
 
 var (
@@ -22,6 +23,7 @@ var (
 const (
 	tokenMaxDuration int64  = 86400 * 1e3 // Milliseconds
 	bearerPrefix     string = "Bearer "
+	nRandBytes       int    = 32 // Number of random bytes used to generate the access token.
 )
 
 // Request is a struct used for authenication requests.
@@ -35,6 +37,17 @@ type Request struct {
 type Response struct {
 	AccessToken string `json:"access_token"`
 	ExpiresIn   int64  `json:"expires_in"`
+}
+
+// generateToken generates n random bytes and encoded it as base64 string.
+func generateToken(n int) (string, error) {
+	bytes := make([]byte, n)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return "", err
+	}
+
+	return base64.URLEncoding.EncodeToString(bytes), nil
 }
 
 // Authenticate validates client's auth requests and provides the reply.
@@ -81,7 +94,10 @@ func Authenticate(r *http.Request, db datastore.Datastore) (string, []byte, erro
 
 	// Create a new token, save it in DB, and return it.
 	expireAt := utils.UnixMilli(time.Now().Add(time.Duration(tokenMaxDuration) * time.Millisecond))
-	token := uuid.NewV4().String()
+	token, err := generateToken(nRandBytes)
+	if err != nil {
+		return "", nil, err
+	}
 	err = db.InsertClientToken(req.PublicKey, token, expireAt)
 	if err != nil {
 		return "", nil, err
