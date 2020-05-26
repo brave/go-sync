@@ -30,8 +30,9 @@ func SyncRouter(datastore datastore.Datastore) chi.Router {
 	return r
 }
 
-func sendJSONRsp(body []byte, w http.ResponseWriter) {
+func sendJSONRsp(body []byte, w http.ResponseWriter, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
 	_, err := w.Write(body)
 	if err != nil {
 		log.Error().Err(err).Msg("Write HTTP response body failed")
@@ -48,7 +49,7 @@ func Timestamp(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	sendJSONRsp(body, w)
+	sendJSONRsp(body, w, http.StatusOK)
 }
 
 // Auth handles authentication requests from sync clients.
@@ -60,7 +61,7 @@ func Auth(db datastore.Datastore) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		sendJSONRsp(body, w)
+		sendJSONRsp(body, w, http.StatusOK)
 	})
 }
 
