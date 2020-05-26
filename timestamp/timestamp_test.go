@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	jsonschema "github.com/brave/go-sync/schema/json"
 	"github.com/brave/go-sync/timestamp"
 	"github.com/stretchr/testify/assert"
 )
@@ -13,7 +14,7 @@ func TestGetTimestamp(t *testing.T) {
 	assert.Nil(t, err)
 
 	// Unmarshal to get the timestamp value
-	time := timestamp.Timestamp{}
+	time := jsonschema.Timestamp{}
 	err = json.Unmarshal(rsp, &time)
 	assert.Nil(t, err)
 

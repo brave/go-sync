@@ -3,7 +3,7 @@
 all: lint test build
 
 protobuf:
-	protoc -I sync_pb/ sync_pb/*.proto --go_out=sync_pb/
+	protoc -I schema/protobuf/sync_pb/ schema/protobuf/sync_pb/*.proto --go_out=schema/protobuf/sync_pb/
 
 build:
 	go run main.go

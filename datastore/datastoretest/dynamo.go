@@ -38,7 +38,7 @@ func DeleteTable(dynamo *datastore.Dynamo) error {
 func CreateTable(dynamo *datastore.Dynamo) error {
 	_, b, _, _ := runtime.Caller(0)
 	root := filepath.Join(filepath.Dir(b), "../../")
-	raw, err := ioutil.ReadFile(filepath.Join(root, "dynamo_local/table.json"))
+	raw, err := ioutil.ReadFile(filepath.Join(root, "schema/dynamodb/table.json"))
 	if err != nil {
 		return fmt.Errorf("error reading table.json: %w", err)
 	}

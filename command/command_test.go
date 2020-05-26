@@ -10,7 +10,7 @@ import (
 	"github.com/brave/go-sync/command"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
-	"github.com/brave/go-sync/sync_pb"
+	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 	"github.com/stretchr/testify/suite"
 )
 

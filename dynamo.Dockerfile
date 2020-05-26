@@ -12,7 +12,7 @@ ARG AWS_REGION=us-west-2
 ARG DB_LOCATION
 ARG TABLE_NAME=client-entity-token-dev
 
-COPY dynamo_local/ .
+COPY schema/dynamodb/ .
 RUN mkdir -p ${DB_LOCATION} && \
       java -jar DynamoDBLocal.jar -sharedDb -dbPath ${DB_LOCATION} & \
       DYNAMO_PID=$! && \

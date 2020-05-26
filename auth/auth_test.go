@@ -13,6 +13,7 @@ import (
 	"github.com/brave/go-sync/auth"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
+	jsonschema "github.com/brave/go-sync/schema/json"
 	"github.com/brave/go-sync/utils"
 	"github.com/stretchr/testify/suite"
 )
@@ -87,7 +88,7 @@ func (suite *AuthTestSuite) TestAuthenticate() {
 		if test.err == nil {
 			suite.Assert().NotEqual("", token, "%s: success request should not return empty token", testName)
 
-			authRsp := auth.Response{AccessToken: token, ExpiresIn: auth.TokenMaxDuration}
+			authRsp := jsonschema.Response{AccessToken: token, ExpiresIn: auth.TokenMaxDuration}
 			outRsp, err := json.Marshal(authRsp)
 			suite.Require().NoError(err, "json marshal should succeed")
 			suite.Assert().Equal(outRsp, rsp, "rsp mismatch for %s test case", testName)

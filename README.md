@@ -9,7 +9,7 @@ This server supports endpoints as bellow.
 2) The `POST /v2/auth` endpoint authenicates a sync client and returns an access token and expected time to expire in JSON format if succeed.
 3) The `POST /v2/command/` endpoint handles Commit and GetUpdates requests from sync clients and return corresponding responses both in protobuf format. Detailed of requests and their corresponding responses are defined in `sync_pb/sync.proto`. Previous granted access token should be passed in the request's Authorization header.
 
-Currently we use dynamoDB as the datastore, the schema could be found in `dynamo_local/table.json`.
+Currently we use dynamoDB as the datastore, the schema could be found in `schema/dynamodb/table.json`.
 
 ## Developer Setup
 1. [Install Go 1.14](https://golang.org/doc/install)

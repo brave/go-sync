@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/brave/go-sync/datastore"
+	jsonschema "github.com/brave/go-sync/schema/json"
 	"github.com/brave/go-sync/utils"
 )
 
@@ -25,19 +26,6 @@ const (
 	bearerPrefix     string = "Bearer "
 	nRandBytes       int    = 32 // Number of random bytes used to generate the access token.
 )
-
-// Request is a struct used for authenication requests.
-type Request struct {
-	PublicKey       string `json:"public_key"`
-	Timestamp       string `json:"timestamp"`
-	SignedTimestamp string `json:"signed_timestamp"`
-}
-
-// Response is a struct used for authenication responses.
-type Response struct {
-	AccessToken string `json:"access_token"`
-	ExpiresIn   int64  `json:"expires_in"`
-}
 
 // generateToken generates n random bytes and encoded it as base64 string.
 func generateToken(n int) (string, error) {
@@ -58,7 +46,7 @@ func Authenticate(r *http.Request, db datastore.Datastore) (string, []byte, erro
 	if err != nil {
 		return "", nil, fmt.Errorf("error parsing form: %w", err)
 	}
-	req := &Request{
+	req := &jsonschema.Request{
 		PublicKey:       r.PostFormValue("client_id"),
 		Timestamp:       r.PostFormValue("timestamp"),
 		SignedTimestamp: r.PostFormValue("client_secret"),
@@ -103,7 +91,7 @@ func Authenticate(r *http.Request, db datastore.Datastore) (string, []byte, erro
 		return "", nil, fmt.Errorf("error inserting client token: %w", err)
 	}
 
-	authRsp := Response{AccessToken: token, ExpiresIn: tokenMaxDuration}
+	authRsp := jsonschema.Response{AccessToken: token, ExpiresIn: tokenMaxDuration}
 	rsp, err = json.Marshal(authRsp)
 	if err != nil {
 		return "", nil, fmt.Errorf("error marshalling authentication response: %w", err)
