@@ -3,6 +3,7 @@ package datastore_test
 import (
 	"sort"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -543,7 +544,7 @@ func (suite *SyncEntityTestSuite) TestCreateDBSyncEntity() {
 	// Empty specifics should report marshal error.
 	pbEntity.Specifics = nil
 	_, err = datastore.CreateDBSyncEntity(&pbEntity, guid, "client1")
-	suite.Assert().Equal(err.Error(), "proto: Marshal called with nil")
+	suite.Assert().True(strings.Contains(err.Error(), "proto: Marshal called with nil"))
 }
 
 func (suite *SyncEntityTestSuite) TestCreatePBSyncEntity() {

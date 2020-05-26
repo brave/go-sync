@@ -229,13 +229,19 @@ func HandleClientToServerMessage(pb *sync_pb.ClientToServerMessage, pbRsp *sync_
 		guRsp := &sync_pb.GetUpdatesResponse{}
 		pbRsp.GetUpdates = guRsp
 		pbRsp.ErrorCode, err = handleGetUpdatesRequest(pb.GetUpdates, guRsp, db, clientID)
+		if err != nil {
+			return fmt.Errorf("error handling GetUpdates request: %w", err)
+		}
 	} else if *pb.MessageContents == sync_pb.ClientToServerMessage_COMMIT {
 		commitRsp := &sync_pb.CommitResponse{}
 		pbRsp.Commit = commitRsp
 		pbRsp.ErrorCode, err = handleCommitRequest(pb.Commit, commitRsp, db, clientID)
+		if err != nil {
+			return fmt.Errorf("error handling Commit request: %w", err)
+		}
 	} else {
 		return fmt.Errorf("unsupported message type of ClientToServerMessage")
 	}
 
-	return err
+	return nil
 }

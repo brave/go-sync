@@ -1,6 +1,7 @@
 package datastore
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -49,7 +50,7 @@ func NewDynamo() (*Dynamo, error) {
 
 	sess, err := session.NewSession(config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error creating new AWS session: %w", err)
 	}
 
 	db := dynamodb.New(sess)

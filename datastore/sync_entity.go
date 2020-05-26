@@ -107,7 +107,7 @@ func (dynamo *Dynamo) InsertSyncEntity(entity *SyncEntity) error {
 	cond := expression.AttributeNotExists(expression.Name(pk))
 	expr, err := expression.NewBuilder().WithCondition(cond).Build()
 	if err != nil {
-		return err
+		return fmt.Errorf("error building expression to insert sync entity: %w", err)
 	}
 
 	if entity.ClientDefinedUniqueTag != nil {
@@ -116,7 +116,7 @@ func (dynamo *Dynamo) InsertSyncEntity(entity *SyncEntity) error {
 		item := NewServerClientUniqueTagItem(entity.ClientID, *entity.ClientDefinedUniqueTag, false)
 		av, err := dynamodbattribute.MarshalMap(*item)
 		if err != nil {
-			return err
+			return fmt.Errorf("error marshalling unique tag item to insert sync entity: %w", err)
 		}
 		tagItem := &dynamodb.TransactWriteItem{
 			Put: &dynamodb.Put{
@@ -131,7 +131,7 @@ func (dynamo *Dynamo) InsertSyncEntity(entity *SyncEntity) error {
 		// Normal sync item
 		av, err = dynamodbattribute.MarshalMap(*entity)
 		if err != nil {
-			return err
+			return fmt.Errorf("error marshlling sync item to insert sync entity: %w", err)
 		}
 		syncItem := &dynamodb.TransactWriteItem{
 			Put: &dynamodb.Put{
@@ -147,13 +147,17 @@ func (dynamo *Dynamo) InsertSyncEntity(entity *SyncEntity) error {
 
 		_, err = dynamo.TransactWriteItems(
 			&dynamodb.TransactWriteItemsInput{TransactItems: items})
-		return err
+		if err != nil {
+			return fmt.Errorf("error writing tag item and sync item in a transaction to insert sync entity: %w", err)
+		}
+
+		return nil
 	}
 
 	// Normal sync item
 	av, err := dynamodbattribute.MarshalMap(*entity)
 	if err != nil {
-		return err
+		return fmt.Errorf("error marshalling sync item to insert sync entity: %w", err)
 	}
 	input := &dynamodb.PutItemInput{
 		Item:                      av,
@@ -163,7 +167,10 @@ func (dynamo *Dynamo) InsertSyncEntity(entity *SyncEntity) error {
 		TableName:                 aws.String(Table),
 	}
 	_, err = dynamo.PutItem(input)
-	return err
+	if err != nil {
+		return fmt.Errorf("error calling PutItem to insert sync item: %w", err)
+	}
+	return nil
 }
 
 // HasServerDefinedUniqueTag check the tag item to see if there is already a
@@ -172,7 +179,7 @@ func (dynamo *Dynamo) HasServerDefinedUniqueTag(clientID string, tag string) (bo
 	key, err := dynamodbattribute.MarshalMap(
 		NewServerClientUniqueTagItem(clientID, tag, true))
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error marshalling key to check if server tag existed: %w", err)
 	}
 
 	input := &dynamodb.GetItemInput{
@@ -183,7 +190,7 @@ func (dynamo *Dynamo) HasServerDefinedUniqueTag(clientID string, tag string) (bo
 
 	out, err := dynamo.GetItem(input)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error calling GetItem to check if server tag existed: %w", err)
 	}
 
 	return out.Item != nil, nil
@@ -200,14 +207,14 @@ func (dynamo *Dynamo) InsertSyncEntitiesWithServerTags(entities []*SyncEntity) e
 		cond := expression.AttributeNotExists(expression.Name(pk))
 		expr, err := expression.NewBuilder().WithCondition(cond).Build()
 		if err != nil {
-			return err
+			return fmt.Errorf("error building expression to insert sync entity with server tag: %w", err)
 		}
 
 		// Additional item for ensuring tag's uniqueness for a specific client.
 		item := NewServerClientUniqueTagItem(entity.ClientID, *entity.ServerDefinedUniqueTag, true)
 		av, err := dynamodbattribute.MarshalMap(*item)
 		if err != nil {
-			return err
+			return fmt.Errorf("error marshalling tag item to insert sync entity with server tag: %w", err)
 		}
 		tagItem := &dynamodb.TransactWriteItem{
 			Put: &dynamodb.Put{
@@ -222,7 +229,7 @@ func (dynamo *Dynamo) InsertSyncEntitiesWithServerTags(entities []*SyncEntity) e
 		// Normal sync item
 		av, err = dynamodbattribute.MarshalMap(*entity)
 		if err != nil {
-			return err
+			return fmt.Errorf("error marshalling sync item to insert sync entity with server tag: %w", err)
 		}
 		syncItem := &dynamodb.TransactWriteItem{
 			Put: &dynamodb.Put{
@@ -240,7 +247,10 @@ func (dynamo *Dynamo) InsertSyncEntitiesWithServerTags(entities []*SyncEntity) e
 
 	_, err := dynamo.TransactWriteItems(
 		&dynamodb.TransactWriteItemsInput{TransactItems: items})
-	return err
+	if err != nil {
+		return fmt.Errorf("error writing sync entities with server tags in a transaction: %w", err)
+	}
+	return nil
 }
 
 // UpdateSyncEntity updates a sync item in dynamoDB.
@@ -248,7 +258,7 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity) (bool, bool, error) {
 	primaryKey := PrimaryKey{ClientID: entity.ClientID, ID: entity.ID}
 	key, err := dynamodbattribute.MarshalMap(primaryKey)
 	if err != nil {
-		return false, false, err
+		return false, false, fmt.Errorf("error marshalling key to update sync entity: %w", err)
 	}
 
 	// condition to ensure to be update only and the version is matched.
@@ -286,7 +296,7 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity) (bool, bool, error) {
 
 	expr, err := expression.NewBuilder().WithCondition(cond).WithUpdate(update).Build()
 	if err != nil {
-		return false, false, err
+		return false, false, fmt.Errorf("error building expression to update sync entity: %w", err)
 	}
 
 	input := &dynamodb.UpdateItemInput{
@@ -307,13 +317,14 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity) (bool, bool, error) {
 				return true, false, nil
 			}
 		}
+		return false, false, fmt.Errorf("error calling UpdateItem to update sync entity: %w", err)
 	}
 
 	// Unmarshal out.Attributes
 	oldEntity := &SyncEntity{}
 	err = dynamodbattribute.UnmarshalMap(out.Attributes, oldEntity)
 	if err != nil {
-		return false, false, err
+		return false, false, fmt.Errorf("error unmarshalling old sync entity: %w", err)
 	}
 	var delete bool
 	if entity.Deleted == nil { // No updates on Deleted this time.
@@ -323,7 +334,7 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity) (bool, bool, error) {
 	} else {
 		delete = !*oldEntity.Deleted && *entity.Deleted
 	}
-	return false, delete, err
+	return false, delete, nil
 }
 
 // GetUpdatesForType returns sync entities of a data type where it's mtime is
@@ -351,7 +362,7 @@ func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFo
 	}
 	expr, err := exprs.Build()
 	if err != nil {
-		return 0, syncEntities, err
+		return 0, syncEntities, fmt.Errorf("error building expression to get updates: %w", err)
 	}
 
 	input := &dynamodb.QueryInput{
@@ -366,7 +377,7 @@ func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFo
 
 	out, err := dynamo.Query(input)
 	if err != nil {
-		return 0, syncEntities, err
+		return 0, syncEntities, fmt.Errorf("error doing query to get updates: %w", err)
 	}
 
 	count := *(out.Count)
@@ -401,13 +412,16 @@ func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFo
 				return last
 			})
 		if err != nil {
-			return 0, syncEntities, err
+			return 0, syncEntities, fmt.Errorf("error getting update items in a batch: %w", err)
 		}
 	}
 
 	err = dynamodbattribute.UnmarshalListOfMaps(outAv, &syncEntities)
+	if err != nil {
+		return 0, syncEntities, fmt.Errorf("error unmarshalling updated sync entities: %w", err)
+	}
 	sort.Sort(SyncEntityByMtime(syncEntities))
-	return count, syncEntities, err
+	return count, syncEntities, nil
 }
 
 func validatePBEntity(entity *sync_pb.SyncEntity) error {
@@ -431,7 +445,7 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 	err := validatePBEntity(entity)
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid sync_pb.SyncEntity received")
-		return nil, err
+		return nil, fmt.Errorf("error validating protobuf sync entity to create DB sync entity: %w", err)
 	}
 
 	// Specifics should always be passed, nil one will lead to a marshal error.
@@ -439,7 +453,7 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 	specifics, err = proto.Marshal(entity.Specifics)
 	if err != nil {
 		log.Error().Err(err).Msg("Marshal specifics failed")
-		return nil, err
+		return nil, fmt.Errorf("error marshalling specifics to create DB sync entity: %w", err)
 	}
 
 	// Use reflect to find out data type ID defined in protobuf tag.
@@ -453,7 +467,7 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 		uniquePosition, err = proto.Marshal(entity.UniquePosition)
 		if err != nil {
 			log.Error().Err(err).Msg("Marshal UniquePosition failed")
-			return nil, err
+			return nil, fmt.Errorf("error marshalling unique position to create DB sync entity: %w", err)
 		}
 	}
 
@@ -538,7 +552,7 @@ func CreatePBSyncEntity(entity *SyncEntity) (*sync_pb.SyncEntity, error) {
 		err := proto.Unmarshal(entity.Specifics, pbEntity.Specifics)
 		if err != nil {
 			log.Error().Err(err).Msg("Unmarshal specifics failed")
-			return nil, err
+			return nil, fmt.Errorf("error unmarshalling specifics to create protobuf sync entity: %w", err)
 		}
 	}
 
@@ -547,7 +561,7 @@ func CreatePBSyncEntity(entity *SyncEntity) (*sync_pb.SyncEntity, error) {
 		err := proto.Unmarshal(entity.UniquePosition, pbEntity.UniquePosition)
 		if err != nil {
 			log.Error().Err(err).Msg("Unmarshal UniquePosition failed")
-			return nil, err
+			return nil, fmt.Errorf("error unmarshalling unique position to create protobuf sync entity: %w", err)
 		}
 	}
 

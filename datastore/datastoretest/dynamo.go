@@ -2,6 +2,7 @@ package datastoretest
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"runtime"
@@ -25,7 +26,7 @@ func DeleteTable(dynamo *datastore.Dynamo) error {
 				return nil
 			}
 		} else {
-			return err
+			return fmt.Errorf("error deleting table: %w", err)
 		}
 	}
 
@@ -39,19 +40,19 @@ func CreateTable(dynamo *datastore.Dynamo) error {
 	root := filepath.Join(filepath.Dir(b), "../../")
 	raw, err := ioutil.ReadFile(filepath.Join(root, "dynamo_local/table.json"))
 	if err != nil {
-		return err
+		return fmt.Errorf("error reading table.json: %w", err)
 	}
 
 	var input dynamodb.CreateTableInput
 	err = json.Unmarshal(raw, &input)
 	if err != nil {
-		return err
+		return fmt.Errorf("error unmarshalling raw data from table.json: %w", err)
 	}
 	input.TableName = aws.String(datastore.Table)
 
 	_, err = dynamo.CreateTable(&input)
 	if err != nil {
-		return err
+		return fmt.Errorf("error creating table: %w", err)
 	}
 
 	return dynamo.WaitUntilTableExists(
@@ -61,7 +62,7 @@ func CreateTable(dynamo *datastore.Dynamo) error {
 // ResetTable deletes and creates datastore.Table in dynamoDB.
 func ResetTable(dynamo *datastore.Dynamo) error {
 	if err := DeleteTable(dynamo); err != nil {
-		return err
+		return fmt.Errorf("error deleting table to reset table: %w", err)
 	}
 	return CreateTable(dynamo)
 }
@@ -71,7 +72,7 @@ func ScanClientTokens(dynamo *datastore.Dynamo) ([]datastore.ClientToken, error)
 	filter := expression.AttributeExists(expression.Name("ExpireAt"))
 	expr, err := expression.NewBuilder().WithFilter(filter).Build()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error building expression to scan client tokens: %w", err)
 	}
 
 	input := &dynamodb.ScanInput{
@@ -82,12 +83,12 @@ func ScanClientTokens(dynamo *datastore.Dynamo) ([]datastore.ClientToken, error)
 	}
 	out, err := dynamo.Scan(input)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error doing scan for client tokens: %w", err)
 	}
 	clientTokens := []datastore.ClientToken{}
 	err = dynamodbattribute.UnmarshalListOfMaps(out.Items, &clientTokens)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error unmarshalling client tokens: %w", err)
 	}
 
 	return clientTokens, nil
@@ -98,7 +99,7 @@ func ScanSyncEntities(dynamo *datastore.Dynamo) ([]datastore.SyncEntity, error) 
 	filter := expression.AttributeExists(expression.Name("Version"))
 	expr, err := expression.NewBuilder().WithFilter(filter).Build()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error building expression to scan sync entitites: %w", err)
 	}
 
 	input := &dynamodb.ScanInput{
@@ -109,12 +110,12 @@ func ScanSyncEntities(dynamo *datastore.Dynamo) ([]datastore.SyncEntity, error) 
 	}
 	out, err := dynamo.Scan(input)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error doing scan for sync entities: %w", err)
 	}
 	syncItems := []datastore.SyncEntity{}
 	err = dynamodbattribute.UnmarshalListOfMaps(out.Items, &syncItems)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error unmarshalling sync entitites: %w", err)
 	}
 
 	return syncItems, nil
@@ -127,7 +128,7 @@ func ScanTagItems(dynamo *datastore.Dynamo) ([]datastore.ServerClientUniqueTagIt
 		expression.AttributeNotExists(expression.Name("Version")))
 	expr, err := expression.NewBuilder().WithFilter(filter).Build()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error building expression to scan tag items: %w", err)
 	}
 
 	input := &dynamodb.ScanInput{
@@ -138,12 +139,12 @@ func ScanTagItems(dynamo *datastore.Dynamo) ([]datastore.ServerClientUniqueTagIt
 	}
 	out, err := dynamo.Scan(input)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error doing scan for tag items: %w", err)
 	}
 	tagItems := []datastore.ServerClientUniqueTagItem{}
 	err = dynamodbattribute.UnmarshalListOfMaps(out.Items, &tagItems)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error unmarshalling tag items: %w", err)
 	}
 
 	return tagItems, nil
@@ -155,7 +156,7 @@ func ScanClientItemCounts(dynamo *datastore.Dynamo) ([]datastore.ClientItemCount
 	filter := expression.AttributeExists(expression.Name("ItemCount"))
 	expr, err := expression.NewBuilder().WithFilter(filter).Build()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error building expression to scan item counts: %w", err)
 	}
 
 	input := &dynamodb.ScanInput{
@@ -166,12 +167,12 @@ func ScanClientItemCounts(dynamo *datastore.Dynamo) ([]datastore.ClientItemCount
 	}
 	out, err := dynamo.Scan(input)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error doing scan for item counts: %w", err)
 	}
 	clientItemCounts := []datastore.ClientItemCount{}
 	err = dynamodbattribute.UnmarshalListOfMaps(out.Items, &clientItemCounts)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error unmarshalling item counts: %w", err)
 	}
 
 	return clientItemCounts, nil

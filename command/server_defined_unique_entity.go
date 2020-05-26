@@ -1,6 +1,7 @@
 package command
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -46,8 +47,11 @@ func InsertServerDefinedUniqueEntities(db datastore.Datastore, clientID string) 
 	// Check if they're existed already for this client.
 	// If yes, just return directly.
 	ready, err := db.HasServerDefinedUniqueTag(clientID, nigoriTag)
-	if err != nil || ready {
-		return err
+	if err != nil {
+		return fmt.Errorf("error checking if entity with a server tag existed: %w", err)
+	}
+	if ready {
+		return nil
 	}
 
 	// Create nigori top-level folder
@@ -56,7 +60,7 @@ func InsertServerDefinedUniqueEntities(db datastore.Datastore, clientID string) 
 	specifics := &sync_pb.EntitySpecifics{SpecificsVariant: nigoriEntitySpecific}
 	entity, err := createServerDefinedUniqueEntity(nigoriName, nigoriTag, clientID, "0", specifics)
 	if err != nil {
-		return err
+		return fmt.Errorf("error creating entity with a server tag: %w", err)
 	}
 	entities = append(entities, entity)
 
@@ -66,7 +70,7 @@ func InsertServerDefinedUniqueEntities(db datastore.Datastore, clientID string) 
 	specifics = &sync_pb.EntitySpecifics{SpecificsVariant: bookmarkEntitySpecific}
 	entity, err = createServerDefinedUniqueEntity(bookmarksName, bookmarksTag, clientID, "0", specifics)
 	if err != nil {
-		return err
+		return fmt.Errorf("error creating entity with a server tag: %w", err)
 	}
 	entities = append(entities, entity)
 
@@ -80,11 +84,15 @@ func InsertServerDefinedUniqueEntities(db datastore.Datastore, clientID string) 
 		entity, err := createServerDefinedUniqueEntity(
 			name, tag, clientID, bookmarkRootID, specifics)
 		if err != nil {
-			return err
+			return fmt.Errorf("error creating entity with a server tag: %w", err)
 		}
 		entities = append(entities, entity)
 	}
 
 	// Start a transaction to insert all server defined unique entities
-	return db.InsertSyncEntitiesWithServerTags(entities)
+	err = db.InsertSyncEntitiesWithServerTags(entities)
+	if err != nil {
+		return fmt.Errorf("error inserting entities with server tags: %w", err)
+	}
+	return nil
 }

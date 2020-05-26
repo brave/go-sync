@@ -44,7 +44,7 @@ func generateToken(n int) (string, error) {
 	bytes := make([]byte, n)
 	_, err := rand.Read(bytes)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("error generating token: %w", err)
 	}
 
 	return base64.URLEncoding.EncodeToString(bytes), nil
@@ -56,7 +56,7 @@ func Authenticate(r *http.Request, db datastore.Datastore) (string, []byte, erro
 
 	err := r.ParseForm()
 	if err != nil {
-		return "", nil, err
+		return "", nil, fmt.Errorf("error parsing form: %w", err)
 	}
 	req := &Request{
 		PublicKey:       r.PostFormValue("client_id"),
@@ -67,15 +67,15 @@ func Authenticate(r *http.Request, db datastore.Datastore) (string, []byte, erro
 	// Verify the signature.
 	publicKey, err := hex.DecodeString(req.PublicKey)
 	if err != nil {
-		return "", nil, err
+		return "", nil, fmt.Errorf("error decoding hex string: %w", err)
 	}
 	timestampBytes, err := hex.DecodeString(req.Timestamp)
 	if err != nil {
-		return "", nil, err
+		return "", nil, fmt.Errorf("error decoding hex string: %w", err)
 	}
 	signedTimestamp, err := hex.DecodeString(req.SignedTimestamp)
 	if err != nil {
-		return "", nil, err
+		return "", nil, fmt.Errorf("error decoding hex string: %w", err)
 	}
 	if !ed25519.Verify(publicKey, timestampBytes, signedTimestamp) {
 		return "", nil, fmt.Errorf("signature verification failed")
@@ -84,7 +84,7 @@ func Authenticate(r *http.Request, db datastore.Datastore) (string, []byte, erro
 	var timestamp int64
 	timestamp, err = strconv.ParseInt(string(timestampBytes), 10, 64)
 	if err != nil {
-		return "", nil, fmt.Errorf("parse timestamp error")
+		return "", nil, fmt.Errorf("error parsing timestamp: %w", err)
 	}
 
 	// Verify the timestamp is not outdated
@@ -96,16 +96,19 @@ func Authenticate(r *http.Request, db datastore.Datastore) (string, []byte, erro
 	expireAt := utils.UnixMilli(time.Now().Add(time.Duration(tokenMaxDuration) * time.Millisecond))
 	token, err := generateToken(nRandBytes)
 	if err != nil {
-		return "", nil, err
+		return "", nil, fmt.Errorf("error generating token: %w", err)
 	}
 	err = db.InsertClientToken(req.PublicKey, token, expireAt)
 	if err != nil {
-		return "", nil, err
+		return "", nil, fmt.Errorf("error inserting client token: %w", err)
 	}
 
 	authRsp := Response{AccessToken: token, ExpiresIn: tokenMaxDuration}
 	rsp, err = json.Marshal(authRsp)
-	return token, rsp, err
+	if err != nil {
+		return "", nil, fmt.Errorf("error marshalling authentication response: %w", err)
+	}
+	return token, rsp, nil
 }
 
 // Authorize extracts the authorize token from the HTTP request and query the

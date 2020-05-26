@@ -24,12 +24,12 @@ func (dynamo *Dynamo) InsertClientToken(id string, token string, expireAt int64)
 	clientToken := ClientToken{ClientID: id, Token: token, ExpireAt: expireAt}
 	av, err := dynamodbattribute.MarshalMap(clientToken)
 	if err != nil {
-		return err
+		return fmt.Errorf("error marshalling client token item to insert client token: %w", err)
 	}
 	cond := expression.AttributeNotExists(expression.Name(pk))
 	expr, err := expression.NewBuilder().WithCondition(cond).Build()
 	if err != nil {
-		return err
+		return fmt.Errorf("error building expression to insert client token: %w", err)
 	}
 	input := &dynamodb.PutItemInput{
 		Item:                      av,
@@ -39,7 +39,10 @@ func (dynamo *Dynamo) InsertClientToken(id string, token string, expireAt int64)
 		TableName:                 aws.String(Table),
 	}
 	_, err = dynamo.PutItem(input)
-	return err
+	if err != nil {
+		return fmt.Errorf("error calling PutItem to insert client token: %w", err)
+	}
+	return nil
 }
 
 // GetClientID queries the table using (ID, ExpireAt) GSI and returns the
@@ -50,7 +53,7 @@ func (dynamo *Dynamo) GetClientID(token string) (string, error) {
 	keyCond := expression.KeyAnd(pkCond, skCond)
 	expr, err := expression.NewBuilder().WithKeyCondition(keyCond).Build()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("error building expression to get client ID: %w", err)
 	}
 	input := &dynamodb.QueryInput{
 		IndexName:                 aws.String(idExpireAtIdx),
@@ -61,7 +64,7 @@ func (dynamo *Dynamo) GetClientID(token string) (string, error) {
 	}
 	out, err := dynamo.Query(input)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("error doing query to get client ID: %w", err)
 	}
 	if *(out.Count) == 0 {
 		return "", fmt.Errorf("Not a valid token")
@@ -70,7 +73,7 @@ func (dynamo *Dynamo) GetClientID(token string) (string, error) {
 	clientTokens := []ClientToken{}
 	err = dynamodbattribute.UnmarshalListOfMaps(out.Items, &clientTokens)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("error unmarshalling client tokens: %w", err)
 	}
 
 	return clientTokens[0].ClientID, nil
