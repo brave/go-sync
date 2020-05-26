@@ -2,9 +2,11 @@ package controller
 
 import (
 	"compress/gzip"
+	"io"
 	"io/ioutil"
 	"net/http"
 
+	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave/go-sync/auth"
 	"github.com/brave/go-sync/command"
 	"github.com/brave/go-sync/datastore"
@@ -13,6 +15,10 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/golang/protobuf/proto"
 	"github.com/rs/zerolog/log"
+)
+
+const (
+	payloadLimit4KB = 1024 * 4
 )
 
 // SyncRouter add routers for command and auth endpoint requests.
@@ -71,23 +77,23 @@ func Command(db datastore.Datastore) http.HandlerFunc {
 			return
 		}
 
-		// Decompress
-		var msg []byte
-		var gr *gzip.Reader
+		reader := r.Body
+		// Create a gzip reader if needed.
 		if r.Header.Get("Content-Encoding") == "gzip" {
-			gr, err = gzip.NewReader(r.Body)
+			gr, err := gzip.NewReader(r.Body)
 			if err != nil {
-				log.Error().Err(err).Msg("Gzip decompression failed")
-				http.Error(w, "Decompress error", http.StatusInternalServerError)
+				log.Error().Err(err).Msg("Create gzip reader failed")
+				http.Error(w, "Create gzip reader failed", http.StatusInternalServerError)
 				return
 			}
-			msg, err = ioutil.ReadAll(gr)
-		} else {
-			msg, err = ioutil.ReadAll(r.Body)
+			defer closers.Panic(gr)
+			reader = gr
 		}
+
+		msg, err := ioutil.ReadAll(io.LimitReader(reader, payloadLimit4KB))
 		if err != nil {
 			log.Error().Err(err).Msg("Read request body failed")
-			http.Error(w, "Decompress error", http.StatusInternalServerError)
+			http.Error(w, "Read request body error", http.StatusInternalServerError)
 			return
 		}
 
