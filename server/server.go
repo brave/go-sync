@@ -2,46 +2,25 @@ package server
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/brave-intl/bat-go/middleware"
+	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave/go-sync/controller"
 	"github.com/brave/go-sync/datastore"
 	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/diode"
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
 )
 
 func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
-	var output io.Writer
-	if os.Getenv("ENV") != "local" {
-		output = os.Stdout
-	} else {
-		output = zerolog.ConsoleWriter{Out: os.Stdout}
-	}
-
-	// Use thread-safe, lock-free, non-blocking writer, log msg could be dropped.
-	wr := diode.NewWriter(output, 1000, time.Duration(10*time.Millisecond), func(missed int) {
-		fmt.Fprintf(os.Stderr, "logger dropped message count: %d", missed)
-	})
-
-	// Always print out timestamp.
-	log := zerolog.New(wr).With().Timestamp().Logger()
-
-	debug := os.Getenv("DEBUG")
-	if debug == "" || debug == "f" || debug == "n" || debug == "0" {
-		log = log.Level(zerolog.InfoLevel)
-	}
-
-	return log.WithContext(ctx), &log
+	return logging.SetupLogger(context.WithValue(ctx, appctx.EnvironmentCTXKey, os.Getenv("ENV")))
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux) {
@@ -50,8 +29,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(chiware.RequestID)
 	r.Use(chiware.RealIP)
 	r.Use(chiware.Heartbeat("/"))
-	r.Use(chiware.Timeout(60 * time.Second))
-	r.Use(middleware.BearerToken)
 
 	if logger != nil {
 		// Also handles panic recovery
@@ -60,6 +37,10 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
 		r.Use(middleware.RequestLogger(logger))
 	}
+
+	r.Use(chiware.Timeout(60 * time.Second))
+	r.Use(middleware.BearerToken)
+	r.Use(middleware.RateLimiter(ctx))
 
 	db, err := datastore.NewDynamo()
 	if err != nil {
