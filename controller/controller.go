@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 
+	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave/go-sync/auth"
 	"github.com/brave/go-sync/command"
@@ -24,9 +25,9 @@ const (
 // SyncRouter add routers for command and auth endpoint requests.
 func SyncRouter(datastore datastore.Datastore) chi.Router {
 	r := chi.NewRouter()
-	r.Post("/command/", Command(datastore))
-	r.Post("/auth", Auth(datastore))
-	r.Get("/timestamp", Timestamp)
+	r.Method("POST", "/command/", middleware.InstrumentHandler("Command", Command(datastore)))
+	r.Method("POST", "/auth", middleware.InstrumentHandler("Auth", Auth(datastore)))
+	r.Method("GET", "/timestamp", middleware.InstrumentHandler("Timetamp", Timestamp()))
 	return r
 }
 
@@ -42,14 +43,16 @@ func sendJSONRsp(body []byte, w http.ResponseWriter, statusCode int) {
 }
 
 // Timestamp returns a current timestamp back to sync clients.
-func Timestamp(w http.ResponseWriter, r *http.Request) {
-	body, err := timestamp.GetTimestamp()
-	if err != nil {
-		log.Error().Err(err).Msg("Get timestamp failed")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	sendJSONRsp(body, w, http.StatusOK)
+func Timestamp() http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := timestamp.GetTimestamp()
+		if err != nil {
+			log.Error().Err(err).Msg("Get timestamp failed")
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		sendJSONRsp(body, w, http.StatusOK)
+	})
 }
 
 // Auth handles authentication requests from sync clients.
