@@ -49,7 +49,8 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		log.Panic().Err(err).Msg("Must be able to init datastore to start")
 	}
 
-	r.Mount("/v2", controller.SyncRouter(db))
+	r.Mount("/v2", controller.SyncRouter(
+		datastore.NewDatastoreWithPrometheus(db, "dynamo")))
 	r.Get("/metrics", middleware.Metrics())
 
 	// Add profiling flag to enable profiling routes.

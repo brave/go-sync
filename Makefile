@@ -25,3 +25,6 @@ docker-up:
 
 docker-test:
 	docker-compose -f docker-compose.yml run --rm dev make test
+
+instrumented:
+	gowrap gen -p github.com/brave/go-sync/datastore -i Datastore -t ./.prom-gowrap.tmpl -o ./datastore/instrumented_datastore.go
