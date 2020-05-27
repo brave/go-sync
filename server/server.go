@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"net/http"
+	_ "net/http/pprof" // pprof magic
 	"os"
 	"time"
 
@@ -50,6 +51,15 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	r.Mount("/v2", controller.SyncRouter(db))
 	r.Get("/metrics", middleware.Metrics())
+
+	// Add profiling flag to enable profiling routes.
+	if os.Getenv("PPROF_ENABLED") != "" {
+		// pprof attaches routes to default serve mux
+		// host:6061/debug/pprof/
+		go func() {
+			log.Error().Err(http.ListenAndServe(":6061", http.DefaultServeMux))
+		}()
+	}
 
 	return ctx, r
 }
