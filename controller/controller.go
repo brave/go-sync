@@ -26,7 +26,6 @@ const (
 func SyncRouter(datastore datastore.Datastore) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/command/", middleware.InstrumentHandler("Command", Command(datastore)))
-	r.Method("POST", "/auth", middleware.InstrumentHandler("Auth", Auth(datastore)))
 	r.Method("GET", "/timestamp", middleware.InstrumentHandler("Timetamp", Timestamp()))
 	return r
 }
@@ -55,24 +54,11 @@ func Timestamp() http.HandlerFunc {
 	})
 }
 
-// Auth handles authentication requests from sync clients.
-func Auth(db datastore.Datastore) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, body, err := auth.Authenticate(r, db)
-		if err != nil {
-			log.Error().Err(err).Msg("Authenticate failed")
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		sendJSONRsp(body, w, http.StatusOK)
-	})
-}
-
 // Command handles GetUpdates and Commit requests from sync clients.
 func Command(db datastore.Datastore) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Authorize
-		clientID, err := auth.Authorize(db, r)
+		clientID, err := auth.Authorize(r)
 		if clientID == "" {
 			if err != nil {
 				log.Error().Err(err).Msg("Authorization failed")
