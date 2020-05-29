@@ -1,151 +1,96 @@
 package auth_test
 
 import (
-	"encoding/json"
+	"encoding/base64"
 	"fmt"
-	"math"
 	"net/http"
-	"net/url"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/brave/go-sync/auth"
-	"github.com/brave/go-sync/datastore"
-	"github.com/brave/go-sync/datastore/datastoretest"
-	jsonschema "github.com/brave/go-sync/schema/json"
+	"github.com/brave/go-sync/auth/authtest"
 	"github.com/brave/go-sync/utils"
 	"github.com/stretchr/testify/suite"
 )
 
 type AuthTestSuite struct {
 	suite.Suite
-	dynamo *datastore.Dynamo
-}
-
-func (suite *AuthTestSuite) SetupSuite() {
-	datastore.Table = "client-entity-token-test-auth"
-	var err error
-	suite.dynamo, err = datastore.NewDynamo()
-	suite.Require().NoError(err, "Failed to get dynamoDB session")
-}
-
-func (suite *AuthTestSuite) SetupTest() {
-	suite.Require().NoError(
-		datastoretest.ResetTable(suite.dynamo), "Failed to reset table")
-}
-
-func (suite *AuthTestSuite) TearDownTest() {
-	suite.Require().NoError(
-		datastoretest.DeleteTable(suite.dynamo), "Failed to delete table")
 }
 
 func (suite *AuthTestSuite) TestAuthenticate() {
-	defaultTimestampMaxDuration := *auth.TimestampMaxDuration
+	// invalid token format
+	id, err := auth.Authenticate(base64.URLEncoding.EncodeToString([]byte("||")))
+	suite.Require().Error(err, "invalid token format should fail")
+	suite.Require().Equal("", id, "empty clientID should be returned")
 
-	// These values are from previous real request.
-	encodedClientID := "F33268C948FF4793E20401ABB2B6D1994F9B7CCC5D6C2DDCBE198594BFC32D7C"
-	encodedTimestamp := "31353839333331313238383436"
-	validSecret := "F715FBC8BBDA7FEC941AE1B29FB9290D64A6001DD102F2D93BAC99151F9E9A18EF35DBEBBE46BB1645375C61A3E9C43D9523811806DEDBB48D32A16F51267B0C"
-	invalidSecret := "ABCDEBC8BBDA7FEC941AE1B29FB9290D64A6001DD102F2D93BAC99151F9E9A18EF35DBEBBE46BB1645375C61A3E9C43D9523811806DEDBB48D32A16F51267B0C" // modified from validSecret
+	// invalid signature
+	_, tokenHex, _, err := authtest.GenerateToken(utils.UnixMilli(time.Now()))
+	suite.Require().NoError(err, "generate token should succeed")
+	id, err = auth.Authenticate(base64.URLEncoding.EncodeToString([]byte("12" + tokenHex)))
+	suite.Require().Error(err, "invalid signature should fail")
+	suite.Require().Equal("", id)
 
-	tests := map[string]struct {
-		timestampMaxDuration int64
-		clientSecret         string
-		err                  error
-	}{
-		"valid signature and timestamp": {
-			timestampMaxDuration: math.MaxInt64,
-			clientSecret:         validSecret,
-			err:                  nil,
-		},
-		"valid signature and outdated timestamp": {
-			timestampMaxDuration: 0,
-			clientSecret:         validSecret,
-			err:                  fmt.Errorf("timestamp is outdated"),
-		},
-		"invalid signature": {
-			timestampMaxDuration: math.MaxInt64,
-			clientSecret:         invalidSecret,
-			err:                  fmt.Errorf("signature verification failed"),
-		},
-	}
+	// valid token
+	tkn, _, expectedID, err := authtest.GenerateToken(utils.UnixMilli(time.Now()))
+	suite.Require().NoError(err, "generate token should succeed")
+	id, err = auth.Authenticate(tkn)
+	suite.Require().NoError(err, "valid token should succeed")
+	suite.Require().Equal(expectedID, id)
 
-	for testName, test := range tests {
-		form := url.Values{
-			"client_id":     {encodedClientID},
-			"timestamp":     {encodedTimestamp},
-			"client_secret": {test.clientSecret},
-		}
-		req, err := http.NewRequest("POST", "url", strings.NewReader(form.Encode()))
-		suite.Require().NoError(err, "NewRequest should succeed")
-		req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	// token expired -1 and +1 day
+	tkn, _, _, err = authtest.GenerateToken(utils.UnixMilli(time.Now()) - auth.TokenMaxDuration - 1)
+	suite.Require().NoError(err, "generate token should succeed")
+	id, err = auth.Authenticate(tkn)
+	suite.Require().Error(err, "outdated token should failed")
+	suite.Require().Equal("", id)
 
-		*auth.TimestampMaxDuration = test.timestampMaxDuration
-		token, rsp, err := auth.Authenticate(req, suite.dynamo)
-		suite.Assert().Equal(test.err, err, "err mismatch for %s test case", testName)
-
-		if test.err == nil {
-			suite.Assert().NotEqual("", token, "%s: success request should not return empty token", testName)
-
-			authRsp := jsonschema.Response{AccessToken: token, ExpiresIn: auth.TokenMaxDuration}
-			outRsp, err := json.Marshal(authRsp)
-			suite.Require().NoError(err, "json marshal should succeed")
-			suite.Assert().Equal(outRsp, rsp, "rsp mismatch for %s test case", testName)
-		} else {
-			suite.Assert().Equal("", token, "%s: fail request should return empty token", testName)
-			suite.Assert().Nil(rsp, "response should be nil for %s test case", testName)
-		}
-	}
-
-	*auth.TimestampMaxDuration = defaultTimestampMaxDuration
+	tkn, _, _, err = authtest.GenerateToken(utils.UnixMilli(time.Now()) + auth.TokenMaxDuration + 100)
+	suite.Require().NoError(err, "generate token should succeed")
+	id, err = auth.Authenticate(tkn)
+	suite.Require().Error(err, "outdated token should failed")
+	suite.Require().Equal("", id)
 }
 
 func (suite *AuthTestSuite) TestAuthorize() {
-	outdatedTime := utils.UnixMilli(time.Unix(0, 0))
-	validTime := utils.UnixMilli(time.Now().Add(time.Minute * 30))
-	suite.Require().NoError(suite.dynamo.InsertClientToken("key", "token1", outdatedTime))
-	suite.Require().NoError(suite.dynamo.InsertClientToken("key", "token2", validTime))
-
 	req, err := http.NewRequest("POST", "url", nil)
 	suite.Require().NoError(err, "NewRequest should succeed")
 
+	validToken, _, validClientID, err := authtest.GenerateToken(utils.UnixMilli(time.Now()))
+	suite.Require().NoError(err, "generate token should succeed")
+	outdatedToken, _, _, err := authtest.GenerateToken(utils.UnixMilli(time.Now()) - auth.TokenMaxDuration - 1)
+	suite.Require().NoError(err, "generate token should succeed")
+
 	invalidTokenErr := fmt.Errorf("Not a valid token")
+	outdatedErr := fmt.Errorf("error authorizing: %w", fmt.Errorf("token is expired"))
 	tests := map[string]struct {
-		header   string
+		token    string
 		clientID string
 		err      error
 	}{
 		"invalid header format": {
-			header:   "Bear ",
+			token:    "Bear ",
 			clientID: "",
 			err:      invalidTokenErr,
 		},
 		"empty token": {
-			header:   "Bearer ",
+			token:    "Bearer ",
 			clientID: "",
 			err:      invalidTokenErr,
 		},
 		"valid token": {
-			header:   "Bearer token2",
-			clientID: "key",
+			token:    "Bearer " + validToken,
+			clientID: validClientID,
 			err:      nil,
 		},
 		"outdated token": {
-			header:   "Bearer token1",
+			token:    "Bearer " + outdatedToken,
 			clientID: "",
-			err:      invalidTokenErr,
-		},
-		"invalid token": {
-			header:   "Bearer token3",
-			clientID: "",
-			err:      invalidTokenErr,
+			err:      outdatedErr,
 		},
 	}
-
 	for testName, test := range tests {
-		req.Header.Set("Authorization", test.header)
-		clientID, err := auth.Authorize(suite.dynamo, req)
+		req.Header.Set("Authorization", test.token)
+		clientID, err := auth.Authorize(req)
 		suite.Require().Equal(test.err, err,
 			"error mismatched for %s test case", testName)
 		suite.Require().Equal(test.clientID, clientID,

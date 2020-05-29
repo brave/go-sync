@@ -67,33 +67,6 @@ func ResetTable(dynamo *datastore.Dynamo) error {
 	return CreateTable(dynamo)
 }
 
-// ScanClientTokens scans the dynamoDB table and returns all client-token items.
-func ScanClientTokens(dynamo *datastore.Dynamo) ([]datastore.ClientToken, error) {
-	filter := expression.AttributeExists(expression.Name("ExpireAt"))
-	expr, err := expression.NewBuilder().WithFilter(filter).Build()
-	if err != nil {
-		return nil, fmt.Errorf("error building expression to scan client tokens: %w", err)
-	}
-
-	input := &dynamodb.ScanInput{
-		ExpressionAttributeNames:  expr.Names(),
-		ExpressionAttributeValues: expr.Values(),
-		FilterExpression:          expr.Filter(),
-		TableName:                 aws.String(datastore.Table),
-	}
-	out, err := dynamo.Scan(input)
-	if err != nil {
-		return nil, fmt.Errorf("error doing scan for client tokens: %w", err)
-	}
-	clientTokens := []datastore.ClientToken{}
-	err = dynamodbattribute.UnmarshalListOfMaps(out.Items, &clientTokens)
-	if err != nil {
-		return nil, fmt.Errorf("error unmarshalling client tokens: %w", err)
-	}
-
-	return clientTokens, nil
-}
-
 // ScanSyncEntities scans the dynamoDB table and returns all sync items.
 func ScanSyncEntities(dynamo *datastore.Dynamo) ([]datastore.SyncEntity, error) {
 	filter := expression.AttributeExists(expression.Name("Version"))

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/brave/go-sync/auth/authtest"
 	"github.com/brave/go-sync/controller"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
@@ -24,7 +25,7 @@ type ControllerTestSuite struct {
 }
 
 func (suite *ControllerTestSuite) SetupSuite() {
-	datastore.Table = "client-entity-token-test-controllor"
+	datastore.Table = "client-entity-test-controllor"
 	var err error
 	suite.dynamo, err = datastore.NewDynamo()
 	suite.Require().NoError(err, "Failed to get dynamoDB session")
@@ -79,9 +80,10 @@ func (suite *ControllerTestSuite) TestCommand() {
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusUnauthorized, rr.Code)
 
-	// Add token into DB to simulate authenicate.
-	ts := utils.UnixMilli(time.Now().Add(time.Minute * 30))
-	suite.Require().NoError(suite.dynamo.InsertClientToken("key", "token", ts))
+	// Generate a valid token to use.
+	token, _, _, err := authtest.GenerateToken(utils.UnixMilli(time.Now()))
+	suite.Require().NoError(err, "generate token should succeed")
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	// Test message without gzip.
 	rr = httptest.NewRecorder()
@@ -98,7 +100,7 @@ func (suite *ControllerTestSuite) TestCommand() {
 
 	req, err = http.NewRequest("POST", "v2/command/", buf)
 	suite.Require().NoError(err, "NewRequest should succeed")
-	req.Header.Set("Authorization", "Bearer token")
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Encoding", "gzip")
 
 	rr = httptest.NewRecorder()

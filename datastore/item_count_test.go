@@ -15,7 +15,7 @@ type ItemCountTestSuite struct {
 }
 
 func (suite *ItemCountTestSuite) SetupSuite() {
-	datastore.Table = "client-entity-token-test-datastore"
+	datastore.Table = "client-entity-test-datastore"
 	var err error
 	suite.dynamo, err = datastore.NewDynamo()
 	suite.Require().NoError(err, "Failed to get dynamoDB session")

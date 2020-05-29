@@ -52,7 +52,7 @@ func NewPBSyncAttrs(name *string, version *int64, deleted *bool, folder *bool, s
 }
 
 func (suite *CommandTestSuite) SetupSuite() {
-	datastore.Table = "client-entity-token-test-command"
+	datastore.Table = "client-entity-test-command"
 	var err error
 	suite.dynamo, err = datastore.NewDynamo()
 	suite.Require().NoError(err, "Failed to get dynamoDB session")

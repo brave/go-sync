@@ -22,7 +22,7 @@ type SyncEntityTestSuite struct {
 }
 
 func (suite *SyncEntityTestSuite) SetupSuite() {
-	datastore.Table = "client-entity-token-test-datastore"
+	datastore.Table = "client-entity-test-datastore"
 	var err error
 	suite.dynamo, err = datastore.NewDynamo()
 	suite.Require().NoError(err, "Failed to get dynamoDB session")
