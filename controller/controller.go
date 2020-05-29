@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	payloadLimit4KB = 1024 * 4
+	payloadLimit10MB = 1024 * 1024 * 10
 )
 
 // SyncRouter add routers for command and auth endpoint requests.
@@ -80,7 +80,7 @@ func Command(db datastore.Datastore) http.HandlerFunc {
 			reader = gr
 		}
 
-		msg, err := ioutil.ReadAll(io.LimitReader(reader, payloadLimit4KB))
+		msg, err := ioutil.ReadAll(io.LimitReader(reader, payloadLimit10MB))
 		if err != nil {
 			log.Error().Err(err).Msg("Read request body failed")
 			http.Error(w, "Read request body error", http.StatusInternalServerError)
