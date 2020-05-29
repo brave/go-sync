@@ -10,7 +10,7 @@ ENV AWS_SECRET_ACCESS_KEY=#
 ARG AWS_ENDPOINT=http://localhost:8000
 ARG AWS_REGION=us-west-2
 ARG DB_LOCATION
-ARG TABLE_NAME=client-entity-token-dev
+ARG TABLE_NAME=client-entity-dev
 
 COPY schema/dynamodb/ .
 RUN mkdir -p ${DB_LOCATION} && \

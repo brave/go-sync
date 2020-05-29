@@ -18,11 +18,6 @@ const (
 	clientIDDataTypeMtimeIdx   string = "ClientIDDataTypeMtimeIndex"
 	clientIDDataTypeMtimeIdxPk string = "ClientID"
 	clientIDDataTypeMtimeIdxSk string = "DataTypeMtime"
-
-	// Strings for (ID, ExpireAt) GSI
-	idExpireAtIdx   string = "IDExpireAtIndex"
-	idExpireAtIdxPk string = "ID"
-	idExpireAtIdxSk string = "ExpireAt"
 )
 
 var (

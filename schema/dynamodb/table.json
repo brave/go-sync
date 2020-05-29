@@ -1,5 +1,5 @@
 {
-  "TableName": "client-entity-token-dev",
+  "TableName": "client-entity-dev",
   "KeySchema": [
     {
       "KeyType": "HASH",
@@ -31,26 +31,6 @@
         "ReadCapacityUnits": 1,
         "WriteCapacityUnits": 1
       }
-    },
-    {
-      "IndexName": "IDExpireAtIndex",
-      "KeySchema": [
-        {
-          "KeyType": "HASH",
-          "AttributeName": "ID"
-        },
-        {
-          "KeyType": "RANGE",
-          "AttributeName": "ExpireAt"
-        }
-      ],
-      "Projection": {
-        "ProjectionType": "KEYS_ONLY"
-      },
-      "ProvisionedThroughput": {
-        "ReadCapacityUnits": 1,
-        "WriteCapacityUnits": 1
-      }
     }
   ],
   "AttributeDefinitions": [
@@ -65,10 +45,6 @@
     {
       "AttributeName": "DataTypeMtime",
       "AttributeType": "S"
-    },
-    {
-      "AttributeName": "ExpireAt",
-      "AttributeType": "N"
     }
   ],
   "ProvisionedThroughput": {

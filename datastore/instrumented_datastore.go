@@ -37,20 +37,6 @@ func NewDatastoreWithPrometheus(base Datastore, instanceName string) DatastoreWi
 	}
 }
 
-// GetClientID implements Datastore
-func (_d DatastoreWithPrometheus) GetClientID(token string) (s1 string, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetClientID", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.GetClientID(token)
-}
-
 // GetClientItemCount implements Datastore
 func (_d DatastoreWithPrometheus) GetClientItemCount(clientID string) (i1 int, err error) {
 	_since := time.Now()
@@ -91,20 +77,6 @@ func (_d DatastoreWithPrometheus) HasServerDefinedUniqueTag(clientID string, tag
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "HasServerDefinedUniqueTag", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.HasServerDefinedUniqueTag(clientID, tag)
-}
-
-// InsertClientToken implements Datastore
-func (_d DatastoreWithPrometheus) InsertClientToken(id string, token string, expireAt int64) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertClientToken", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.InsertClientToken(id, token, expireAt)
 }
 
 // InsertSyncEntitiesWithServerTags implements Datastore

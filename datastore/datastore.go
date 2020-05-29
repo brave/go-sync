@@ -2,10 +2,6 @@ package datastore
 
 // Datastore abstracts over the underlying datastore.
 type Datastore interface {
-	// Insert a new access token for a given client.
-	InsertClientToken(id string, token string, expireAt int64) error
-	// Get the client ID from a non-expired token.
-	GetClientID(token string) (string, error)
 	// Insert a new sync entity.
 	InsertSyncEntity(entity *SyncEntity) error
 	// Insert a series of sync entities in a write transaction.

@@ -41,7 +41,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=#
       - AWS_REGION=us-west-2
       - AWS_ENDPOINT=http://dynamo-local:8000
-      - TABLE_NAME=client-entity-token-dev
+      - TABLE_NAME=client-entity-dev
   dynamo-local:
     build:
       context: .
