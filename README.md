@@ -2,7 +2,7 @@
 
 A sync server implemented in go to communicate with Brave sync clients using
 [components/sync/protocol/sync.proto](https://cs.chromium.org/chromium/src/components/sync/protocol/sync.proto).
-Current Chromium version for sync protocol buffer files used in this repo is Chromium 81.0.4044.113.
+Current Chromium version for sync protocol buffer files used in this repo is Chromium 83.0.4103.61.
 
 This server supports endpoints as bellow.
 1) The `GET /v2/timestamp` endpoint returns a UNIX timestamp in milliseconds and expected time for a token to expire in JSON format. Sync clients are responsible to create valid access tokens using timestamps returned by the server.
