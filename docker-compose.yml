@@ -1,0 +1,52 @@
+version: '3.4'
+
+networks:
+  sync:
+    driver: bridge
+
+services:
+  dev:
+    build:
+      context: .
+      target: builder
+    depends_on:
+      - dynamo-local
+    networks:
+      - sync
+    environment:
+      - PPROF_ENABLED=true
+      - SENTRY_DSN
+      - ENV=local
+      - DEBUG=1
+      - AWS_ACCESS_KEY_ID=#
+      - AWS_SECRET_ACCESS_KEY=#
+      - AWS_REGION=us-west-2
+      - AWS_ENDPOINT=http://dynamo-local:8000
+  web:
+    build:
+      context: .
+      target: artifact
+    ports:
+      - "8295:8295"
+    depends_on:
+      - dynamo-local
+    networks:
+      - sync
+    environment:
+      - PPROF_ENABLED=true
+      - SENTRY_DSN
+      - ENV=local
+      - DEBUG=1
+      - AWS_ACCESS_KEY_ID=#
+      - AWS_SECRET_ACCESS_KEY=#
+      - AWS_REGION=us-west-2
+      - AWS_ENDPOINT=http://dynamo-local:8000
+      - TABLE_NAME=client-entity-dev
+  dynamo-local:
+    build:
+      context: .
+      dockerfile: dynamo.Dockerfile
+    ports:
+      - "8000:8000"
+    networks:
+      - sync

@@ -1,0 +1,203 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+//
+// Sync protocol datatype extension for user events.
+
+// If you change or add any fields in this file, update proto_visitors.h and
+// potentially proto_enum_conversions.{h, cc}.
+
+syntax = "proto2";
+
+option java_multiple_files = true;
+option java_package = "org.chromium.components.sync.protocol";
+
+option optimize_for = LITE_RUNTIME;
+
+package sync_pb;
+
+import "user_consent_types.proto";
+import "gaia_password_reuse.proto";
+
+message UserEventSpecifics {
+  // Time of event, as measured by client in microseconds since Windows epoch.
+  optional int64 event_time_usec = 1;
+
+  // The |global_id| field of the associated navigation, if there is one.
+  optional int64 navigation_id = 2;
+
+  // On startup we generate a new random id to identify which FieldTrialEvents
+  // other events belonged to.
+  optional fixed64 session_id = 3;
+
+  // 4-7 reserved for future scalars.
+
+  // Used for testing and debugging EventLog system.
+  message Test {}
+
+  // Reports field trial membership for the subset of trials that have been
+  // registered as important to other event types.
+  message FieldTrial { repeated fixed32 variation_ids = 1; }
+
+  // Language detection output.
+  message LanguageDetection {
+    message Language {
+      // ISO 639 language code will be used.
+      optional string language_code = 1;
+      // Whether the detected language is reliable, note this is determined by
+      // the CLD3.
+      optional bool is_reliable = 2;
+    }
+    // Top n languages. Typically we just log the top language, but for page
+    // that we're not confident about, we may log up to 3 top languages in
+    // descending order.
+    repeated Language detected_languages = 1;
+    // Adopted language code is the code of final determined language.
+    // It will be stored only if it's different from the first detected
+    // language.
+    optional string adopted_language_code = 2;
+  }
+
+  // User translated a page or interacted with translate suggestion.
+  message Translation {
+    // Source language of the translation.
+    optional string from_language_code = 1;
+    // Target language of the translation.
+    optional string to_language_code = 2;
+    enum Interaction {
+      UNKNOWN = 0;
+      ACCEPT = 1;
+      DECLINE = 2;
+      // This happens when user scroll or click outside the UI without
+      // translation.
+      IGNORED = 3;
+      // This happens when user choose to close the translation window without
+      // translation.
+      DISMISSED = 4;
+      // User manually entered either language.
+      // In this case, from_language_code and to_language_code will be user
+      // chosen values.
+      MANUAL = 5;
+      // User choose to revert the translation, in this case, from_language_code
+      // and to_language_code will be previous chosen values.
+      TRANSLATION_REVERTED = 6;
+      // Automatically triggered translation.
+      // User sets always translate in user settings.
+      AUTO_TRANSLATION_BY_PREF = 7;
+      // User navigated through a click from a translated page.
+      AUTO_TRANSLATION_BY_LINK = 8;
+      // Failed to initialize the translate script, this can happen for iOS due
+      // to CSPs.
+      INITIALIZATION_ERROR = 9;
+    }
+    optional Interaction interaction = 3;
+  }
+
+  // User consented to the usage of a feature or denied/revoked a consent.
+  // Next id: 14
+  message UserConsent {
+    // =========================================================================
+    // Fields common to all Chrome User Consents.
+    // =========================================================================
+
+    // The UI language Chrome is using, represented as the IETF language tag
+    // defined in BCP 47. The region subtag is not included when it adds no
+    // distinguishing information to the language tag (e.g. both "en-US"
+    // and "fr" are correct here).
+    optional string locale = 4;
+
+    // The local time on the client when the user consent was recorded. The time
+    // as measured by client is given in microseconds since Windows epoch. This
+    // is needed since user consent recording may happen when a client is
+    // offline.
+    optional int64 client_consent_time_usec = 12;
+
+    // =========================================================================
+    // The specific consent type. Add new User Consent types to
+    // user_consent_types.proto.
+    // =========================================================================
+
+    oneof consent {
+      UserConsentTypes.SyncConsent sync_consent = 7;
+
+      UserConsentTypes.ArcBackupAndRestoreConsent
+          arc_backup_and_restore_consent = 8;
+
+      UserConsentTypes.ArcGoogleLocationServiceConsent
+          arc_location_service_consent = 9;
+
+      UserConsentTypes.ArcPlayTermsOfServiceConsent
+          arc_play_terms_of_service_consent = 10;
+
+      UserConsentTypes.ArcMetricsAndUsageConsent arc_metrics_and_usage_consent =
+          11;
+
+      UserConsentTypes.UnifiedConsent unified_consent = 13;
+    }
+
+    // =========================================================================
+    // Client only fields. TODO(markusheintz): Refactor the code so that these
+    // fields can be moved out of this message.
+    // =========================================================================
+
+    // The account ID of the user who gave the consent. This field is used
+    // by UserEventService to distinguish consents from different users,
+    // as UserConsent does not get deleted when a user signs out. However,
+    // it should be cleared before being sent over the wire, as the UserEvent
+    // is sent over an authenticated channel, so this information would be
+    // redundant.
+    //
+    // For semantics and usage of the |account_id| in the signin codebase,
+    // see PrimaryAccountManager::GetAuthenticatedAccountId()
+    // or AccountInfo::account_id.
+    optional string account_id = 6;
+
+    // =========================================================================
+    // Deprecated fields. Please do not use them !
+    // =========================================================================
+    // TODO (markusheintz): Deprecate them completely once there few clients with <= M67.
+
+    // Which feature does the consent apply to?
+    enum Feature {
+      FEATURE_UNSPECIFIED = 0;
+      CHROME_SYNC = 1;
+      PLAY_STORE = 2;
+      BACKUP_AND_RESTORE = 3;
+      GOOGLE_LOCATION_SERVICE = 4;
+      CHROME_UNIFIED_CONSENT = 5;
+      // TODO(markusheintz): ASSISTANT_ACTIVITY_CONTROL was only added as
+      // emergency fallback. Remove if not needed.
+      ASSISTANT_ACTIVITY_CONTROL = 6;
+    }
+    optional Feature feature = 1 [deprecated = true];
+    // Ids of the strings of the consent text presented to the user.
+    repeated int32 description_grd_ids = 2 [deprecated = true];
+    // Id of the string of the UI element the user clicked when consenting.
+    optional int32 confirmation_grd_id = 3 [deprecated = true];
+    // Was the consent for |feature| given or not given (denied/revoked)?
+    optional UserConsentTypes.ConsentStatus status = 5 [deprecated = true];
+  }
+
+  // Logged when the user logs into Google, and at least once per 28d.
+  message GaiaPasswordCaptured {
+    enum EventTrigger {
+      UNSPECIFIED = 0;
+      // Event added because user logged in.
+      USER_LOGGED_IN = 1;
+      // Event added because 28d timer fired.
+      EXPIRED_28D_TIMER = 2;
+    }
+    optional EventTrigger event_trigger = 1;
+  }
+
+  oneof event {
+    Test test_event = 8;
+    FieldTrial field_trial_event = 9;
+    LanguageDetection language_detection_event = 10;
+    Translation translation_event = 11;
+    UserConsent user_consent = 12;
+    // Happens when a user types their Google account password on another site.
+    GaiaPasswordReuse gaia_password_reuse_event = 104;
+    GaiaPasswordCaptured gaia_password_captured_event = 15;
+  }
+}

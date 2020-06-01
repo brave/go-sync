@@ -1,0 +1,54 @@
+{
+  "TableName": "client-entity-dev",
+  "KeySchema": [
+    {
+      "KeyType": "HASH",
+      "AttributeName": "ClientID"
+    },
+    {
+      "KeyType": "RANGE",
+      "AttributeName": "ID"
+    }
+  ],
+  "GlobalSecondaryIndexes": [
+    {
+      "IndexName": "ClientIDDataTypeMtimeIndex",
+      "KeySchema": [
+        {
+          "KeyType": "HASH",
+          "AttributeName": "ClientID"
+        },
+        {
+          "KeyType": "RANGE",
+          "AttributeName": "DataTypeMtime"
+        }
+      ],
+      "Projection": {
+        "ProjectionType": "INCLUDE",
+        "NonKeyAttributes": ["Folder"]
+      },
+      "ProvisionedThroughput": {
+        "ReadCapacityUnits": 1,
+        "WriteCapacityUnits": 1
+      }
+    }
+  ],
+  "AttributeDefinitions": [
+    {
+      "AttributeName": "ClientID",
+      "AttributeType": "S"
+    },
+    {
+      "AttributeName": "ID",
+      "AttributeType": "S"
+    },
+    {
+      "AttributeName": "DataTypeMtime",
+      "AttributeType": "S"
+    }
+  ],
+  "ProvisionedThroughput": {
+    "ReadCapacityUnits": 1,
+    "WriteCapacityUnits": 1
+  }
+}
