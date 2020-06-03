@@ -21,7 +21,10 @@ import (
 )
 
 const (
-	maxBatchGetItemSize = 100 // Limited by AWS.
+	maxBatchGetItemSize    = 100 // Limited by AWS.
+	clientTagItemPrefix    = "Client#"
+	serverTagItemPrefix    = "Server#"
+	conditionalCheckFailed = "ConditionalCheckFailed"
 )
 
 // SyncEntity is used to marshal and unmarshal sync items in dynamoDB.
@@ -86,9 +89,9 @@ func (a TagItemByClientIDID) Less(i, j int) bool {
 // NewServerClientUniqueTagItem creates a tag item which is used to ensure the
 // uniqueness of server-defined or client-defined unique tags for a client.
 func NewServerClientUniqueTagItem(clientID string, tag string, isServer bool) *ServerClientUniqueTagItem {
-	prefix := "Client#"
+	prefix := clientTagItemPrefix
 	if isServer {
-		prefix = "Server#"
+		prefix = serverTagItemPrefix
 	}
 
 	return &ServerClientUniqueTagItem{
@@ -299,6 +302,58 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity) (bool, bool, error) {
 		return false, false, fmt.Errorf("error building expression to update sync entity: %w", err)
 	}
 
+	// Soft-delete a sync item with a client tag, use a transaction to delete its
+	// tag item too.
+	if entity.Deleted != nil && entity.ClientDefinedUniqueTag != nil && *entity.Deleted {
+		pk := PrimaryKey{
+			ClientID: entity.ClientID, ID: clientTagItemPrefix + *entity.ClientDefinedUniqueTag}
+		tagItemKey, err := dynamodbattribute.MarshalMap(pk)
+		if err != nil {
+			return false, false, fmt.Errorf("error marshalling key to update sync entity: %w", err)
+		}
+
+		items := []*dynamodb.TransactWriteItem{}
+		updateSyncItem := &dynamodb.TransactWriteItem{
+			Update: &dynamodb.Update{
+				Key:                                 key,
+				ExpressionAttributeNames:            expr.Names(),
+				ExpressionAttributeValues:           expr.Values(),
+				ConditionExpression:                 expr.Condition(),
+				UpdateExpression:                    expr.Update(),
+				ReturnValuesOnConditionCheckFailure: aws.String(dynamodb.ReturnValueAllOld),
+				TableName:                           aws.String(Table),
+			},
+		}
+		deleteTagItem := &dynamodb.TransactWriteItem{
+			Delete: &dynamodb.Delete{
+				Key:       tagItemKey,
+				TableName: aws.String(Table),
+			},
+		}
+		items = append(items, updateSyncItem)
+		items = append(items, deleteTagItem)
+
+		_, err = dynamo.TransactWriteItems(
+			&dynamodb.TransactWriteItemsInput{TransactItems: items})
+		if err != nil {
+			// Return conflict if the update condition fails.
+			if canceledException, ok := err.(*dynamodb.TransactionCanceledException); ok {
+				for _, reason := range canceledException.CancellationReasons {
+					if reason.Code != nil && *reason.Code == conditionalCheckFailed {
+						return true, false, nil
+					}
+				}
+			}
+
+			return false, false, fmt.Errorf("error deleting sync item and tag item in a transaction: %w", err)
+		}
+
+		// Successfully soft-delete the sync item and delete the tag item.
+		return false, true, nil
+	}
+
+	// Not deleting a sync item with a client tag, do a normal update on sync
+	// item.
 	input := &dynamodb.UpdateItemInput{
 		Key:                       key,
 		ExpressionAttributeNames:  expr.Names(),

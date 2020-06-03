@@ -228,7 +228,7 @@ func (suite *SyncEntityTestSuite) TestInsertSyncEntitiesWithServerTags() {
 	suite.Assert().Equal(tagItems, expectedTagItems)
 }
 
-func (suite *SyncEntityTestSuite) TestUpdateSyncEntity() {
+func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_Basic() {
 	// Insert three new items.
 	entity1 := datastore.SyncEntity{
 		ClientID:      "client1",
@@ -268,7 +268,7 @@ func (suite *SyncEntityTestSuite) TestUpdateSyncEntity() {
 	conflict, delete, err := suite.dynamo.UpdateSyncEntity(&updateEntity1)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().False(conflict, "Successful update should not have conflict")
-	suite.Assert().True(delete, "Delete operation should return false")
+	suite.Assert().True(delete, "Delete operation should return true")
 
 	// Update with optional fields.
 	updateEntity2 := updateEntity1
@@ -309,6 +309,72 @@ func (suite *SyncEntityTestSuite) TestUpdateSyncEntity() {
 	syncItems, err = datastoretest.ScanSyncEntities(suite.dynamo)
 	suite.Require().NoError(err, "ScanSyncEntities should succeed")
 	suite.Assert().Equal(syncItems, []datastore.SyncEntity{updateEntity1, updateEntity2, updateEntity3})
+}
+
+func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_ReuseClientTag() {
+	// Insert an item with client tag.
+	entity1 := datastore.SyncEntity{
+		ClientID:               "client1",
+		ID:                     "id1",
+		Version:                aws.Int64(1),
+		ClientDefinedUniqueTag: aws.String("client_tag"),
+		Ctime:                  aws.Int64(12345678),
+		Mtime:                  aws.Int64(12345678),
+		DataType:               aws.Int(123),
+		Folder:                 aws.Bool(false),
+		Deleted:                aws.Bool(false),
+		DataTypeMtime:          aws.String("123#12345678"),
+		Specifics:              []byte{1, 2},
+	}
+	suite.Require().NoError(
+		suite.dynamo.InsertSyncEntity(&entity1), "InsertSyncEntity should succeed")
+
+	// Check a tag item is inserted.
+	tagItems, err := datastoretest.ScanTagItems(suite.dynamo)
+	suite.Require().NoError(err, "ScanTagItems should succeed")
+	suite.Assert().Equal(1, len(tagItems), "Tag item should be inserted")
+
+	// Update it to version 2.
+	updateEntity1 := entity1
+	updateEntity1.Version = aws.Int64(2)
+	updateEntity1.Mtime = aws.Int64(23456789)
+	updateEntity1.Folder = aws.Bool(true)
+	updateEntity1.DataTypeMtime = aws.String("123#23456789")
+	updateEntity1.Specifics = []byte{3, 4}
+	conflict, delete, err := suite.dynamo.UpdateSyncEntity(&updateEntity1)
+	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
+	suite.Assert().False(conflict, "Successful update should not have conflict")
+	suite.Assert().False(delete, "Non-delete operation should return false")
+
+	// Soft-delete the item with wrong version should get conflict.
+	updateEntity1.Deleted = aws.Bool(true)
+	conflict, delete, err = suite.dynamo.UpdateSyncEntity(&updateEntity1)
+	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
+	suite.Assert().True(conflict, "Version mismatched update should have conflict")
+	suite.Assert().False(delete, "Failed delete operation should return false")
+
+	// Soft-delete the item with matched version.
+	updateEntity1.Version = aws.Int64(3)
+	conflict, delete, err = suite.dynamo.UpdateSyncEntity(&updateEntity1)
+	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
+	suite.Assert().False(conflict, "Successful update should not have conflict")
+	suite.Assert().True(delete, "Delete operation should return true")
+
+	// Check tag item is deleted.
+	tagItems, err = datastoretest.ScanTagItems(suite.dynamo)
+	suite.Require().NoError(err, "ScanTagItems should succeed")
+	suite.Assert().Equal(0, len(tagItems), "Tag item should be deleted")
+
+	// Insert another item with the same client tag again.
+	entity2 := entity1
+	entity2.ID = "id2"
+	suite.Require().NoError(
+		suite.dynamo.InsertSyncEntity(&entity2), "InsertSyncEntity should succeed")
+
+	// Check a tag item is inserted.
+	tagItems, err = datastoretest.ScanTagItems(suite.dynamo)
+	suite.Require().NoError(err, "ScanTagItems should succeed")
+	suite.Assert().Equal(1, len(tagItems), "Tag item should be inserted")
 }
 
 func (suite *SyncEntityTestSuite) TestGetUpdatesForType() {
