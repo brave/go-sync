@@ -7,11 +7,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/brave-intl/bat-go/middleware"
+	batware "github.com/brave-intl/bat-go/middleware"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave/go-sync/controller"
 	"github.com/brave/go-sync/datastore"
+	"github.com/brave/go-sync/middleware"
 	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
@@ -36,11 +37,12 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Use(hlog.NewHandler(*logger))
 		r.Use(hlog.UserAgentHandler("user_agent"))
 		r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
-		r.Use(middleware.RequestLogger(logger))
+		r.Use(batware.RequestLogger(logger))
 	}
 
 	r.Use(chiware.Timeout(60 * time.Second))
-	r.Use(middleware.BearerToken)
+	r.Use(batware.BearerToken)
+	r.Use(middleware.ResponseHeader)
 
 	db, err := datastore.NewDynamo()
 	if err != nil {
@@ -50,7 +52,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	r.Mount("/v2", controller.SyncRouter(
 		datastore.NewDatastoreWithPrometheus(db, "dynamo")))
-	r.Get("/metrics", middleware.Metrics())
+	r.Get("/metrics", batware.Metrics())
 
 	// Add profiling flag to enable profiling routes.
 	if os.Getenv("PPROF_ENABLED") != "" {
