@@ -26,7 +26,7 @@ const (
 func SyncRouter(datastore datastore.Datastore) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/command/", middleware.InstrumentHandler("Command", Command(datastore)))
-	r.Method("GET", "/timestamp", middleware.InstrumentHandler("Timetamp", Timestamp()))
+	r.Method("POST", "/timestamp", middleware.InstrumentHandler("Timetamp", Timestamp()))
 	return r
 }
 

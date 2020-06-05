@@ -2,22 +2,31 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	_ "net/http/pprof" // pprof magic
 	"os"
 	"time"
 
-	"github.com/brave-intl/bat-go/middleware"
+	batware "github.com/brave-intl/bat-go/middleware"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave/go-sync/controller"
 	"github.com/brave/go-sync/datastore"
+	"github.com/brave/go-sync/middleware"
 	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
+)
+
+var (
+	commit    string
+	version   string
+	buildTime string
 )
 
 func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
@@ -36,11 +45,12 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Use(hlog.NewHandler(*logger))
 		r.Use(hlog.UserAgentHandler("user_agent"))
 		r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
-		r.Use(middleware.RequestLogger(logger))
+		r.Use(batware.RequestLogger(logger))
 	}
 
 	r.Use(chiware.Timeout(60 * time.Second))
-	r.Use(middleware.BearerToken)
+	r.Use(batware.BearerToken)
+	r.Use(middleware.CommonResponseHeaders)
 
 	db, err := datastore.NewDynamo()
 	if err != nil {
@@ -50,7 +60,14 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	r.Mount("/v2", controller.SyncRouter(
 		datastore.NewDatastoreWithPrometheus(db, "dynamo")))
-	r.Get("/metrics", middleware.Metrics())
+	r.Get("/metrics", batware.Metrics())
+
+	log.Info().
+		Str("version", version).
+		Str("commit", commit).
+		Str("buildTime", buildTime).
+		Msg("server starting up")
+	r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit))
 
 	// Add profiling flag to enable profiling routes.
 	if os.Getenv("PPROF_ENABLED") != "" {
@@ -71,7 +88,10 @@ func StartServer() {
 	// Setup Sentry.
 	sentryDsn := os.Getenv("SENTRY_DSN")
 	if sentryDsn != "" {
-		err := sentry.Init(sentry.ClientOptions{Dsn: sentryDsn})
+		err := sentry.Init(sentry.ClientOptions{
+			Dsn:     sentryDsn,
+			Release: fmt.Sprintf("go-sync@%s-%s", commit, buildTime),
+		})
 		if err != nil {
 			logger.Panic().Err(err).Msg("Init sentry failed")
 		}

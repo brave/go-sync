@@ -20,6 +20,6 @@ func TestGetTimestamp(t *testing.T) {
 	err = json.Unmarshal(rsp, &timestampRsp)
 	assert.Nil(t, err)
 
-	expectedJSON := "{\"timestamp\":\"" + timestampRsp.Timestamp + "\",\"expires_in\":" + strconv.FormatInt(auth.TokenMaxDuration, 10) + "}"
+	expectedJSON := "{\"access_token\":\"" + timestampRsp.Timestamp + "\",\"expires_in\":" + strconv.FormatInt(auth.TokenMaxDuration, 10) + "}"
 	assert.Equal(t, expectedJSON, string(rsp))
 }
