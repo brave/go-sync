@@ -9,6 +9,10 @@ services:
     build:
       context: .
       target: builder
+      args:
+        VERSION: "${VERSION}"
+        COMMIT: "${COMMIT}"
+        BUILD_TIME: "${BUILD_TIME}"
     depends_on:
       - dynamo-local
     networks:
@@ -26,6 +30,10 @@ services:
     build:
       context: .
       target: artifact
+      args:
+        VERSION: "${VERSION}"
+        COMMIT: "${COMMIT}"
+        BUILD_TIME: "${BUILD_TIME}"
     ports:
       - "8295:8295"
     depends_on:
