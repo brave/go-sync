@@ -12,7 +12,6 @@ import (
 	"github.com/brave/go-sync/command"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
-	"github.com/brave/go-sync/timestamp"
 	"github.com/go-chi/chi"
 	"github.com/golang/protobuf/proto"
 	"github.com/rs/zerolog/log"
@@ -26,32 +25,7 @@ const (
 func SyncRouter(datastore datastore.Datastore) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/command/", middleware.InstrumentHandler("Command", Command(datastore)))
-	r.Method("POST", "/timestamp", middleware.InstrumentHandler("Timetamp", Timestamp()))
 	return r
-}
-
-func sendJSONRsp(body []byte, w http.ResponseWriter, statusCode int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	_, err := w.Write(body)
-	if err != nil {
-		log.Error().Err(err).Msg("Write HTTP response body failed")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-}
-
-// Timestamp returns a current timestamp back to sync clients.
-func Timestamp() http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := timestamp.GetTimestamp()
-		if err != nil {
-			log.Error().Err(err).Msg("Get timestamp failed")
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		sendJSONRsp(body, w, http.StatusOK)
-	})
 }
 
 // Command handles GetUpdates and Commit requests from sync clients.
