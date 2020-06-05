@@ -8,15 +8,23 @@ import (
 	"github.com/brave/go-sync/utils"
 )
 
-const (
-	saneTimeMillsHeaderKey = "Sane-Time-Millis"
+func saneTimeMillsHeaderFunc(w http.ResponseWriter) {
+	w.Header().Set("Sane-Time-Millis", strconv.FormatInt(utils.UnixMilli(time.Now()), 10))
+}
+
+var (
+	headerFuncs = []func(w http.ResponseWriter){
+		saneTimeMillsHeaderFunc,
+	}
 )
 
-// ResponseHeader is a middleware to apply common response headers.
-func ResponseHeader(next http.Handler) http.Handler {
+// CommonResponseHeaders is a middleware to apply common response headers.
+func CommonResponseHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set(saneTimeMillsHeaderKey,
-			strconv.FormatInt(utils.UnixMilli(time.Now()), 10))
+		for _, headerFunc := range headerFuncs {
+			headerFunc(w)
+		}
+
 		next.ServeHTTP(w, r)
 	})
 }
