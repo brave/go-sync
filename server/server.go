@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	_ "net/http/pprof" // pprof magic
 	"os"
@@ -9,6 +10,7 @@ import (
 
 	batware "github.com/brave-intl/bat-go/middleware"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave/go-sync/controller"
 	"github.com/brave/go-sync/datastore"
@@ -19,6 +21,12 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
+)
+
+var (
+	commit    string
+	version   string
+	buildTime string
 )
 
 func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
@@ -54,6 +62,13 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		datastore.NewDatastoreWithPrometheus(db, "dynamo")))
 	r.Get("/metrics", batware.Metrics())
 
+	log.Info().
+		Str("version", version).
+		Str("commit", commit).
+		Str("buildTime", buildTime).
+		Msg("server starting up")
+	r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit))
+
 	// Add profiling flag to enable profiling routes.
 	if os.Getenv("PPROF_ENABLED") != "" {
 		// pprof attaches routes to default serve mux
@@ -73,7 +88,10 @@ func StartServer() {
 	// Setup Sentry.
 	sentryDsn := os.Getenv("SENTRY_DSN")
 	if sentryDsn != "" {
-		err := sentry.Init(sentry.ClientOptions{Dsn: sentryDsn})
+		err := sentry.Init(sentry.ClientOptions{
+			Dsn:     sentryDsn,
+			Release: fmt.Sprintf("go-sync@%s-%s", commit, buildTime),
+		})
 		if err != nil {
 			logger.Panic().Err(err).Msg("Init sentry failed")
 		}
