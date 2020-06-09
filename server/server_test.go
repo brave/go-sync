@@ -34,12 +34,12 @@ func TestPing(t *testing.T) {
 	assert.Equal(t, expected, string(actual))
 }
 
-func TestTimestamp(t *testing.T) {
-	req, err := http.NewRequest("POST", "/v2/timestamp", nil)
+func TestCommand(t *testing.T) {
+	req, err := http.NewRequest("POST", "/v2/command/", nil)
 	assert.Nil(t, err)
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 	assert.NotEmpty(t, rr.Result().Header.Get("Sane-Time-Millis"))
 }
