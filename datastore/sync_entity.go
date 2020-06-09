@@ -25,6 +25,8 @@ const (
 	clientTagItemPrefix    = "Client#"
 	serverTagItemPrefix    = "Server#"
 	conditionalCheckFailed = "ConditionalCheckFailed"
+	ttlAttrName            = "ttl"
+	ttl                    = time.Hour * 24 * 90 // 90 days
 )
 
 // SyncEntity is used to marshal and unmarshal sync items in dynamoDB.
@@ -292,6 +294,12 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity) (bool, bool, error) {
 	}
 	if entity.Deleted != nil {
 		update = update.Set(expression.Name("Deleted"), expression.Value(entity.Deleted))
+
+		// Set TTL attribute when soft-deleting an item which will remove obsolete
+		// items automatically by dynamoDB.
+		if *entity.Deleted {
+			update = update.Set(expression.Name(ttlAttrName), expression.Value(time.Now().Add(ttl).Unix()))
+		}
 	}
 	if entity.Folder != nil {
 		update = update.Set(expression.Name("Folder"), expression.Value(entity.Folder))
