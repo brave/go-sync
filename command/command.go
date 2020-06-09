@@ -29,13 +29,13 @@ const (
 // deleted based on the client's requests.
 func handleGetUpdatesRequest(guMsg *sync_pb.GetUpdatesMessage, guRsp *sync_pb.GetUpdatesResponse, db datastore.Datastore, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
 	errCode := sync_pb.SyncEnums_SUCCESS // default value, might be changed later
-
-	if *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_NEW_CLIENT {
+	isNewClient := guMsg.GetUpdatesOrigin != nil && *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_NEW_CLIENT
+	if isNewClient {
 		err := InsertServerDefinedUniqueEntities(db, clientID)
 		if err != nil {
 			log.Error().Err(err).Msg("Create server defined unique entities failed")
 			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-			return &errCode, nil
+			return &errCode, fmt.Errorf("error creating server defined unique entitiies: %w", err)
 		}
 	}
 
@@ -72,8 +72,7 @@ func handleGetUpdatesRequest(guMsg *sync_pb.GetUpdatesMessage, guRsp *sync_pb.Ge
 			binary.PutVarint(guRsp.NewProgressMarker[i].Token, int64(0))
 		}
 
-		if *fromProgressMarker.DataTypeId == nigoriTypeID &&
-			*guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_NEW_CLIENT {
+		if *fromProgressMarker.DataTypeId == nigoriTypeID && isNewClient {
 			// Bypassing chromium's restriction here, our server won't provide the
 			// initial encryption keys like chromium does, this will be overwritten
 			// by our client.
@@ -83,15 +82,16 @@ func handleGetUpdatesRequest(guMsg *sync_pb.GetUpdatesMessage, guRsp *sync_pb.Ge
 
 		token, n := binary.Varint(guRsp.NewProgressMarker[i].Token)
 		if n <= 0 {
-			return &errCode, fmt.Errorf("Failed at decoding token value %v", token)
+			return nil, fmt.Errorf("Failed at decoding token value %v", token)
 		}
 
 		curMaxSize := int64(maxSize) - int64(len(guRsp.Entries))
 		count, entities, err := db.GetUpdatesForType(int(*fromProgressMarker.DataTypeId), token, fetchFolders, clientID, curMaxSize)
 		if err != nil {
-			log.Error().Err(err).Msg("db.GetUpdatesForType failed")
+			log.Error().Err(err).Msgf("db.GetUpdatesForType failed for type %v", *fromProgressMarker.DataTypeId)
 			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-			return &errCode, nil
+			return &errCode,
+				fmt.Errorf("error getting updates for type %v: %w", *fromProgressMarker.DataTypeId, err)
 		}
 
 		// Fill the PB entry from above DB entries until maxSize is reached.
@@ -100,7 +100,7 @@ func handleGetUpdatesRequest(guMsg *sync_pb.GetUpdatesMessage, guRsp *sync_pb.Ge
 			entity, err := datastore.CreatePBSyncEntity(&entities[j])
 			if err != nil {
 				errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-				return &errCode, nil
+				return &errCode, fmt.Errorf("error creating protobuf sync entity from DB entity: %w", err)
 			}
 			guRsp.Entries = append(guRsp.Entries, entity)
 		}
@@ -136,7 +136,7 @@ func handleCommitRequest(commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.Co
 	if err != nil {
 		log.Error().Err(err).Msg("Get client's item count failed")
 		errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-		return &errCode, nil
+		return &errCode, fmt.Errorf("error getting client's item count: %w", err)
 	}
 
 	commitRsp.Entryresponse = make([]*sync_pb.CommitResponse_EntryResponse, len(commitMsg.Entries))
@@ -148,6 +148,7 @@ func handleCommitRequest(commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.Co
 		if err != nil { // Can't unmarshal & marshal the message from PB into DB format
 			rspType := sync_pb.CommitResponse_INVALID_MESSAGE
 			entryRsp.ResponseType = &rspType
+			entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Cannot convert protobuf sync entity to DB format: %v", err.Error()))
 			continue
 		}
 
@@ -156,6 +157,7 @@ func handleCommitRequest(commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.Co
 			if itemCount+count >= maxClientObjectQuota {
 				rspType := sync_pb.CommitResponse_OVER_QUOTA
 				entryRsp.ResponseType = &rspType
+				entryRsp.ErrorMessage = aws.String(fmt.Sprintf("There are already %v non-deleted objects in store", itemCount))
 				continue
 			}
 
@@ -164,6 +166,7 @@ func handleCommitRequest(commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.Co
 				log.Error().Err(err).Msg("Insert sync entity failed")
 				rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
 				entryRsp.ResponseType = &rspType
+				entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Insert sync entity failed: %v", err.Error()))
 				continue
 			}
 			count++
@@ -173,6 +176,7 @@ func handleCommitRequest(commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.Co
 				log.Error().Err(err).Msg("Update sync entity failed")
 				rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
 				entryRsp.ResponseType = &rspType
+				entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Update sync entity failed: %v", err.Error()))
 				continue
 			}
 			if conflict {
@@ -230,6 +234,13 @@ func HandleClientToServerMessage(pb *sync_pb.ClientToServerMessage, pbRsp *sync_
 		pbRsp.GetUpdates = guRsp
 		pbRsp.ErrorCode, err = handleGetUpdatesRequest(pb.GetUpdates, guRsp, db, clientID)
 		if err != nil {
+			if pbRsp.ErrorCode != nil {
+				pbRsp.ErrorMessage = aws.String(err.Error())
+				return nil
+			}
+			// In seledom error cases which are not temporary and will not go away
+			// when clients retry, we will not use defined sync error in the proto
+			// response, but use internal server error.
 			return fmt.Errorf("error handling GetUpdates request: %w", err)
 		}
 	} else if *pb.MessageContents == sync_pb.ClientToServerMessage_COMMIT {
@@ -237,6 +248,13 @@ func HandleClientToServerMessage(pb *sync_pb.ClientToServerMessage, pbRsp *sync_
 		pbRsp.Commit = commitRsp
 		pbRsp.ErrorCode, err = handleCommitRequest(pb.Commit, commitRsp, db, clientID)
 		if err != nil {
+			if pbRsp.ErrorCode != nil {
+				pbRsp.ErrorMessage = aws.String(err.Error())
+				return nil
+			}
+			// In seledom error cases which are not temporary and will not go away
+			// when clients retry, we will not use defined sync error in the proto
+			// response, but use internal server error.
 			return fmt.Errorf("error handling Commit request: %w", err)
 		}
 	} else {
