@@ -18,6 +18,9 @@ RUN mkdir -p ${DB_LOCATION} && \
       DYNAMO_PID=$! && \
       aws dynamodb create-table --cli-input-json file://table.json \
       --endpoint-url ${AWS_ENDPOINT} --region ${AWS_REGION} && \
+      aws dynamodb update-time-to-live --table-name ${TABLE_NAME} \
+      --endpoint-url ${AWS_ENDPOINT} --region ${AWS_REGION} \
+      --time-to-live-specification Enabled=true,AttributeName=ttl && \
       kill $DYNAMO_PID
 
 FROM amazon/dynamodb-local:1.12.0
