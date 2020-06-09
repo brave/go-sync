@@ -150,3 +150,41 @@ func ScanClientItemCounts(dynamo *datastore.Dynamo) ([]datastore.ClientItemCount
 
 	return clientItemCounts, nil
 }
+
+// TTL is used to unmarshal result of TTL attribute from dynamoDB.
+type TTL struct {
+	TTL *int64 `dynamodbav:"ttl,omitempty"`
+}
+
+// IsTTLSet checks if TTL is set for an item.
+func IsTTLSet(dynamo *datastore.Dynamo, clientID string, id string) (bool, error) {
+	primaryKey := datastore.PrimaryKey{ClientID: clientID, ID: id}
+	key, err := dynamodbattribute.MarshalMap(primaryKey)
+	if err != nil {
+		return false, fmt.Errorf("error marshalling primary key: %w", err)
+	}
+
+	proj := expression.NamesList(expression.Name("ttl"))
+	expr, err := expression.NewBuilder().WithProjection(proj).Build()
+	if err != nil {
+		return false, fmt.Errorf("error building expr: %w", err)
+	}
+
+	input := &dynamodb.GetItemInput{
+		Key:                      key,
+		ExpressionAttributeNames: expr.Names(),
+		ProjectionExpression:     expr.Projection(),
+		TableName:                aws.String(datastore.Table),
+	}
+	out, err := dynamo.GetItem(input)
+	if err != nil {
+		return false, fmt.Errorf("error doing get TTL for an item: %w", err)
+	}
+
+	ttl := TTL{}
+	err = dynamodbattribute.UnmarshalMap(out.Item, &ttl)
+	if err != nil {
+		return false, fmt.Errorf("error unmarshalling TTL: %w", err)
+	}
+	return ttl.TTL != nil, nil
+}
