@@ -15,9 +15,9 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb/expression"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 	"github.com/brave/go-sync/utils"
-	"github.com/golang/protobuf/proto"
 	"github.com/rs/zerolog/log"
 	"github.com/satori/go.uuid"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
