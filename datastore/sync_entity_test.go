@@ -311,46 +311,6 @@ func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_Basic() {
 	suite.Assert().Equal(syncItems, []datastore.SyncEntity{updateEntity1, updateEntity2, updateEntity3})
 }
 
-func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_AddTTLWhenSoftDelete() {
-	entity1 := datastore.SyncEntity{
-		ClientID:      "client1",
-		ID:            "id1",
-		Version:       aws.Int64(1),
-		Ctime:         aws.Int64(12345678),
-		Mtime:         aws.Int64(12345678),
-		DataType:      aws.Int(123),
-		Folder:        aws.Bool(false),
-		Deleted:       aws.Bool(false),
-		DataTypeMtime: aws.String("123#12345678"),
-		Specifics:     []byte{1, 2},
-	}
-	suite.Require().NoError(
-		suite.dynamo.InsertSyncEntity(&entity1), "InsertSyncEntity should succeed")
-
-	// Do a non-delete update.
-	entity1.Version = aws.Int64(2)
-	conflict, delete, err := suite.dynamo.UpdateSyncEntity(&entity1)
-	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
-	suite.Assert().False(conflict, "Successful update should not have conflict")
-	suite.Assert().False(delete, "Non-delete operation should return false")
-
-	isTTLSet, err := datastoretest.IsTTLSet(suite.dynamo, entity1.ClientID, entity1.ID)
-	suite.Require().NoError(err, "IsTTLSet should succeed")
-	suite.Assert().False(isTTLSet, "TTL should not be set for non-delete operations")
-
-	// Do a soft-delete.
-	entity1.Version = aws.Int64(3)
-	entity1.Deleted = aws.Bool(true)
-	conflict, delete, err = suite.dynamo.UpdateSyncEntity(&entity1)
-	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
-	suite.Assert().False(conflict, "Successful update should not have conflict")
-	suite.Assert().True(delete, "Delete operation should return false")
-
-	isTTLSet, err = datastoretest.IsTTLSet(suite.dynamo, entity1.ClientID, entity1.ID)
-	suite.Require().NoError(err, "IsTTLSet should succeed")
-	suite.Assert().True(isTTLSet, "TTL should be set when soft-delete")
-}
-
 func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_ReuseClientTag() {
 	// Insert an item with client tag.
 	entity1 := datastore.SyncEntity{
