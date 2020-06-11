@@ -1,9 +1,9 @@
 package datastore_test
 
 import (
+	"encoding/json"
 	"sort"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -610,7 +610,7 @@ func (suite *SyncEntityTestSuite) TestCreateDBSyncEntity() {
 	// Empty specifics should report marshal error.
 	pbEntity.Specifics = nil
 	_, err = datastore.CreateDBSyncEntity(&pbEntity, guid, "client1")
-	suite.Assert().True(strings.Contains(err.Error(), "proto: Marshal called with nil"))
+	suite.Assert().NotNil(err.Error(), "empty specifics should fail")
 }
 
 func (suite *SyncEntityTestSuite) TestCreatePBSyncEntity() {
@@ -668,12 +668,13 @@ func (suite *SyncEntityTestSuite) TestCreatePBSyncEntity() {
 
 	pbEntity, err := datastore.CreatePBSyncEntity(&dbEntity)
 	suite.Require().NoError(err, "CreatePBSyncEntity should succeed")
-	// These two are a part of protobuf internal implementation which would
-	// break our use of DeepEqual in the below assert, manually reset to 0 as a
-	// workaround to make them equal.
-	specifics.XXX_sizecache = 0
-	uniquePosition.XXX_sizecache = 0
-	suite.Assert().Equal(*pbEntity, expectedPBEntity)
+
+	// Marshal to json to ignore protobuf internal fields when checking equality.
+	s1, err := json.Marshal(pbEntity)
+	suite.Require().NoError(err, "json.Marshal should succeed")
+	s2, err := json.Marshal(&expectedPBEntity)
+	suite.Require().NoError(err, "json.Marshal should succeed")
+	suite.Assert().Equal(s1, s2)
 
 	// Nil UniquePosition should be unmarshalled as nil without error.
 	dbEntity.UniquePosition = nil

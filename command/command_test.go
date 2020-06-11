@@ -2,6 +2,7 @@ package command_test
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"sort"
 	"strings"
 	"testing"
@@ -190,7 +191,14 @@ func assertGetUpdatesResponse(suite *CommandTestSuite, rsp *sync_pb.GetUpdatesRe
 
 	sort.Sort(PBSyncAttrsByName(expectedPBSyncAttrs))
 	sort.Sort(PBSyncAttrsByName(PBSyncAttrs))
-	suite.Assert().Equal(expectedPBSyncAttrs, PBSyncAttrs)
+
+	// Marshal to json to ignore protobuf internal fields when checking equality.
+	s1, err := json.Marshal(expectedPBSyncAttrs)
+	suite.Require().NoError(err, "json.Marshal should succeed")
+	s2, err := json.Marshal(PBSyncAttrs)
+	suite.Require().NoError(err, "json.Marshal should succeed")
+	suite.Assert().Equal(s1, s2)
+
 	suite.Assert().Equal(*newMarker, rsp.NewProgressMarker)
 	suite.Assert().Equal(expectedChangesRemaining, *rsp.ChangesRemaining)
 }
