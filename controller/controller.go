@@ -13,8 +13,8 @@ import (
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 	"github.com/go-chi/chi"
-	"github.com/golang/protobuf/proto"
 	"github.com/rs/zerolog/log"
+	"google.golang.org/protobuf/proto"
 )
 
 const (

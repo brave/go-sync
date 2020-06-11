@@ -15,9 +15,9 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb/expression"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 	"github.com/brave/go-sync/utils"
-	"github.com/golang/protobuf/proto"
 	"github.com/rs/zerolog/log"
 	"github.com/satori/go.uuid"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -492,6 +492,10 @@ func validatePBEntity(entity *sync_pb.SyncEntity) error {
 		return fmt.Errorf("validate SyncEntity error: empty Version")
 	}
 
+	if entity.Specifics == nil {
+		return fmt.Errorf("validate SyncEntity error: nil Specifics")
+	}
+
 	return nil
 }
 
@@ -503,7 +507,7 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 		return nil, fmt.Errorf("error validating protobuf sync entity to create DB sync entity: %w", err)
 	}
 
-	// Specifics should always be passed, nil one will lead to a marshal error.
+	// Specifics are always passed and checked by validatePBEntity above.
 	var specifics []byte
 	specifics, err = proto.Marshal(entity.Specifics)
 	if err != nil {
