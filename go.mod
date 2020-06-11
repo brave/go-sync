@@ -7,11 +7,12 @@ require (
 	github.com/brave-intl/bat-go v0.3.0
 	github.com/getsentry/sentry-go v0.6.1
 	github.com/go-chi/chi v4.0.3+incompatible
-	github.com/golang/protobuf v1.3.2
+	github.com/golang/protobuf v1.4.2
 	github.com/kr/pretty v0.2.0 // indirect
 	github.com/prometheus/client_golang v1.3.0
 	github.com/rs/zerolog v1.18.0
 	github.com/satori/go.uuid v1.2.0
 	github.com/stretchr/testify v1.5.1
+	google.golang.org/protobuf v1.23.0
 	gopkg.in/yaml.v2 v2.2.8 // indirect
 )
