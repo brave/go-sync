@@ -417,47 +417,54 @@ func (suite *SyncEntityTestSuite) TestGetUpdatesForType() {
 		suite.dynamo.InsertSyncEntity(&entity4), "InsertSyncEntity should succeed")
 
 	// Get all updates for type 123 and client1 using token = 0.
-	count, syncItems, err := suite.dynamo.GetUpdatesForType(123, 0, true, "client1", 100)
+	hasChangesRemaining, syncItems, err := suite.dynamo.GetUpdatesForType(123, 0, true, "client1", 100)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	suite.Assert().Equal(syncItems, []datastore.SyncEntity{entity1, entity2})
-	suite.Assert().Equal(int64(2), count)
+	suite.Assert().False(hasChangesRemaining)
 
 	// Get all updates for type 124 and client1 using token = 0.
-	count, syncItems, err = suite.dynamo.GetUpdatesForType(124, 0, true, "client1", 100)
+	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(124, 0, true, "client1", 100)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	suite.Assert().Equal(syncItems, []datastore.SyncEntity{entity3})
-	suite.Assert().Equal(int64(1), count)
+	suite.Assert().False(hasChangesRemaining)
 
 	// Get all updates for type 123 and client2 using token = 0.
-	count, syncItems, err = suite.dynamo.GetUpdatesForType(123, 0, true, "client2", 100)
+	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(123, 0, true, "client2", 100)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	suite.Assert().Equal(syncItems, []datastore.SyncEntity{entity4})
-	suite.Assert().Equal(int64(1), count)
+	suite.Assert().False(hasChangesRemaining)
 
 	// Get all updates for type 124 and client2 using token = 0.
-	count, syncItems, err = suite.dynamo.GetUpdatesForType(124, 0, true, "client2", 100)
+	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(124, 0, true, "client2", 100)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	suite.Assert().Equal(len(syncItems), 0)
-	suite.Assert().Equal(int64(0), count)
+	suite.Assert().False(hasChangesRemaining)
 
-	// Test maxSize will limit the return entries size, and count should be the
-	// size of all available updates in the DB.
-	count, syncItems, err = suite.dynamo.GetUpdatesForType(123, 0, true, "client1", 1)
+	// Test maxSize will limit the return entries size, and hasChangesRemaining
+	// should be true when there are more updates available in the DB.
+	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(123, 0, true, "client1", 1)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	suite.Assert().Equal(syncItems, []datastore.SyncEntity{entity1})
-	suite.Assert().Equal(int64(2), count)
+	suite.Assert().True(hasChangesRemaining)
+
+	// Test when num of query items equal to the limit, hasChangesRemaining should
+	// be true.
+	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(123, 0, true, "client1", 2)
+	suite.Require().NoError(err, "GetUpdatesForType should succeed")
+	suite.Assert().Equal(syncItems, []datastore.SyncEntity{entity1, entity2})
+	suite.Assert().True(hasChangesRemaining)
 
 	// Test fetchFolders will remove folder items if false
-	count, syncItems, err = suite.dynamo.GetUpdatesForType(123, 0, false, "client1", 100)
+	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(123, 0, false, "client1", 100)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	suite.Assert().Equal(syncItems, []datastore.SyncEntity{entity2})
-	suite.Assert().Equal(int64(1), count)
+	suite.Assert().False(hasChangesRemaining)
 
 	// Get all updates for a type for a client using mtime of one item as token.
-	count, syncItems, err = suite.dynamo.GetUpdatesForType(123, 12345678, true, "client1", 100)
+	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(123, 12345678, true, "client1", 100)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	suite.Assert().Equal(syncItems, []datastore.SyncEntity{entity2})
-	suite.Assert().Equal(int64(1), count)
+	suite.Assert().False(hasChangesRemaining)
 
 	// Test batch is working correctly for over 100 items
 	err = datastoretest.ResetTable(suite.dynamo)
@@ -487,18 +494,18 @@ func (suite *SyncEntityTestSuite) TestGetUpdatesForType() {
 	}
 
 	// All items should be returned and sorted by Mtime.
-	count, syncItems, err = suite.dynamo.GetUpdatesForType(123, 0, true, "client1", 300)
+	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(123, 0, true, "client1", 300)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	sort.Sort(datastore.SyncEntityByMtime(expectedSyncItems))
 	suite.Assert().Equal(syncItems, expectedSyncItems)
-	suite.Assert().Equal(int64(250), count)
+	suite.Assert().False(hasChangesRemaining)
 
 	// Test that when maxGUBatchSize is smaller than total updates, the first n
 	// items ordered by Mtime should be returned.
-	count, syncItems, err = suite.dynamo.GetUpdatesForType(123, 0, true, "client1", 200)
+	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(123, 0, true, "client1", 200)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	suite.Assert().Equal(syncItems, expectedSyncItems[0:200])
-	suite.Assert().Equal(int64(250), count)
+	suite.Assert().True(hasChangesRemaining)
 }
 
 func (suite *SyncEntityTestSuite) TestCreateDBSyncEntity() {
