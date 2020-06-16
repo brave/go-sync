@@ -539,6 +539,55 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 	*command.MaxClientObjectQuota = defaultMaxClientObjectQuota
 }
 
+func (suite *CommandTestSuite) TestHandleClientToServerMessage_ReplaceParentIDToServerGeneratedID() {
+	// Commit parents with its child bookmarks in one commit request.
+	parent1 := getCommitEntity("id_parent", 0, false, getBookmarkSpecifics())
+	parent1.Folder = aws.Bool(true)
+	child1 := getCommitEntity("id_child", 0, false, getBookmarkSpecifics())
+	child1.ParentIdString = aws.String("id_parent")
+	parent2 := getCommitEntity("id_parent2", 0, false, getBookmarkSpecifics())
+	parent2.Folder = aws.Bool(true)
+	child2 := getCommitEntity("id_child2", 0, false, getBookmarkSpecifics())
+	child2.ParentIdString = aws.String("id_parent")
+	child3 := getCommitEntity("id_child3", 0, false, getBookmarkSpecifics())
+	child3.ParentIdString = aws.String("id_parent2")
+
+	entries := []*sync_pb.SyncEntity{parent1, child1, parent2, child2, child3}
+	msg := getClientToServerCommitMsg(entries)
+	rsp := &sync_pb.ClientToServerResponse{}
+
+	suite.Require().NoError(
+		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		"HandleClientToServerMessage should succeed")
+	assertCommonResponse(suite, rsp, true)
+	suite.Assert().Equal(5, len(rsp.Commit.Entryresponse))
+	commitSuccess := sync_pb.CommitResponse_SUCCESS
+	for _, entryRsp := range rsp.Commit.Entryresponse {
+		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
+		suite.Assert().Equal(int64(1), *entryRsp.Version)
+	}
+
+	// Get updates to check if child's parent ID is replaced with the server
+	// generated ID of its parent.
+	marker := getMarker(suite, []int64{0, 0})
+	msg = getClientToServerGUMsg(
+		marker, sync_pb.SyncEnums_GU_TRIGGER, true, nil)
+	rsp = &sync_pb.ClientToServerResponse{}
+	suite.Require().NoError(
+		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		"HandleClientToServerMessage should succeed")
+	assertCommonResponse(suite, rsp, false)
+	suite.Require().Equal(5, len(rsp.GetUpdates.Entries))
+	for i := 0; i < len(rsp.GetUpdates.Entries); i++ {
+		suite.Assert().Equal(rsp.GetUpdates.Entries[i].OriginatorClientItemId, entries[i].IdString)
+		suite.Assert().NotNil(rsp.GetUpdates.Entries[i].IdString)
+	}
+
+	suite.Assert().Equal(rsp.GetUpdates.Entries[1].ParentIdString, rsp.GetUpdates.Entries[0].IdString)
+	suite.Assert().Equal(rsp.GetUpdates.Entries[3].ParentIdString, rsp.GetUpdates.Entries[0].IdString)
+	suite.Assert().Equal(rsp.GetUpdates.Entries[4].ParentIdString, rsp.GetUpdates.Entries[2].IdString)
+}
+
 func TestCommandTestSuite(t *testing.T) {
 	suite.Run(t, new(CommandTestSuite))
 }
