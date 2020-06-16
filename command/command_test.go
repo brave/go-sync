@@ -422,8 +422,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_GUBatchSize() {
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
 	suite.Assert().Equal(int(*command.MaxGUBatchSize), len(rsp.GetUpdates.Entries))
-	suite.Assert().Equal(int64(len(entries)-int(*command.MaxGUBatchSize)),
-		*rsp.GetUpdates.ChangesRemaining)
+	suite.Assert().Equal(int64(1), *rsp.GetUpdates.ChangesRemaining)
 	// nigori1, nigori2
 	expectedName = []*string{entries[1].Name, entries[3].Name}
 	for i, entry := range rsp.GetUpdates.Entries {
