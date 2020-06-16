@@ -165,6 +165,14 @@ func handleCommitRequest(commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.Co
 			continue
 		}
 
+		// Check if ParentID is a client-generated ID which appears in previous
+		// commit entries, if so, replace with corresponding server-generated ID.
+		if entityToCommit.ParentID != nil {
+			if serverParentID, ok := idMap[*entityToCommit.ParentID]; ok {
+				entityToCommit.ParentID = &serverParentID
+			}
+		}
+
 		*entityToCommit.Version++
 		if *entityToCommit.Version == 1 { // Create
 			if itemCount+count >= maxClientObjectQuota {
@@ -172,14 +180,6 @@ func handleCommitRequest(commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.Co
 				entryRsp.ResponseType = &rspType
 				entryRsp.ErrorMessage = aws.String(fmt.Sprintf("There are already %v non-deleted objects in store", itemCount))
 				continue
-			}
-
-			// Check if ParentID is a client-generated ID which appears in previous
-			// commit entries, if so, replace with corresponding server-generated ID.
-			if entityToCommit.ParentID != nil {
-				if serverParentID, ok := idMap[*entityToCommit.ParentID]; ok {
-					entityToCommit.ParentID = &serverParentID
-				}
 			}
 
 			err = db.InsertSyncEntity(entityToCommit)
