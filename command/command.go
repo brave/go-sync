@@ -140,6 +140,10 @@ func handleCommitRequest(commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.Co
 	}
 
 	commitRsp.Entryresponse = make([]*sync_pb.CommitResponse_EntryResponse, len(commitMsg.Entries))
+
+	// Map client-generated ID to its server-generated ID.
+	idMap := make(map[string]string)
+
 	for i, v := range commitMsg.Entries {
 		entryRsp := &sync_pb.CommitResponse_EntryResponse{}
 		commitRsp.Entryresponse[i] = entryRsp
@@ -161,6 +165,14 @@ func handleCommitRequest(commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.Co
 				continue
 			}
 
+			// Check if ParentID is a client-generated ID which appears in previous
+			// commit entries, if so, replace with corresponding server-generated ID.
+			if entityToCommit.ParentID != nil {
+				if serverParentID, ok := idMap[*entityToCommit.ParentID]; ok {
+					entityToCommit.ParentID = &serverParentID
+				}
+			}
+
 			err = db.InsertSyncEntity(entityToCommit)
 			if err != nil {
 				log.Error().Err(err).Msg("Insert sync entity failed")
@@ -169,6 +181,13 @@ func handleCommitRequest(commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.Co
 				entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Insert sync entity failed: %v", err.Error()))
 				continue
 			}
+
+			// Save client-generated to server-generated ID mapping when committing
+			// a new entry with OriginatorClientItemID (client-generated ID).
+			if entityToCommit.OriginatorClientItemID != nil {
+				idMap[*entityToCommit.OriginatorClientItemID] = entityToCommit.ID
+			}
+
 			count++
 		} else { // Update
 			conflict, delete, err := db.UpdateSyncEntity(entityToCommit)
