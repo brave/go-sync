@@ -397,7 +397,7 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity) (bool, bool, error) {
 // To do this in dynamoDB, we use (ClientID, DataType#Mtime) as GSI to get a
 // list of (ClientID, ID) primary keys with the given condition, then read the
 // actual sync item using the list of primary keys.
-func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFolders bool, clientID string, maxSize int64) (int64, []SyncEntity, error) {
+func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFolders bool, clientID string, maxSize int64) (bool, []SyncEntity, error) {
 	syncEntities := []SyncEntity{}
 
 	// Get (ClientID, ID) pairs which are updates after mtime for a data type,
@@ -417,7 +417,7 @@ func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFo
 	}
 	expr, err := exprs.Build()
 	if err != nil {
-		return 0, syncEntities, fmt.Errorf("error building expression to get updates: %w", err)
+		return false, syncEntities, fmt.Errorf("error building expression to get updates: %w", err)
 	}
 
 	input := &dynamodb.QueryInput{
@@ -428,29 +428,31 @@ func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFo
 		FilterExpression:          expr.Filter(),
 		ProjectionExpression:      aws.String(projPk),
 		TableName:                 aws.String(Table),
+		Limit:                     aws.Int64(maxSize),
 	}
 
 	out, err := dynamo.Query(input)
 	if err != nil {
-		return 0, syncEntities, fmt.Errorf("error doing query to get updates: %w", err)
+		return false, syncEntities, fmt.Errorf("error doing query to get updates: %w", err)
+	}
+
+	hasChangesRemaining := false
+	if out.LastEvaluatedKey != nil && len(out.LastEvaluatedKey) > 0 {
+		hasChangesRemaining = true
 	}
 
 	count := *(out.Count)
 	if count == 0 { // No updates
-		return count, syncEntities, nil
+		return hasChangesRemaining, syncEntities, nil
 	}
 
-	maxIndex := count
-	if maxIndex > maxSize {
-		maxIndex = maxSize
-	}
 	// Use return (ClientID, ID) primary keys to get the actual items.
 	var outAv []map[string]*dynamodb.AttributeValue
 	var i, j int64
-	for i = 0; i < maxIndex; i += maxBatchGetItemSize {
+	for i = 0; i < count; i += maxBatchGetItemSize {
 		j = i + maxBatchGetItemSize
-		if j > maxIndex {
-			j = maxIndex
+		if j > count {
+			j = count
 		}
 
 		batchInput := &dynamodb.BatchGetItemInput{
@@ -467,16 +469,16 @@ func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFo
 				return last
 			})
 		if err != nil {
-			return 0, syncEntities, fmt.Errorf("error getting update items in a batch: %w", err)
+			return false, syncEntities, fmt.Errorf("error getting update items in a batch: %w", err)
 		}
 	}
 
 	err = dynamodbattribute.UnmarshalListOfMaps(outAv, &syncEntities)
 	if err != nil {
-		return 0, syncEntities, fmt.Errorf("error unmarshalling updated sync entities: %w", err)
+		return false, syncEntities, fmt.Errorf("error unmarshalling updated sync entities: %w", err)
 	}
 	sort.Sort(SyncEntityByMtime(syncEntities))
-	return count, syncEntities, nil
+	return hasChangesRemaining, syncEntities, nil
 }
 
 func validatePBEntity(entity *sync_pb.SyncEntity) error {
