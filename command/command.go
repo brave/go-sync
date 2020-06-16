@@ -80,18 +80,30 @@ func handleGetUpdatesRequest(guMsg *sync_pb.GetUpdatesMessage, guRsp *sync_pb.Ge
 			guRsp.EncryptionKeys[0] = []byte("1234")
 		}
 
+		// No need to get updates for this type because we already reach the
+		// maximum GetUpdates size for this request. Continue to next type instead
+		// of break because we need to prepare NewProgressMarker for all entries in
+		// FromProgressMarker, where the returned token stays the same as the one
+		// passed in FromProgressMarker.
+		if int32(len(guRsp.Entries)) >= maxSize {
+			continue
+		}
+
 		token, n := binary.Varint(guRsp.NewProgressMarker[i].Token)
 		if n <= 0 {
 			return nil, fmt.Errorf("Failed at decoding token value %v", token)
 		}
 
 		curMaxSize := int64(maxSize) - int64(len(guRsp.Entries))
-		count, entities, err := db.GetUpdatesForType(int(*fromProgressMarker.DataTypeId), token, fetchFolders, clientID, curMaxSize)
+		hasChangesRemaining, entities, err := db.GetUpdatesForType(int(*fromProgressMarker.DataTypeId), token, fetchFolders, clientID, curMaxSize)
 		if err != nil {
 			log.Error().Err(err).Msgf("db.GetUpdatesForType failed for type %v", *fromProgressMarker.DataTypeId)
 			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
 			return &errCode,
 				fmt.Errorf("error getting updates for type %v: %w", *fromProgressMarker.DataTypeId, err)
+		}
+		if hasChangesRemaining {
+			changesRemaining = 1 // Chromium uses 1 instead of actual count of update entries remaining.
 		}
 
 		// Fill the PB entry from above DB entries until maxSize is reached.
@@ -104,9 +116,6 @@ func handleGetUpdatesRequest(guMsg *sync_pb.GetUpdatesMessage, guRsp *sync_pb.Ge
 			}
 			guRsp.Entries = append(guRsp.Entries, entity)
 		}
-		// Add to changesRemaining if this type has some items left due to batchSize.
-		changesRemaining = count - int64(len(entities))
-
 		// If entities are appended, use the lastest mtime as returned token.
 		if j != 0 {
 			guRsp.NewProgressMarker[i].Token = make([]byte, binary.MaxVarintLen64)
@@ -140,6 +149,10 @@ func handleCommitRequest(commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.Co
 	}
 
 	commitRsp.Entryresponse = make([]*sync_pb.CommitResponse_EntryResponse, len(commitMsg.Entries))
+
+	// Map client-generated ID to its server-generated ID.
+	idMap := make(map[string]string)
+
 	for i, v := range commitMsg.Entries {
 		entryRsp := &sync_pb.CommitResponse_EntryResponse{}
 		commitRsp.Entryresponse[i] = entryRsp
@@ -150,6 +163,14 @@ func handleCommitRequest(commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.Co
 			entryRsp.ResponseType = &rspType
 			entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Cannot convert protobuf sync entity to DB format: %v", err.Error()))
 			continue
+		}
+
+		// Check if ParentID is a client-generated ID which appears in previous
+		// commit entries, if so, replace with corresponding server-generated ID.
+		if entityToCommit.ParentID != nil {
+			if serverParentID, ok := idMap[*entityToCommit.ParentID]; ok {
+				entityToCommit.ParentID = &serverParentID
+			}
 		}
 
 		*entityToCommit.Version++
@@ -169,6 +190,13 @@ func handleCommitRequest(commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.Co
 				entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Insert sync entity failed: %v", err.Error()))
 				continue
 			}
+
+			// Save client-generated to server-generated ID mapping when committing
+			// a new entry with OriginatorClientItemID (client-generated ID).
+			if entityToCommit.OriginatorClientItemID != nil {
+				idMap[*entityToCommit.OriginatorClientItemID] = entityToCommit.ID
+			}
+
 			count++
 		} else { // Update
 			conflict, delete, err := db.UpdateSyncEntity(entityToCommit)
