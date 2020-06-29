@@ -102,6 +102,17 @@ func handleGetUpdatesRequest(guMsg *sync_pb.GetUpdatesMessage, guRsp *sync_pb.Ge
 			return &errCode,
 				fmt.Errorf("error getting updates for type %v: %w", *fromProgressMarker.DataTypeId, err)
 		}
+
+		// Due to eventually read consistency, it is possible that we cannot get
+		// the nigori root folder entity for this NEW_CLIENT GetUpdates request,
+		// which is essential for clients when initializing sync engine with nigori
+		// type. Return a transient error for clients to re-request in this case.
+		if isNewClient && *fromProgressMarker.DataTypeId == nigoriTypeID &&
+			token == 0 && len(entities) == 0 {
+			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
+			return &errCode, fmt.Errorf("nigori root folder entity is not ready yet")
+		}
+
 		if hasChangesRemaining {
 			changesRemaining = 1 // Chromium uses 1 instead of actual count of update entries remaining.
 		}
