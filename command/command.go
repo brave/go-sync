@@ -19,8 +19,8 @@ var (
 const (
 	storeBirthday              string = "1"
 	maxCommitBatchSize         int32  = 90
-	sessionsCommitDelaySeconds int32  = 11
-	setSyncPollInterval        int32  = 30
+	sessionsCommitDelaySeconds int32  = 30
+	setSyncPollInterval        int32  = 60
 	nigoriTypeID               int32  = 47745
 )
 
