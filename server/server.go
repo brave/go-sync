@@ -12,6 +12,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave/go-sync/cache"
 	"github.com/brave/go-sync/controller"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/middleware"
@@ -58,7 +59,10 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		log.Panic().Err(err).Msg("Must be able to init datastore to start")
 	}
 
+	cache := cache.NewCache(cache.NewRedisClient())
+
 	r.Mount("/v2", controller.SyncRouter(
+		cache,
 		datastore.NewDatastoreWithPrometheus(db, "dynamo")))
 	r.Get("/metrics", batware.Metrics())
 

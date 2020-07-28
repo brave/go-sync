@@ -15,6 +15,7 @@ services:
         BUILD_TIME: "${BUILD_TIME}"
     depends_on:
       - dynamo-local
+      - redis
     networks:
       - sync
     environment:
@@ -26,6 +27,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=#
       - AWS_REGION=us-west-2
       - AWS_ENDPOINT=http://dynamo-local:8000
+      - REDIS_URL=redis:6379
   web:
     build:
       context: .
@@ -38,6 +40,7 @@ services:
       - "8295:8295"
     depends_on:
       - dynamo-local
+      - redis
     networks:
       - sync
     environment:
@@ -50,11 +53,18 @@ services:
       - AWS_REGION=us-west-2
       - AWS_ENDPOINT=http://dynamo-local:8000
       - TABLE_NAME=client-entity-dev
+      - REDIS_URL=redis:6379
   dynamo-local:
     build:
       context: .
       dockerfile: dynamo.Dockerfile
     ports:
       - "8000:8000"
+    networks:
+      - sync
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
     networks:
       - sync

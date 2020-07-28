@@ -9,6 +9,7 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave/go-sync/auth"
+	"github.com/brave/go-sync/cache"
 	"github.com/brave/go-sync/command"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
@@ -22,14 +23,14 @@ const (
 )
 
 // SyncRouter add routers for command and auth endpoint requests.
-func SyncRouter(datastore datastore.Datastore) chi.Router {
+func SyncRouter(cache *cache.Cache, datastore datastore.Datastore) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/command/", middleware.InstrumentHandler("Command", Command(datastore)))
+	r.Method("POST", "/command/", middleware.InstrumentHandler("Command", Command(cache, datastore)))
 	return r
 }
 
 // Command handles GetUpdates and Commit requests from sync clients.
-func Command(db datastore.Datastore) http.HandlerFunc {
+func Command(cache *cache.Cache, db datastore.Datastore) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Authorize
 		clientID, err := auth.Authorize(r)
@@ -71,7 +72,7 @@ func Command(db datastore.Datastore) http.HandlerFunc {
 		}
 
 		pbRsp := &sync_pb.ClientToServerResponse{}
-		err = command.HandleClientToServerMessage(pb, pbRsp, db, clientID)
+		err = command.HandleClientToServerMessage(cache, pb, pbRsp, db, clientID)
 		if err != nil {
 			log.Error().Err(err).Msg("Handle command message failed")
 			http.Error(w, err.Error(), http.StatusInternalServerError)
