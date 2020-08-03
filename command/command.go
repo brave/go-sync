@@ -1,10 +1,12 @@
 package command
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/brave/go-sync/cache"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 	"github.com/rs/zerolog/log"
@@ -27,9 +29,10 @@ const (
 // handleGetUpdatesRequest handles GetUpdatesMessage and fills
 // GetUpdatesResponse. Target sync entities in the database will be updated or
 // deleted based on the client's requests.
-func handleGetUpdatesRequest(guMsg *sync_pb.GetUpdatesMessage, guRsp *sync_pb.GetUpdatesResponse, db datastore.Datastore, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
+func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessage, guRsp *sync_pb.GetUpdatesResponse, db datastore.Datastore, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
 	errCode := sync_pb.SyncEnums_SUCCESS // default value, might be changed later
 	isNewClient := guMsg.GetUpdatesOrigin != nil && *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_NEW_CLIENT
+	isPoll := guMsg.GetUpdatesOrigin != nil && *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_PERIODIC
 	if isNewClient {
 		err := InsertServerDefinedUniqueEntities(db, clientID)
 		if err != nil {
@@ -94,6 +97,12 @@ func handleGetUpdatesRequest(guMsg *sync_pb.GetUpdatesMessage, guRsp *sync_pb.Ge
 			return nil, fmt.Errorf("Failed at decoding token value %v", token)
 		}
 
+		// Check cache to short circuit with 0 updates for polling requests.
+		if isPoll &&
+			!cache.IsTypeMtimeUpdated(context.Background(), clientID, int(*fromProgressMarker.DataTypeId), token) {
+			continue
+		}
+
 		curMaxSize := int64(maxSize) - int64(len(guRsp.Entries))
 		hasChangesRemaining, entities, err := db.GetUpdatesForType(int(*fromProgressMarker.DataTypeId), token, fetchFolders, clientID, curMaxSize)
 		if err != nil {
@@ -132,6 +141,23 @@ func handleGetUpdatesRequest(guMsg *sync_pb.GetUpdatesMessage, guRsp *sync_pb.Ge
 			guRsp.NewProgressMarker[i].Token = make([]byte, binary.MaxVarintLen64)
 			binary.PutVarint(guRsp.NewProgressMarker[i].Token, *entities[j-1].Mtime)
 		}
+
+		// Save (clientID#dataType, mtime) into cache after querying from DB.
+		// If changes_remaining = 1 in the response, client will send another poll
+		// request immediately, we do not save mtime into cache in this iteration
+		// because the client token in the subsequent poll request will be equal to
+		// this mtime and we will wrongly think there are no updates when we
+		// process that subsequent poll request. The cache will be updated in a
+		// subsequent poll request where changes_remaining = 0.
+		if changesRemaining != 1 {
+			var mtime int64
+			if j == 0 {
+				mtime = token
+			} else {
+				mtime = *entities[j-1].Mtime
+			}
+			cache.SetTypeMtime(context.Background(), clientID, int(*fromProgressMarker.DataTypeId), mtime)
+		}
 	}
 
 	return &errCode, nil
@@ -141,7 +167,7 @@ func handleGetUpdatesRequest(guMsg *sync_pb.GetUpdatesMessage, guRsp *sync_pb.Ge
 // For each commit entry:
 //   - new sync entity is created and inserted into the database if version is 0.
 //   - existed sync entity will be updated if version is greater than 0.
-func handleCommitRequest(commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.CommitResponse, db datastore.Datastore, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
+func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.CommitResponse, db datastore.Datastore, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
 	if commitMsg == nil {
 		return nil, fmt.Errorf("nil commitMsg is received")
 	}
@@ -163,7 +189,8 @@ func handleCommitRequest(commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.Co
 
 	// Map client-generated ID to its server-generated ID.
 	idMap := make(map[string]string)
-
+	// Map to save commit data type ID & mtime
+	typeMtimeMap := make(map[int]int64)
 	for i, v := range commitMsg.Entries {
 		entryRsp := &sync_pb.CommitResponse_EntryResponse{}
 		commitRsp.Entryresponse[i] = entryRsp
@@ -228,6 +255,7 @@ func handleCommitRequest(commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.Co
 			}
 		}
 
+		typeMtimeMap[*entityToCommit.DataType] = *entityToCommit.Mtime
 		// Prepare success response
 		rspType := sync_pb.CommitResponse_SUCCESS
 		entryRsp.ResponseType = &rspType
@@ -237,6 +265,11 @@ func handleCommitRequest(commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.Co
 		entryRsp.Name = entityToCommit.Name
 		entryRsp.NonUniqueName = entityToCommit.NonUniqueName
 		entryRsp.Mtime = entityToCommit.Mtime
+	}
+
+	// Save (clientID#dataType, mtime) into cache after writing into DB.
+	for dataType, mtime := range typeMtimeMap {
+		cache.SetTypeMtime(context.Background(), clientID, dataType, mtime)
 	}
 
 	err = db.UpdateClientItemCount(clientID, count)
@@ -256,7 +289,7 @@ func handleCommitRequest(commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.Co
 
 // HandleClientToServerMessage handles the protobuf ClientToServerMessage and
 // fills the protobuf ClientToServerResponse.
-func HandleClientToServerMessage(pb *sync_pb.ClientToServerMessage, pbRsp *sync_pb.ClientToServerResponse, db datastore.Datastore, clientID string) error {
+func HandleClientToServerMessage(cache *cache.Cache, pb *sync_pb.ClientToServerMessage, pbRsp *sync_pb.ClientToServerResponse, db datastore.Datastore, clientID string) error {
 	// Create ClientToServerResponse and fill general fields for both GU and
 	// Commit.
 	pbRsp.StoreBirthday = aws.String(storeBirthday)
@@ -271,7 +304,7 @@ func HandleClientToServerMessage(pb *sync_pb.ClientToServerMessage, pbRsp *sync_
 	} else if *pb.MessageContents == sync_pb.ClientToServerMessage_GET_UPDATES {
 		guRsp := &sync_pb.GetUpdatesResponse{}
 		pbRsp.GetUpdates = guRsp
-		pbRsp.ErrorCode, err = handleGetUpdatesRequest(pb.GetUpdates, guRsp, db, clientID)
+		pbRsp.ErrorCode, err = handleGetUpdatesRequest(cache, pb.GetUpdates, guRsp, db, clientID)
 		if err != nil {
 			if pbRsp.ErrorCode != nil {
 				pbRsp.ErrorMessage = aws.String(err.Error())
@@ -285,7 +318,7 @@ func HandleClientToServerMessage(pb *sync_pb.ClientToServerMessage, pbRsp *sync_
 	} else if *pb.MessageContents == sync_pb.ClientToServerMessage_COMMIT {
 		commitRsp := &sync_pb.CommitResponse{}
 		pbRsp.Commit = commitRsp
-		pbRsp.ErrorCode, err = handleCommitRequest(pb.Commit, commitRsp, db, clientID)
+		pbRsp.ErrorCode, err = handleCommitRequest(cache, pb.Commit, commitRsp, db, clientID)
 		if err != nil {
 			if pbRsp.ErrorCode != nil {
 				pbRsp.ErrorMessage = aws.String(err.Error())
