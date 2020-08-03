@@ -1,13 +1,16 @@
 package command_test
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/brave/go-sync/cache"
 	"github.com/brave/go-sync/command"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
@@ -16,6 +19,7 @@ import (
 )
 
 const (
+	clientID     string = "client"
 	bookmarkType int32  = 32904
 	nigoriType   int32  = 47745
 	cacheGUID    string = "cache_guid"
@@ -24,6 +28,7 @@ const (
 type CommandTestSuite struct {
 	suite.Suite
 	dynamo *datastore.Dynamo
+	cache  *cache.Cache
 }
 
 type PBSyncAttrs struct {
@@ -57,6 +62,8 @@ func (suite *CommandTestSuite) SetupSuite() {
 	var err error
 	suite.dynamo, err = datastore.NewDynamo()
 	suite.Require().NoError(err, "Failed to get dynamoDB session")
+
+	suite.cache = cache.NewCache(cache.NewRedisClient())
 }
 
 func (suite *CommandTestSuite) SetupTest() {
@@ -67,6 +74,8 @@ func (suite *CommandTestSuite) SetupTest() {
 func (suite *CommandTestSuite) TearDownTest() {
 	suite.Require().NoError(
 		datastoretest.DeleteTable(suite.dynamo), "Failed to delete table")
+	suite.Require().NoError(
+		suite.cache.FlushAll(context.Background()), "Failed to clear cache")
 }
 
 func getNigoriSpecifics() *sync_pb.EntitySpecifics {
@@ -214,7 +223,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 
 	// Commit and check response.
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
@@ -232,7 +241,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 		marker, sync_pb.SyncEnums_GU_TRIGGER, false, nil)
 	rsp = &sync_pb.ClientToServerResponse{}
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
 
@@ -256,7 +265,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 	rsp = &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 
@@ -277,7 +286,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 		marker, sync_pb.SyncEnums_GU_TRIGGER, false, nil)
 	rsp = &sync_pb.ClientToServerResponse{}
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
 
@@ -302,7 +311,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 	msg = getClientToServerCommitMsg(entries)
 	rsp = &sync_pb.ClientToServerResponse{}
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
@@ -318,7 +327,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 		marker, sync_pb.SyncEnums_GU_TRIGGER, false, nil)
 	rsp = &sync_pb.ClientToServerResponse{}
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
 
@@ -335,7 +344,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_NewClient() {
 	rsp := &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
 
@@ -379,7 +388,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_GUBatchSize() {
 
 	// Commit and check response.
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(4, len(rsp.Commit.Entryresponse))
@@ -397,7 +406,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_GUBatchSize() {
 		marker, sync_pb.SyncEnums_GU_TRIGGER, false, aws.Int32(int32(clientBatchSize)))
 	rsp = &sync_pb.ClientToServerResponse{}
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
 	suite.Assert().Equal(clientBatchSize, len(rsp.GetUpdates.Entries))
@@ -418,7 +427,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_GUBatchSize() {
 	*command.MaxGUBatchSize = 2
 	rsp = &sync_pb.ClientToServerResponse{}
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
 	suite.Assert().Equal(int(*command.MaxGUBatchSize), len(rsp.GetUpdates.Entries))
@@ -446,7 +455,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 	rsp := &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
@@ -469,7 +478,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 	rsp = &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(4, len(rsp.Commit.Entryresponse))
@@ -490,7 +499,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 	rsp = &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
@@ -507,7 +516,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 	rsp = &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
@@ -527,7 +536,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 	rsp = &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(4, len(rsp.Commit.Entryresponse))
@@ -544,7 +553,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_ReplaceParentIDTo
 	msg := getClientToServerCommitMsg([]*sync_pb.SyncEntity{child0})
 	rsp := &sync_pb.ClientToServerResponse{}
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(1, len(rsp.Commit.Entryresponse))
@@ -573,7 +582,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_ReplaceParentIDTo
 	rsp = &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(6, len(rsp.Commit.Entryresponse))
@@ -588,7 +597,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_ReplaceParentIDTo
 		marker, sync_pb.SyncEnums_GU_TRIGGER, true, nil)
 	rsp = &sync_pb.ClientToServerResponse{}
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(msg, rsp, suite.dynamo, "client"),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
 	suite.Require().Equal(6, len(rsp.GetUpdates.Entries))
@@ -605,6 +614,240 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_ReplaceParentIDTo
 	suite.Assert().Equal(rsp.GetUpdates.Entries[3].ParentIdString, rsp.GetUpdates.Entries[0].IdString)
 	suite.Assert().Equal(rsp.GetUpdates.Entries[4].ParentIdString, rsp.GetUpdates.Entries[2].IdString)
 	suite.Assert().Equal(rsp.GetUpdates.Entries[5].ParentIdString, rsp.GetUpdates.Entries[0].IdString)
+}
+
+func assertTypeMtimeCacheValue(suite *CommandTestSuite, key string, mtime int64, errMsg string) {
+	val, err := suite.cache.Get(context.Background(), key)
+	suite.Require().NoError(err, "cache.Get should succeed")
+	suite.Assert().Equal(val, strconv.FormatInt(mtime, 10), errMsg)
+}
+
+func insertSyncEntitiesWithoutUpdateCache(
+	suite *CommandTestSuite, entries []*sync_pb.SyncEntity, clientID string) (ret []*datastore.SyncEntity) {
+	for _, entry := range entries {
+		dbEntry, err := datastore.CreateDBSyncEntity(entry, nil, clientID)
+		suite.Require().NoError(err, "Create db entity from pb entity should succeed")
+		suite.Require().NoError(suite.dynamo.InsertSyncEntity(dbEntry),
+			"Insert sync entity should succeed")
+		val, err := suite.cache.Get(context.Background(),
+			clientID+"#"+strconv.Itoa(*dbEntry.DataType))
+		suite.Require().NoError(err, "Get from cache should succeed")
+		suite.Require().NotEqual(val, strconv.FormatInt(*dbEntry.Mtime, 10),
+			"Cache should not be updated")
+		ret = append(ret, dbEntry)
+	}
+	return
+}
+
+func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Basic() {
+	// Commit two entries of type1, one entry of type2 into dynamoDB and get the
+	// mtime from response.
+	entries := []*sync_pb.SyncEntity{
+		getCommitEntity("id1_bookmark", 0, false, getBookmarkSpecifics()),
+		getCommitEntity("id2_bookmark", 0, false, getBookmarkSpecifics()),
+		getCommitEntity("id3_nigori", 0, false, getNigoriSpecifics()),
+	}
+	msg := getClientToServerCommitMsg(entries)
+	rsp := &sync_pb.ClientToServerResponse{}
+
+	suite.Require().NoError(
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		"HandleClientToServerMessage should succeed")
+	assertCommonResponse(suite, rsp, true)
+	suite.Assert().Equal(3, len(rsp.Commit.Entryresponse))
+	commitSuccess := sync_pb.CommitResponse_SUCCESS
+	var latestBookmarkMtime int64
+	var latestNigoriMtime int64
+	for _, entryRsp := range rsp.Commit.Entryresponse {
+		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
+		if strings.Contains(*entryRsp.Name, "bookmark") {
+			latestBookmarkMtime = *entryRsp.Mtime
+		}
+		if strings.Contains(*entryRsp.Name, "nigori") {
+			latestNigoriMtime = *entryRsp.Mtime
+		}
+	}
+
+	// Latest mtime of each type in the commit should be stored in the cache.
+	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
+		latestBookmarkMtime,
+		"Successful commit should write the latest mtime into cache")
+	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(nigoriType)),
+		latestNigoriMtime,
+		"Successful commit should write the latest mtime into cache")
+
+	// Insert an entry into DB manually to make sure there are updates in DB
+	// after lastestBookmark time to check if we do short circuit in later GU.
+	dbEntries := insertSyncEntitiesWithoutUpdateCache(suite,
+		[]*sync_pb.SyncEntity{
+			getCommitEntity("id4_bookmark", 0, false, getBookmarkSpecifics()),
+			getCommitEntity("id5_nigori", 0, false, getNigoriSpecifics()),
+		},
+		clientID)
+
+	// GU request with the same or newer token should be short circuited, so
+	// should return no updates.
+	marker := getMarker(suite, []int64{latestNigoriMtime, latestBookmarkMtime + 1})
+	msg = getClientToServerGUMsg(
+		marker, sync_pb.SyncEnums_PERIODIC, false, nil)
+	rsp = &sync_pb.ClientToServerResponse{}
+	suite.Require().NoError(
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		"HandleClientToServerMessage should succeed")
+	assertCommonResponse(suite, rsp, false)
+	suite.Assert().Equal(0, len(rsp.GetUpdates.Entries))
+	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
+		latestBookmarkMtime, "cache is not updated when short circuited")
+	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(nigoriType)),
+		latestNigoriMtime, "cache is not updated when short circuited")
+
+	// Manually update cache for our DB insert.
+	latestBookmarkMtime = *dbEntries[0].Mtime
+	latestNigoriMtime = *dbEntries[1].Mtime
+	suite.cache.SetTypeMtime(context.Background(), clientID, int(bookmarkType), latestBookmarkMtime)
+	suite.cache.SetTypeMtime(context.Background(), clientID, int(nigoriType), latestNigoriMtime)
+
+	// Commit another entry and check if cache is updated.
+	entries = []*sync_pb.SyncEntity{
+		getCommitEntity("id6_bookmark", 0, false, getBookmarkSpecifics()),
+	}
+	msg = getClientToServerCommitMsg(entries)
+	rsp = &sync_pb.ClientToServerResponse{}
+
+	suite.Require().NoError(
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		"HandleClientToServerMessage should succeed")
+	assertCommonResponse(suite, rsp, true)
+	suite.Assert().Equal(1, len(rsp.Commit.Entryresponse))
+	entryRsp := rsp.Commit.Entryresponse[0]
+	suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
+
+	latestBookmarkMtime = *entryRsp.Mtime
+	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
+		latestBookmarkMtime, "Successful commit should update the cache")
+
+	// Send GU with an old token will get updates immediately.
+	// Check the cache value again, should be the same as the latest mtime in rsp.
+	marker = getMarker(suite, []int64{latestNigoriMtime - 1, latestBookmarkMtime - 1})
+	msg = getClientToServerGUMsg(
+		marker, sync_pb.SyncEnums_PERIODIC, false, nil)
+	rsp = &sync_pb.ClientToServerResponse{}
+	suite.Require().NoError(
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		"HandleClientToServerMessage should succeed")
+	assertCommonResponse(suite, rsp, false)
+	suite.Assert().Equal(2, len(rsp.GetUpdates.Entries))
+	suite.Assert().Equal(latestNigoriMtime, *rsp.GetUpdates.Entries[0].Mtime)
+	suite.Assert().Equal(latestBookmarkMtime, *rsp.GetUpdates.Entries[1].Mtime)
+	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
+		latestBookmarkMtime, "Cached token should be equal to latest mtime")
+	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(nigoriType)),
+		latestNigoriMtime, "Cached token should be equal to latest mtime")
+}
+
+func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_SkipCacheForNonPollReq() {
+	// Commit one entity and check cache value is set properly.
+	entries := []*sync_pb.SyncEntity{
+		getCommitEntity("id1_bookmark", 0, false, getBookmarkSpecifics()),
+	}
+	msg := getClientToServerCommitMsg(entries)
+	rsp := &sync_pb.ClientToServerResponse{}
+
+	suite.Require().NoError(
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		"HandleClientToServerMessage should succeed")
+	assertCommonResponse(suite, rsp, true)
+	suite.Assert().Equal(1, len(rsp.Commit.Entryresponse))
+	commitSuccess := sync_pb.CommitResponse_SUCCESS
+	suite.Assert().Equal(commitSuccess, *rsp.Commit.Entryresponse[0].ResponseType)
+	latestBookmarkMtime := *rsp.Commit.Entryresponse[0].Mtime
+	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
+		latestBookmarkMtime,
+		"Commit should write the latest mtime into cache")
+
+	// Make sure non-poll request should not be short circuited due to cache.
+	// Insert an entry into DB manually without touching the cache to make sure
+	// there are updates in DB after lastestBookmark so we will have updates if
+	// we go query the DB using the previous token.
+	dbEntries := insertSyncEntitiesWithoutUpdateCache(suite,
+		[]*sync_pb.SyncEntity{
+			getCommitEntity("id2_bookmark", 0, false, getBookmarkSpecifics()),
+		},
+		clientID)
+
+	// Check that we will receive the manually inserted item from DB immediately.
+	marker := getMarker(suite, []int64{0, latestBookmarkMtime})
+	msg = getClientToServerGUMsg(
+		marker, sync_pb.SyncEnums_GU_TRIGGER, true, nil)
+	rsp = &sync_pb.ClientToServerResponse{}
+	suite.Require().NoError(
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		"HandleClientToServerMessage should succeed")
+	assertCommonResponse(suite, rsp, false)
+	suite.Require().Equal(1, len(rsp.GetUpdates.Entries))
+	suite.Require().Equal(dbEntries[0].Mtime, rsp.GetUpdates.Entries[0].Mtime)
+	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
+		*dbEntries[0].Mtime, "Successful commit should update the cache")
+}
+
+func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_ChangesRemaining() {
+	// Commit two entries and check cache value is set properly.
+	entries := []*sync_pb.SyncEntity{
+		getCommitEntity("id1_bookmark", 0, false, getBookmarkSpecifics()),
+		getCommitEntity("id2_bookmark", 0, false, getBookmarkSpecifics()),
+	}
+	msg := getClientToServerCommitMsg(entries)
+	rsp := &sync_pb.ClientToServerResponse{}
+
+	suite.Require().NoError(
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		"HandleClientToServerMessage should succeed")
+	assertCommonResponse(suite, rsp, true)
+	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
+	commitSuccess := sync_pb.CommitResponse_SUCCESS
+	var latestBookmarkMtime int64
+	for _, entryRsp := range rsp.Commit.Entryresponse {
+		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
+		suite.Assert().NotEqual(latestBookmarkMtime, *entryRsp.Mtime)
+		latestBookmarkMtime = *entryRsp.Mtime
+	}
+	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
+		latestBookmarkMtime,
+		"Commit should write the latest mtime into cache")
+
+	// Send a GU with batch size set to 1, changesRemaining in rsp should be 1
+	// and cache should not be updated.
+	marker := getMarker(suite, []int64{0, 0})
+	clientBatch := int32(1)
+	msg = getClientToServerGUMsg(
+		marker, sync_pb.SyncEnums_PERIODIC, true, &clientBatch)
+	rsp = &sync_pb.ClientToServerResponse{}
+	suite.Require().NoError(
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		"HandleClientToServerMessage should succeed")
+	assertCommonResponse(suite, rsp, false)
+	suite.Require().Equal(1, len(rsp.GetUpdates.Entries))
+	suite.Require().Equal(int64(1), *rsp.GetUpdates.ChangesRemaining)
+	mtime := *rsp.GetUpdates.Entries[0].Mtime
+	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
+		latestBookmarkMtime,
+		"cache should not be updated when changes remaining = 1")
+
+	// Send a second GU with changesRemaining in rsp = 0 and check cache is now
+	// updated.
+	marker = getMarker(suite, []int64{0, mtime})
+	msg = getClientToServerGUMsg(
+		marker, sync_pb.SyncEnums_PERIODIC, true, nil)
+	rsp = &sync_pb.ClientToServerResponse{}
+	suite.Require().NoError(
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		"HandleClientToServerMessage should succeed")
+	assertCommonResponse(suite, rsp, false)
+	suite.Require().Equal(1, len(rsp.GetUpdates.Entries))
+	suite.Require().Equal(int64(0), *rsp.GetUpdates.ChangesRemaining)
+	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
+		latestBookmarkMtime,
+		"cache should be updated when changes remaining = 0")
 }
 
 func TestCommandTestSuite(t *testing.T) {

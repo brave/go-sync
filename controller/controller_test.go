@@ -3,6 +3,7 @@ package controller_test
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/brave/go-sync/auth/authtest"
+	"github.com/brave/go-sync/cache"
 	"github.com/brave/go-sync/controller"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
@@ -22,6 +24,7 @@ import (
 type ControllerTestSuite struct {
 	suite.Suite
 	dynamo *datastore.Dynamo
+	cache  *cache.Cache
 }
 
 func (suite *ControllerTestSuite) SetupSuite() {
@@ -29,6 +32,8 @@ func (suite *ControllerTestSuite) SetupSuite() {
 	var err error
 	suite.dynamo, err = datastore.NewDynamo()
 	suite.Require().NoError(err, "Failed to get dynamoDB session")
+
+	suite.cache = cache.NewCache(cache.NewRedisClient())
 }
 
 func (suite *ControllerTestSuite) SetupTest() {
@@ -39,6 +44,8 @@ func (suite *ControllerTestSuite) SetupTest() {
 func (suite *ControllerTestSuite) TearDownTest() {
 	suite.Require().NoError(
 		datastoretest.DeleteTable(suite.dynamo), "Failed to delete table")
+	suite.Require().NoError(
+		suite.cache.FlushAll(context.Background()), "Failed to clear cache")
 }
 
 func (suite *ControllerTestSuite) TestCommand() {
@@ -73,7 +80,7 @@ func (suite *ControllerTestSuite) TestCommand() {
 	suite.Require().NoError(err, "NewRequest should succeed")
 	req.Header.Set("Authorization", "Bearer token")
 
-	handler := controller.Command(suite.dynamo)
+	handler := controller.Command(suite.cache, suite.dynamo)
 
 	// Test unauthorized response.
 	rr := httptest.NewRecorder()
