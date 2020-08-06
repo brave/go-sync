@@ -59,7 +59,8 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		log.Panic().Err(err).Msg("Must be able to init datastore to start")
 	}
 
-	cache := cache.NewCache(cache.NewRedisClient())
+	redis := cache.NewRedisClient()
+	cache := cache.NewCache(cache.NewRedisClientWithPrometheus(redis, "redis"))
 
 	r.Mount("/v2", controller.SyncRouter(
 		cache,
