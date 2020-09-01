@@ -32,7 +32,6 @@ type SyncEntity struct {
 	ClientID               string
 	ID                     string
 	ParentID               *string `dynamodbav:",omitempty"`
-	OldParentID            *string `dynamodbav:",omitempty"`
 	Version                *int64
 	Mtime                  *int64
 	Ctime                  *int64
@@ -280,9 +279,6 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity) (bool, bool, error) {
 	}
 	if entity.ParentID != nil {
 		update = update.Set(expression.Name("ParentID"), expression.Value(entity.ParentID))
-	}
-	if entity.OldParentID != nil {
-		update = update.Set(expression.Name("OldParentID"), expression.Value(entity.OldParentID))
 	}
 	if entity.Name != nil {
 		update = update.Set(expression.Name("Name"), expression.Value(entity.Name))
@@ -570,7 +566,6 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 		ClientID:               clientID,
 		ID:                     id,
 		ParentID:               entity.ParentIdString,
-		OldParentID:            entity.OldParentId,
 		Version:                entity.Version,
 		Ctime:                  cTime,
 		Mtime:                  now,
@@ -594,7 +589,6 @@ func CreatePBSyncEntity(entity *SyncEntity) (*sync_pb.SyncEntity, error) {
 	pbEntity := &sync_pb.SyncEntity{
 		IdString:               &entity.ID,
 		ParentIdString:         entity.ParentID,
-		OldParentId:            entity.OldParentID,
 		Version:                entity.Version,
 		Mtime:                  entity.Mtime,
 		Ctime:                  entity.Ctime,

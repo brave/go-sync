@@ -277,7 +277,6 @@ func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_Basic() {
 	updateEntity2.Folder = aws.Bool(false)
 	updateEntity2.UniquePosition = []byte{5, 6}
 	updateEntity2.ParentID = aws.String("parentID")
-	updateEntity2.OldParentID = aws.String("oldParentID")
 	updateEntity2.Name = aws.String("name")
 	updateEntity2.NonUniqueName = aws.String("non_unique_name")
 	conflict, delete, err = suite.dynamo.UpdateSyncEntity(&updateEntity2)
@@ -525,7 +524,6 @@ func (suite *SyncEntityTestSuite) TestCreateDBSyncEntity() {
 	pbEntity := sync_pb.SyncEntity{
 		IdString:               aws.String("client_item_id"),
 		ParentIdString:         aws.String("parent_id"),
-		OldParentId:            aws.String("old_parent_id"),
 		Version:                aws.Int64(0),
 		Name:                   aws.String("name"),
 		NonUniqueName:          aws.String("non_unique_name"),
@@ -539,7 +537,6 @@ func (suite *SyncEntityTestSuite) TestCreateDBSyncEntity() {
 	expectedDBEntity := datastore.SyncEntity{
 		ClientID:               "client1",
 		ParentID:               pbEntity.ParentIdString,
-		OldParentID:            pbEntity.OldParentId,
 		Version:                pbEntity.Version,
 		Name:                   pbEntity.Name,
 		NonUniqueName:          pbEntity.NonUniqueName,
@@ -637,7 +634,6 @@ func (suite *SyncEntityTestSuite) TestCreatePBSyncEntity() {
 		ClientID:               "client1",
 		ID:                     "id1",
 		ParentID:               aws.String("parent_id"),
-		OldParentID:            aws.String("old_parent_id"),
 		Version:                aws.Int64(10),
 		Mtime:                  aws.Int64(12345678),
 		Ctime:                  aws.Int64(12345678),
@@ -657,7 +653,6 @@ func (suite *SyncEntityTestSuite) TestCreatePBSyncEntity() {
 	expectedPBEntity := sync_pb.SyncEntity{
 		IdString:               &dbEntity.ID,
 		ParentIdString:         dbEntity.ParentID,
-		OldParentId:            dbEntity.OldParentID,
 		Version:                dbEntity.Version,
 		Mtime:                  dbEntity.Mtime,
 		Ctime:                  dbEntity.Ctime,
