@@ -31,7 +31,9 @@ var (
 )
 
 func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
-	return logging.SetupLogger(context.WithValue(ctx, appctx.EnvironmentCTXKey, os.Getenv("ENV")))
+	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, os.Getenv("ENV"))
+	ctx = context.WithValue(ctx, appctx.LogLevelCTXKey, zerolog.WarnLevel)
+	return logging.SetupLogger(ctx)
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux) {
