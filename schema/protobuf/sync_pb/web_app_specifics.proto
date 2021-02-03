@@ -13,10 +13,21 @@ package sync_pb;
 
 // Sync & local data: Information about web app icon.
 message WebAppIconInfo {
+  enum Purpose {
+    UNSPECIFIED = 0;
+    // Suitable for any purpose.
+    ANY = 1;
+    // Designed for masking.
+    MASKABLE = 2;
+    // MONOCHROME; is never serialized.
+  }
+
   // The size of the square app icon, in raw pixels.
   optional int32 size_in_px = 1;
   // The URL of the app icon.
   optional string url = 2;
+  // The purpose or context in which the icon should be used.
+  optional Purpose purpose = 3;
 }
 
 // WebApp data. This is a synced part of
@@ -26,14 +37,15 @@ message WebAppSpecifics {
   // chrome/browser/web_applications/proto/web_app.proto and
   // third_party/blink/public/mojom/manifest/display_mode.mojom
   enum UserDisplayMode {
-    // UNDEFINED is never serialized.
+    UNSPECIFIED = 0;
     BROWSER = 1;
     // MINIMAL_UI is never serialized.
     STANDALONE = 3;
     // FULLSCREEN is never serialized.
+    // WINDOW_CONTROLS_OVERLAY is never serialized.
   }
 
-  optional string launch_url = 1;
+  optional string start_url = 1;
   optional string name = 2;
   optional UserDisplayMode user_display_mode = 3;
   optional uint32 theme_color = 4;

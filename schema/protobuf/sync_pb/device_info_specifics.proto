@@ -17,6 +17,7 @@ option optimize_for = LITE_RUNTIME;
 package sync_pb;
 
 import "sync_enums.proto";
+import "brave_device_info_specifics.proto";
 
 // Information about a device that is running a sync-enabled Chrome browser.  We
 // are mapping the per-client cache guid to more specific information about the
@@ -74,6 +75,7 @@ message DeviceInfoSpecifics {
 
   // Device specific information for Sync invalidations.
   optional InvalidationSpecificFields invalidation_fields = 14;
+  optional BraveSpecificFields brave_fields = 1000;
 }
 
 // Feature specific information about the device that is running a sync-enabled
@@ -104,6 +106,9 @@ message SharingSpecificFields {
 
   // Enum defining available Sharing features.
   enum EnabledFeatures {
+    reserved 5;
+    reserved "PEER_CONNECTION";
+
     UNKNOWN = 0;
     // Supports Click to Call only via VAPID.
     CLICK_TO_CALL_VAPID = 1;
@@ -111,7 +116,6 @@ message SharingSpecificFields {
     SHARED_CLIPBOARD_VAPID = 2;
     SMS_FETCHER = 3;
     REMOTE_COPY = 4;
-    PEER_CONNECTION = 5;
     DISCOVERY = 6;
     // Suppots Click to Call via both VAPID and sender ID.
     CLICK_TO_CALL_V2 = 7;
@@ -146,5 +150,9 @@ message InvalidationSpecificFields {
   // FCM registration token of device (using Sync sender ID).
   optional string instance_id_token = 1;
 
-  // TODO(crbug.com/1082117): add data types list.
+  // This device wants to receive only invalidations which are related to these
+  // types. The legitimate values of this field correspond to the protobuf field
+  // numbers of all EntitySpecifics fields supported by the server (see
+  // components/sync/protocol/sync.proto).
+  repeated int32 interested_data_type_ids = 2;
 }
