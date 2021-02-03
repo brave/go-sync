@@ -23,6 +23,7 @@ import "app_setting_specifics.proto";
 import "app_specifics.proto";
 import "arc_package_specifics.proto";
 import "autofill_specifics.proto";
+import "autofill_offer_specifics.proto";
 import "bookmark_specifics.proto";
 import "client_commands.proto";
 import "client_debug_info.proto";
@@ -168,6 +169,7 @@ message EntitySpecifics {
     OsPreferenceSpecifics os_preference = 702141;
     OsPriorityPreferenceSpecifics os_priority_preference = 703915;
     SharingMessageSpecifics sharing_message = 728866;
+    AutofillOfferSpecifics autofill_offer = 774329;
   }
   reserved 218175;
   reserved "wifi_credential";
@@ -439,6 +441,12 @@ message ClientConfigParams {
   // chrome account. If multiple accounts are present in the cookie jar, a
   // mismatch implies all of them are different from the chrome account.
   optional bool cookie_jar_mismatch = 3;
+
+  // Indicates that the client is not aware of any other active clients for the
+  // user. This flag shows that it is not necessary to send invalidations for
+  // the committed data. The client is considered active if it's DeviceInfo has
+  // updated recent enough.
+  optional bool single_client = 4;
 }
 
 message CommitMessage {
@@ -966,7 +974,8 @@ message ClientToServerResponse {
   message Error {
     optional SyncEnums.ErrorType error_type = 1 [default = UNKNOWN];
     optional string error_description = 2;
-    optional string url = 3;
+    reserved 3;
+    reserved "url";
     optional SyncEnums.Action action = 4 [default = UNKNOWN_ACTION];
 
     // Currently meaningful if |error_type| is throttled or partial_failure.
