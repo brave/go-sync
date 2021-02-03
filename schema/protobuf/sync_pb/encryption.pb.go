@@ -52,7 +52,7 @@ type EncryptedData struct {
 	unknownFields protoimpl.UnknownFields
 
 	KeyName *string `protobuf:"bytes,1,opt,name=key_name,json=keyName" json:"key_name,omitempty"`
-	Blob    *string `protobuf:"bytes,2,opt,name=blob" json:"blob,omitempty"`
+	Blob    *string `protobuf:"bytes,2,opt,name=blob" json:"blob,omitempty"` // base64-encoded.
 }
 
 func (x *EncryptedData) Reset() {
