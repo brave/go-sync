@@ -94,7 +94,7 @@ func (_d DatastoreWithPrometheus) InsertSyncEntitiesWithServerTags(entities []*S
 }
 
 // InsertSyncEntity implements Datastore
-func (_d DatastoreWithPrometheus) InsertSyncEntity(entity *SyncEntity) (err error) {
+func (_d DatastoreWithPrometheus) InsertSyncEntity(entity *SyncEntity) (b1 bool, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

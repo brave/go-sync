@@ -67,12 +67,12 @@ func (suite *SyncEntityTestSuite) TestInsertSyncEntity() {
 	}
 	entity2 := entity1
 	entity2.ID = "id2"
-	suite.Require().NoError(
-		suite.dynamo.InsertSyncEntity(&entity1), "InsertSyncEntity should succeed")
-	suite.Require().NoError(
-		suite.dynamo.InsertSyncEntity(&entity2), "InsertSyncEntity with other ID should succeed")
-	suite.Require().Error(
-		suite.dynamo.InsertSyncEntity(&entity1), "InsertSyncEntity with the same ClientID and ID should fail")
+	_, err := suite.dynamo.InsertSyncEntity(&entity1)
+	suite.Require().NoError(err, "InsertSyncEntity should succeed")
+	_, err = suite.dynamo.InsertSyncEntity(&entity2)
+	suite.Require().NoError(err, "InsertSyncEntity with other ID should succeed")
+	_, err = suite.dynamo.InsertSyncEntity(&entity1)
+	suite.Require().Error(err, "InsertSyncEntity with the same ClientID and ID should fail")
 
 	// Each InsertSyncEntity without client tag should result in one sync item saved.
 	tagItems, err := datastoretest.ScanTagItems(suite.dynamo)
@@ -88,30 +88,29 @@ func (suite *SyncEntityTestSuite) TestInsertSyncEntity() {
 	entity3 := entity1
 	entity3.ID = "id3"
 	entity3.ClientDefinedUniqueTag = aws.String("tag1")
-	suite.Require().NoError(
-		suite.dynamo.InsertSyncEntity(&entity3), "InsertSyncEntity should succeed")
+	_, err = suite.dynamo.InsertSyncEntity(&entity3)
+	suite.Require().NoError(err, "InsertSyncEntity should succeed")
 
 	// Insert entity with different tag for same ClientID should succeed.
 	entity4 := entity3
 	entity4.ID = "id4"
 	entity4.ClientDefinedUniqueTag = aws.String("tag2")
-	suite.Require().NoError(
-		suite.dynamo.InsertSyncEntity(&entity4),
-		"InsertSyncEntity with different server tag should succeed")
+	_, err = suite.dynamo.InsertSyncEntity(&entity4)
+	suite.Require().NoError(err, "InsertSyncEntity with different server tag should succeed")
 
-	// Insert entity with the same client tag and ClientID should fail.
+	// Insert entity with the same client tag and ClientID should fail with conflict.
 	entity4Copy := entity4
 	entity4Copy.ID = "id4_copy"
-	suite.Require().Error(
-		suite.dynamo.InsertSyncEntity(&entity4Copy),
-		"InsertSyncEntity with the same client tag and ClientID should fail")
+	conflict, err := suite.dynamo.InsertSyncEntity(&entity4Copy)
+	suite.Require().Error(err, "InsertSyncEntity with the same client tag and ClientID should fail")
+	suite.Assert().True(conflict, "Return conflict for duplicate client tag")
 
 	// Insert entity with the same client tag for other client should not fail.
 	entity5 := entity3
 	entity5.ClientID = "client2"
 	entity5.ID = "id5"
-	suite.Require().NoError(
-		suite.dynamo.InsertSyncEntity(&entity5),
+	_, err = suite.dynamo.InsertSyncEntity(&entity5)
+	suite.Require().NoError(err,
 		"InsertSyncEntity with the same client tag for another client should succeed")
 
 	// Check sync items are saved for entity1, entity2, entity3, entity4, entity5.
@@ -246,12 +245,12 @@ func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_Basic() {
 	entity2.ID = "id2"
 	entity3 := entity1
 	entity3.ID = "id3"
-	suite.Require().NoError(
-		suite.dynamo.InsertSyncEntity(&entity1), "InsertSyncEntity should succeed")
-	suite.Require().NoError(
-		suite.dynamo.InsertSyncEntity(&entity2), "InsertSyncEntity should succeed")
-	suite.Require().NoError(
-		suite.dynamo.InsertSyncEntity(&entity3), "InsertSyncEntity should succeed")
+	_, err := suite.dynamo.InsertSyncEntity(&entity1)
+	suite.Require().NoError(err, "InsertSyncEntity should succeed")
+	_, err = suite.dynamo.InsertSyncEntity(&entity2)
+	suite.Require().NoError(err, "InsertSyncEntity should succeed")
+	_, err = suite.dynamo.InsertSyncEntity(&entity3)
+	suite.Require().NoError(err, "InsertSyncEntity should succeed")
 	// Check sync entities are inserted correctly in DB.
 	syncItems, err := datastoretest.ScanSyncEntities(suite.dynamo)
 	suite.Require().NoError(err, "ScanSyncEntities should succeed")
@@ -325,8 +324,9 @@ func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_ReuseClientTag() {
 		DataTypeMtime:          aws.String("123#12345678"),
 		Specifics:              []byte{1, 2},
 	}
-	suite.Require().NoError(
-		suite.dynamo.InsertSyncEntity(&entity1), "InsertSyncEntity should succeed")
+	conflict, err := suite.dynamo.InsertSyncEntity(&entity1)
+	suite.Require().NoError(err, "InsertSyncEntity should succeed")
+	suite.Assert().False(conflict, "Successful insert should not have conflict")
 
 	// Check a tag item is inserted.
 	tagItems, err := datastoretest.ScanTagItems(suite.dynamo)
@@ -367,8 +367,9 @@ func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_ReuseClientTag() {
 	// Insert another item with the same client tag again.
 	entity2 := entity1
 	entity2.ID = "id2"
-	suite.Require().NoError(
-		suite.dynamo.InsertSyncEntity(&entity2), "InsertSyncEntity should succeed")
+	conflict, err = suite.dynamo.InsertSyncEntity(&entity2)
+	suite.Require().NoError(err, "InsertSyncEntity should succeed")
+	suite.Assert().False(conflict, "Successful insert should not have conflict")
 
 	// Check a tag item is inserted.
 	tagItems, err = datastoretest.ScanTagItems(suite.dynamo)
@@ -406,14 +407,14 @@ func (suite *SyncEntityTestSuite) TestGetUpdatesForType() {
 	entity4.ClientID = "client2"
 	entity4.ID = "id4"
 
-	suite.Require().NoError(
-		suite.dynamo.InsertSyncEntity(&entity1), "InsertSyncEntity should succeed")
-	suite.Require().NoError(
-		suite.dynamo.InsertSyncEntity(&entity2), "InsertSyncEntity should succeed")
-	suite.Require().NoError(
-		suite.dynamo.InsertSyncEntity(&entity3), "InsertSyncEntity should succeed")
-	suite.Require().NoError(
-		suite.dynamo.InsertSyncEntity(&entity4), "InsertSyncEntity should succeed")
+	_, err := suite.dynamo.InsertSyncEntity(&entity1)
+	suite.Require().NoError(err, "InsertSyncEntity should succeed")
+	_, err = suite.dynamo.InsertSyncEntity(&entity2)
+	suite.Require().NoError(err, "InsertSyncEntity should succeed")
+	_, err = suite.dynamo.InsertSyncEntity(&entity3)
+	suite.Require().NoError(err, "InsertSyncEntity should succeed")
+	_, err = suite.dynamo.InsertSyncEntity(&entity4)
+	suite.Require().NoError(err, "InsertSyncEntity should succeed")
 
 	// Get all updates for type 123 and client1 using token = 0.
 	hasChangesRemaining, syncItems, err := suite.dynamo.GetUpdatesForType(123, 0, true, "client1", 100)
@@ -487,8 +488,8 @@ func (suite *SyncEntityTestSuite) TestGetUpdatesForType() {
 		entity.ID = "id" + strconv.Itoa(i)
 		entity.Mtime = aws.Int64(mtime)
 		entity.DataTypeMtime = aws.String("123#" + strconv.FormatInt(*entity.Mtime, 10))
-		suite.Require().NoError(
-			suite.dynamo.InsertSyncEntity(&entity), "InsertSyncEntity should succeed")
+		_, err := suite.dynamo.InsertSyncEntity(&entity)
+		suite.Require().NoError(err, "InsertSyncEntity should succeed")
 		expectedSyncItems = append(expectedSyncItems, entity)
 	}
 
