@@ -104,12 +104,12 @@ func NewServerClientUniqueTagItem(clientID string, tag string, isServer bool) *S
 // write a sync item along with a tag item to ensure the uniqueness of the
 // client tag. Otherwise, only a sync item is written into DB without using
 // transactions.
-func (dynamo *Dynamo) InsertSyncEntity(entity *SyncEntity) error {
+func (dynamo *Dynamo) InsertSyncEntity(entity *SyncEntity) (bool, error) {
 	// Create a condition for inserting new items only.
 	cond := expression.AttributeNotExists(expression.Name(pk))
 	expr, err := expression.NewBuilder().WithCondition(cond).Build()
 	if err != nil {
-		return fmt.Errorf("error building expression to insert sync entity: %w", err)
+		return false, fmt.Errorf("error building expression to insert sync entity: %w", err)
 	}
 
 	if entity.ClientDefinedUniqueTag != nil {
@@ -118,7 +118,7 @@ func (dynamo *Dynamo) InsertSyncEntity(entity *SyncEntity) error {
 		item := NewServerClientUniqueTagItem(entity.ClientID, *entity.ClientDefinedUniqueTag, false)
 		av, err := dynamodbattribute.MarshalMap(*item)
 		if err != nil {
-			return fmt.Errorf("error marshalling unique tag item to insert sync entity: %w", err)
+			return false, fmt.Errorf("error marshalling unique tag item to insert sync entity: %w", err)
 		}
 		tagItem := &dynamodb.TransactWriteItem{
 			Put: &dynamodb.Put{
@@ -133,7 +133,7 @@ func (dynamo *Dynamo) InsertSyncEntity(entity *SyncEntity) error {
 		// Normal sync item
 		av, err = dynamodbattribute.MarshalMap(*entity)
 		if err != nil {
-			return fmt.Errorf("error marshlling sync item to insert sync entity: %w", err)
+			return false, fmt.Errorf("error marshlling sync item to insert sync entity: %w", err)
 		}
 		syncItem := &dynamodb.TransactWriteItem{
 			Put: &dynamodb.Put{
@@ -150,16 +150,24 @@ func (dynamo *Dynamo) InsertSyncEntity(entity *SyncEntity) error {
 		_, err = dynamo.TransactWriteItems(
 			&dynamodb.TransactWriteItemsInput{TransactItems: items})
 		if err != nil {
-			return fmt.Errorf("error writing tag item and sync item in a transaction to insert sync entity: %w", err)
+			// Return conflict if insert condition failed.
+			if canceledException, ok := err.(*dynamodb.TransactionCanceledException); ok {
+				for _, reason := range canceledException.CancellationReasons {
+					if reason.Code != nil && *reason.Code == conditionalCheckFailed {
+						return true, fmt.Errorf("error inserting sync item with client tag: %w", err)
+					}
+				}
+			}
+			return false, fmt.Errorf("error writing tag item and sync item in a transaction to insert sync entity: %w", err)
 		}
 
-		return nil
+		return false, nil
 	}
 
 	// Normal sync item
 	av, err := dynamodbattribute.MarshalMap(*entity)
 	if err != nil {
-		return fmt.Errorf("error marshalling sync item to insert sync entity: %w", err)
+		return false, fmt.Errorf("error marshalling sync item to insert sync entity: %w", err)
 	}
 	input := &dynamodb.PutItemInput{
 		Item:                      av,
@@ -170,9 +178,9 @@ func (dynamo *Dynamo) InsertSyncEntity(entity *SyncEntity) error {
 	}
 	_, err = dynamo.PutItem(input)
 	if err != nil {
-		return fmt.Errorf("error calling PutItem to insert sync item: %w", err)
+		return false, fmt.Errorf("error calling PutItem to insert sync item: %w", err)
 	}
-	return nil
+	return false, nil
 }
 
 // HasServerDefinedUniqueTag check the tag item to see if there is already a

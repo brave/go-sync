@@ -627,8 +627,8 @@ func insertSyncEntitiesWithoutUpdateCache(
 	for _, entry := range entries {
 		dbEntry, err := datastore.CreateDBSyncEntity(entry, nil, clientID)
 		suite.Require().NoError(err, "Create db entity from pb entity should succeed")
-		suite.Require().NoError(suite.dynamo.InsertSyncEntity(dbEntry),
-			"Insert sync entity should succeed")
+		_, err = suite.dynamo.InsertSyncEntity(dbEntry)
+		suite.Require().NoError(err, "Insert sync entity should succeed")
 		val, err := suite.cache.Get(context.Background(),
 			clientID+"#"+strconv.Itoa(*dbEntry.DataType))
 		suite.Require().NoError(err, "Get from cache should succeed")
