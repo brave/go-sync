@@ -627,8 +627,8 @@ func insertSyncEntitiesWithoutUpdateCache(
 	for _, entry := range entries {
 		dbEntry, err := datastore.CreateDBSyncEntity(entry, nil, clientID)
 		suite.Require().NoError(err, "Create db entity from pb entity should succeed")
-		suite.Require().NoError(suite.dynamo.InsertSyncEntity(dbEntry),
-			"Insert sync entity should succeed")
+		_, err = suite.dynamo.InsertSyncEntity(dbEntry)
+		suite.Require().NoError(err, "Insert sync entity should succeed")
 		val, err := suite.cache.Get(context.Background(),
 			clientID+"#"+strconv.Itoa(*dbEntry.DataType))
 		suite.Require().NoError(err, "Get from cache should succeed")
@@ -848,6 +848,11 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ch
 	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
 		latestBookmarkMtime,
 		"cache should be updated when changes remaining = 0")
+}
+
+func (suite *CommandTestSuite) TestShouldReturnConflict() {
+	suite.Require().True(command.ShouldReturnConflict("TEST"))
+	suite.Require().False(command.ShouldReturnConflict("TEST2"))
 }
 
 func TestCommandTestSuite(t *testing.T) {

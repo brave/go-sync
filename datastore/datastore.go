@@ -3,7 +3,7 @@ package datastore
 // Datastore abstracts over the underlying datastore.
 type Datastore interface {
 	// Insert a new sync entity.
-	InsertSyncEntity(entity *SyncEntity) error
+	InsertSyncEntity(entity *SyncEntity) (bool, error)
 	// Insert a series of sync entities in a write transaction.
 	InsertSyncEntitiesWithServerTags(entities []*SyncEntity) error
 	// Update an existing sync entity.
