@@ -850,6 +850,11 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ch
 		"cache should be updated when changes remaining = 0")
 }
 
+func (suite *CommandTestSuite) TestShouldReturnConflict() {
+	suite.Require().True(command.ShouldReturnConflict("TEST"))
+	suite.Require().False(command.ShouldReturnConflict("TEST2"))
+}
+
 func TestCommandTestSuite(t *testing.T) {
 	suite.Run(t, new(CommandTestSuite))
 }

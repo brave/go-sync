@@ -17,4 +17,5 @@ var (
 	SetSyncPollInterval        = setSyncPollInterval
 	MaxGUBatchSize             = &maxGUBatchSize
 	MaxClientObjectQuota       = &maxClientObjectQuota
+	ShouldReturnConflict       = shouldReturnConflict
 )

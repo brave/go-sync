@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/brave/go-sync/cache"
@@ -163,6 +165,10 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 	return &errCode, nil
 }
 
+func shouldReturnConflict(clientID string) bool {
+	return clientID != "" && clientID == os.Getenv("ReturnConflictForClientTag")
+}
+
 // handleCommitRequest handles the commit message and fills the commit response.
 // For each commit entry:
 //   - new sync entity is created and inserted into the database if version is 0.
@@ -224,7 +230,8 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 			if err != nil {
 				log.Error().Err(err).Msg("Insert sync entity failed")
 				rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
-				if conflict {
+				if conflict && shouldReturnConflict(strings.ToUpper(clientID)) {
+					log.Error().Msg("CONFLICT returned for specific clients")
 					rspType = sync_pb.CommitResponse_CONFLICT
 				}
 				entryRsp.ResponseType = &rspType

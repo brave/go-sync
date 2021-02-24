@@ -28,6 +28,7 @@ services:
       - AWS_REGION=us-west-2
       - AWS_ENDPOINT=http://dynamo-local:8000
       - REDIS_URL=redis:6379
+      - ReturnConflictForClientTag=TEST
   web:
     build:
       context: .
