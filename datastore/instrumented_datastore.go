@@ -122,7 +122,7 @@ func (_d DatastoreWithPrometheus) UpdateClientItemCount(clientID string, count i
 }
 
 // UpdateSyncEntity implements Datastore
-func (_d DatastoreWithPrometheus) UpdateSyncEntity(entity *SyncEntity) (conflict bool, delete bool, err error) {
+func (_d DatastoreWithPrometheus) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (conflict bool, delete bool, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -132,5 +132,5 @@ func (_d DatastoreWithPrometheus) UpdateSyncEntity(entity *SyncEntity) (conflict
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpdateSyncEntity", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.UpdateSyncEntity(entity)
+	return _d.base.UpdateSyncEntity(entity, oldVersion)
 }
