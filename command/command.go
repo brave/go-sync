@@ -211,8 +211,9 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 			}
 		}
 
-		*entityToCommit.Version++
-		if *entityToCommit.Version == 1 { // Create
+		oldVersion := *entityToCommit.Version
+		*entityToCommit.Version = *entityToCommit.Mtime
+		if oldVersion == 0 { // Create
 			if itemCount+count >= maxClientObjectQuota {
 				rspType := sync_pb.CommitResponse_OVER_QUOTA
 				entryRsp.ResponseType = &rspType
@@ -240,7 +241,7 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 
 			count++
 		} else { // Update
-			conflict, delete, err := db.UpdateSyncEntity(entityToCommit)
+			conflict, delete, err := db.UpdateSyncEntity(entityToCommit, oldVersion)
 			if err != nil {
 				log.Error().Err(err).Msg("Update sync entity failed")
 				rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
