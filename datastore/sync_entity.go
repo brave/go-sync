@@ -264,7 +264,7 @@ func (dynamo *Dynamo) InsertSyncEntitiesWithServerTags(entities []*SyncEntity) e
 }
 
 // UpdateSyncEntity updates a sync item in dynamoDB.
-func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity) (bool, bool, error) {
+func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (bool, bool, error) {
 	primaryKey := PrimaryKey{ClientID: entity.ClientID, ID: entity.ID}
 	key, err := dynamodbattribute.MarshalMap(primaryKey)
 	if err != nil {
@@ -274,7 +274,7 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity) (bool, bool, error) {
 	// condition to ensure to be update only and the version is matched.
 	cond := expression.And(
 		expression.AttributeExists(expression.Name(pk)),
-		expression.Name("Version").Equal(expression.Value(*entity.Version-1)))
+		expression.Name("Version").Equal(expression.Value(oldVersion)))
 
 	update := expression.Set(expression.Name("Version"), expression.Value(entity.Version))
 	update = update.Set(expression.Name("Mtime"), expression.Value(entity.Mtime))

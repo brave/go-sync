@@ -229,10 +229,12 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
 	commitSuccess := sync_pb.CommitResponse_SUCCESS
 	serverIDs := []string{}
+	commitVersions := []int64{}
 	for _, entryRsp := range rsp.Commit.Entryresponse {
 		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
-		suite.Assert().Equal(int64(1), *entryRsp.Version)
+		suite.Assert().Equal(*entryRsp.Mtime, *entryRsp.Version)
 		serverIDs = append(serverIDs, *entryRsp.IdString)
+		commitVersions = append(commitVersions, *entryRsp.Version)
 	}
 
 	// GetUpdates with token 0 should get all of them.
@@ -246,9 +248,9 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 	assertCommonResponse(suite, rsp, false)
 
 	expectedPBSyncAttrs := []*PBSyncAttrs{
-		NewPBSyncAttrs(entries[0].Name, aws.Int64(1), aws.Bool(false),
+		NewPBSyncAttrs(entries[0].Name, &commitVersions[0], aws.Bool(false),
 			aws.Bool(false), nil, getBookmarkSpecifics()),
-		NewPBSyncAttrs(entries[1].Name, aws.Int64(1), aws.Bool(false),
+		NewPBSyncAttrs(entries[1].Name, &commitVersions[1], aws.Bool(false),
 			aws.Bool(false), nil, getNigoriSpecifics()),
 	}
 	newMarker := marker // Initialize expected NewProgressMarker with tokens = 0.
@@ -256,8 +258,8 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 
 	// Commit one new item, update one current item for each type.
 	entries = []*sync_pb.SyncEntity{
-		getCommitEntity(serverIDs[0], 1, true, getBookmarkSpecifics()),
-		getCommitEntity(serverIDs[1], 1, true, getNigoriSpecifics()),
+		getCommitEntity(serverIDs[0], commitVersions[0], true, getBookmarkSpecifics()),
+		getCommitEntity(serverIDs[1], commitVersions[1], true, getNigoriSpecifics()),
 		getCommitEntity("id3_bookmark", 0, false, getBookmarkSpecifics()),
 		getCommitEntity("id4_nigori", 0, false, getNigoriSpecifics()),
 	}
@@ -271,11 +273,12 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 
 	suite.Assert().Equal(4, len(rsp.Commit.Entryresponse))
 	serverIDs = []string{}
-	expectedVersion := []int64{2, 2, 1, 1}
-	for i, entryRsp := range rsp.Commit.Entryresponse {
+	commitVersions = []int64{}
+	for _, entryRsp := range rsp.Commit.Entryresponse {
 		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
-		suite.Assert().Equal(expectedVersion[i], *entryRsp.Version)
+		suite.Assert().Equal(*entryRsp.Mtime, *entryRsp.Version)
 		serverIDs = append(serverIDs, *entryRsp.IdString)
+		commitVersions = append(commitVersions, *entryRsp.Version)
 	}
 
 	// GetUpdates again with previous returned mtimes and check the result, it
@@ -291,13 +294,13 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 	assertCommonResponse(suite, rsp, false)
 
 	expectedPBSyncAttrs = []*PBSyncAttrs{
-		NewPBSyncAttrs(entries[0].Name, aws.Int64(2), aws.Bool(true),
+		NewPBSyncAttrs(entries[0].Name, &commitVersions[0], aws.Bool(true),
 			aws.Bool(false), nil, getBookmarkSpecifics()),
-		NewPBSyncAttrs(entries[1].Name, aws.Int64(2), aws.Bool(true),
+		NewPBSyncAttrs(entries[1].Name, &commitVersions[1], aws.Bool(true),
 			aws.Bool(false), nil, getNigoriSpecifics()),
-		NewPBSyncAttrs(entries[2].Name, aws.Int64(1), aws.Bool(false),
+		NewPBSyncAttrs(entries[2].Name, &commitVersions[2], aws.Bool(false),
 			aws.Bool(false), nil, getBookmarkSpecifics()),
-		NewPBSyncAttrs(entries[3].Name, aws.Int64(1), aws.Bool(false),
+		NewPBSyncAttrs(entries[3].Name, &commitVersions[3], aws.Bool(false),
 			aws.Bool(false), nil, getNigoriSpecifics()),
 	}
 	newMarker = marker // Initialize expected NewProgressMarker with FromProgressMarker.
@@ -395,7 +398,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_GUBatchSize() {
 	commitSuccess := sync_pb.CommitResponse_SUCCESS
 	for _, entryRsp := range rsp.Commit.Entryresponse {
 		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
-		suite.Assert().Equal(int64(1), *entryRsp.Version)
+		suite.Assert().Equal(*entryRsp.Mtime, *entryRsp.Version)
 	}
 
 	// Test maxGUBatchSize from client side should be respected when smaller than
@@ -461,10 +464,12 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
 	commitSuccess := sync_pb.CommitResponse_SUCCESS
 	serverIDs := []string{}
+	commitVersions := []int64{}
 	for _, entryRsp := range rsp.Commit.Entryresponse {
 		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
-		suite.Assert().Equal(int64(1), *entryRsp.Version)
+		suite.Assert().Equal(*entryRsp.Mtime, *entryRsp.Version)
 		serverIDs = append(serverIDs, *entryRsp.IdString)
+		commitVersions = append(commitVersions, *entryRsp.Version)
 	}
 
 	// Commit 4 items to exceed quota by a half, 2 should return OVER_QUOTA.
@@ -484,7 +489,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 	suite.Assert().Equal(4, len(rsp.Commit.Entryresponse))
 	overQuota := sync_pb.CommitResponse_OVER_QUOTA
 	expectedEntryRsp := []sync_pb.CommitResponse_ResponseType{commitSuccess, commitSuccess, overQuota, overQuota}
-	expectedVersion := []*int64{aws.Int64(1), aws.Int64(1), nil, nil}
+	expectedVersion := []*int64{rsp.Commit.Entryresponse[0].Mtime, rsp.Commit.Entryresponse[1].Mtime, nil, nil}
 	for i, entryRsp := range rsp.Commit.Entryresponse {
 		suite.Assert().Equal(expectedEntryRsp[i], *entryRsp.ResponseType)
 		suite.Assert().Equal(expectedVersion[i], entryRsp.Version)
@@ -509,8 +514,8 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 
 	// Commit updates to delete two previous inserted items.
 	entries = []*sync_pb.SyncEntity{
-		getCommitEntity(serverIDs[0], 1, true, getBookmarkSpecifics()),
-		getCommitEntity(serverIDs[1], 1, true, getBookmarkSpecifics()),
+		getCommitEntity(serverIDs[0], commitVersions[0], true, getBookmarkSpecifics()),
+		getCommitEntity(serverIDs[1], commitVersions[1], true, getBookmarkSpecifics()),
 	}
 	msg = getClientToServerCommitMsg(entries)
 	rsp = &sync_pb.ClientToServerResponse{}
@@ -522,7 +527,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
 	for _, entryRsp := range rsp.Commit.Entryresponse {
 		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
-		suite.Assert().Equal(int64(2), *entryRsp.Version)
+		suite.Assert().Equal(*entryRsp.Mtime, *entryRsp.Version)
 	}
 
 	// Commit 4 items should have two success and two OVER_QUOTA.
@@ -540,9 +545,14 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(4, len(rsp.Commit.Entryresponse))
+	expectedVersion = []*int64{rsp.Commit.Entryresponse[0].Mtime, rsp.Commit.Entryresponse[1].Mtime, nil, nil}
 	for i, entryRsp := range rsp.Commit.Entryresponse {
 		suite.Assert().Equal(expectedEntryRsp[i], *entryRsp.ResponseType)
-		suite.Assert().Equal(expectedVersion[i], entryRsp.Version)
+		if *entryRsp.ResponseType == commitSuccess {
+			suite.Assert().Equal(*expectedVersion[i], *entryRsp.Version)
+		} else {
+			suite.Assert().Equal(expectedVersion[i], entryRsp.Version)
+		}
 	}
 
 	*command.MaxClientObjectQuota = defaultMaxClientObjectQuota
@@ -574,7 +584,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_ReplaceParentIDTo
 	child3 := getCommitEntity("id_child3", 0, false, getBookmarkSpecifics())
 	child3.ParentIdString = aws.String("id_parent2")
 
-	updateChild0 := getCommitEntity(*rsp.Commit.Entryresponse[0].IdString, 1, false, getBookmarkSpecifics())
+	updateChild0 := getCommitEntity(*rsp.Commit.Entryresponse[0].IdString, *rsp.Commit.Entryresponse[0].Version, false, getBookmarkSpecifics())
 	updateChild0.ParentIdString = aws.String("id_parent")
 
 	entries := []*sync_pb.SyncEntity{parent1, child1, parent2, child2, child3, updateChild0}
