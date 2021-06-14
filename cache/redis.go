@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +30,10 @@ type redisClusterClient struct {
 func NewRedisClient() RedisClient {
 	addrs := strings.Split(os.Getenv("REDIS_URL"), ",")
 	cluster := os.Getenv("ENV") != "local"
+	poolSize, err := strconv.Atoi(os.Getenv("REDIS_POOL_SIZE"))
+	if err != nil {
+		poolSize = 100
+	}
 
 	// Fallback to localhost:6397 and non-cluster client if redis env is not set.
 	if len(addrs) == 0 {
@@ -45,7 +50,8 @@ func NewRedisClient() RedisClient {
 		r = &redisSimpleClient{client}
 	} else {
 		client := redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs: addrs,
+			Addrs:    addrs,
+			PoolSize: poolSize,
 		})
 		r = &redisClusterClient{client}
 	}
