@@ -52,6 +52,7 @@ func NewRedisClient() RedisClient {
 		client := redis.NewClusterClient(&redis.ClusterOptions{
 			Addrs:    addrs,
 			PoolSize: poolSize,
+			ReadOnly: true,
 		})
 		r = &redisClusterClient{client}
 	}
