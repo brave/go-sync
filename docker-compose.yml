@@ -63,7 +63,7 @@ services:
     networks:
       - sync
   redis:
-    image: redis:latest
+    image: public.ecr.aws/lts/redis:latest
     ports:
       - "6379:6379"
     networks:
