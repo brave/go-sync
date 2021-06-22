@@ -66,5 +66,7 @@ services:
     image: public.ecr.aws/lts/redis:latest
     ports:
       - "6379:6379"
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
     networks:
       - sync
