@@ -33,6 +33,7 @@ var (
 // ServerOpts provide configuration options for the server.
 type ServerOpts struct {
 	SentryDSN string
+	Addr      string
 }
 
 func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
@@ -93,7 +94,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	return ctx, r
 }
 
-// StartServer starts the translate proxy server on port 8195
+// StartServer starts the translate proxy server.
 func StartServer(serverOpts ServerOpts) {
 	serverCtx, logger := setupLogger(context.Background())
 
@@ -113,8 +114,7 @@ func StartServer(serverOpts ServerOpts) {
 
 	serverCtx, r := setupRouter(serverCtx, logger)
 
-	port := ":8295"
-	srv := http.Server{Addr: port, Handler: chi.ServerBaseContext(serverCtx, r)}
+	srv := http.Server{Addr: serverOpts.Addr, Handler: chi.ServerBaseContext(serverCtx, r)}
 	err := srv.ListenAndServe()
 	if err != nil {
 		sentry.CaptureException(err)

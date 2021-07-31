@@ -7,5 +7,10 @@ import (
 )
 
 func main() {
-	server.StartServer(server.ServerOpts{SentryDSN: os.Getenv("SENTRY_DSN")})
+	server.StartServer(
+		server.ServerOpts{
+			SentryDSN: os.Getenv("SENTRY_DSN"),
+			Addr:      ":8295",
+		},
+	)
 }
