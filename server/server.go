@@ -30,6 +30,10 @@ var (
 	buildTime string
 )
 
+type ServerOpts struct {
+	SentryDSN string
+}
+
 func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, os.Getenv("ENV"))
 	ctx = context.WithValue(ctx, appctx.LogLevelCTXKey, zerolog.WarnLevel)
@@ -89,14 +93,13 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 }
 
 // StartServer starts the translate proxy server on port 8195
-func StartServer() {
+func StartServer(serverOpts ServerOpts) {
 	serverCtx, logger := setupLogger(context.Background())
 
 	// Setup Sentry.
-	sentryDsn := os.Getenv("SENTRY_DSN")
-	if sentryDsn != "" {
+	if serverOpts.SentryDSN != "" {
 		err := sentry.Init(sentry.ClientOptions{
-			Dsn:     sentryDsn,
+			Dsn:     serverOpts.SentryDSN,
 			Release: fmt.Sprintf("go-sync@%s-%s", commit, buildTime),
 		})
 		if err != nil {
