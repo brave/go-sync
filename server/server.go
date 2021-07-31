@@ -30,6 +30,7 @@ var (
 	buildTime string
 )
 
+// ServerOpts provide configuration options for the server.
 type ServerOpts struct {
 	SentryDSN string
 }
