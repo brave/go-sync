@@ -30,8 +30,8 @@ var (
 	buildTime string
 )
 
-// ServerOpts provide configuration options for the server.
-type ServerOpts struct {
+// Opts provide configuration options for the server.
+type Opts struct {
 	SentryDSN string
 	Addr      string
 }
@@ -95,13 +95,13 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 }
 
 // StartServer starts the translate proxy server.
-func StartServer(serverOpts ServerOpts) {
+func StartServer(opts Opts) {
 	serverCtx, logger := setupLogger(context.Background())
 
 	// Setup Sentry.
-	if serverOpts.SentryDSN != "" {
+	if opts.SentryDSN != "" {
 		err := sentry.Init(sentry.ClientOptions{
-			Dsn:     serverOpts.SentryDSN,
+			Dsn:     opts.SentryDSN,
 			Release: fmt.Sprintf("go-sync@%s-%s", commit, buildTime),
 		})
 		if err != nil {
@@ -114,7 +114,7 @@ func StartServer(serverOpts ServerOpts) {
 
 	serverCtx, r := setupRouter(serverCtx, logger)
 
-	srv := http.Server{Addr: serverOpts.Addr, Handler: chi.ServerBaseContext(serverCtx, r)}
+	srv := http.Server{Addr: opts.Addr, Handler: chi.ServerBaseContext(serverCtx, r)}
 	err := srv.ListenAndServe()
 	if err != nil {
 		sentry.CaptureException(err)
