@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -77,6 +78,13 @@ func authenticate(tkn string) (string, error) {
 	// Verify that this token is within +/- 1 day.
 	if abs(utils.UnixMilli(time.Now())-timestamp) > TokenMaxDuration {
 		return "", fmt.Errorf("token is expired")
+	}
+
+	blockedIds := strings.Split(os.Getenv("BLOCKED_CLIENT_IDS"), ",")
+	for _, id := range blockedIds {
+		if token.PublicKeyHex == id {
+			return "", fmt.Errorf("This client ID is blocked")
+		}
 	}
 
 	return token.PublicKeyHex, nil
