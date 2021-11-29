@@ -24,6 +24,8 @@ const (
 	sessionsCommitDelaySeconds int32  = 11
 	setSyncPollInterval        int32  = 30
 	nigoriTypeID               int32  = 47745
+	deviceInfoTypeID           int    = 154522
+	maxActiveDevices           int    = 20
 )
 
 // handleGetUpdatesRequest handles GetUpdatesMessage and fills
@@ -34,6 +36,36 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 	isNewClient := guMsg.GetUpdatesOrigin != nil && *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_NEW_CLIENT
 	isPoll := guMsg.GetUpdatesOrigin != nil && *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_PERIODIC
 	if isNewClient {
+		// Reject the request if client has >= 20 devices in the chain.
+		activeDevices := 0
+		for {
+			hasChangesRemaining, syncEntities, err := db.GetUpdatesForType(deviceInfoTypeID, 0, false, clientID, int64(maxGUBatchSize))
+			if err != nil {
+				log.Error().Err(err).Msgf("db.GetUpdatesForType failed for type %v", deviceInfoTypeID)
+				errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
+				return &errCode,
+					fmt.Errorf("error getting updates for type %v: %w", deviceInfoTypeID, err)
+			}
+
+			for _, entity := range syncEntities {
+				if !*entity.Deleted {
+					activeDevices++
+				}
+
+				// Error out when exceeds the limit.
+				if activeDevices >= maxActiveDevices {
+					errCode = sync_pb.SyncEnums_THROTTLED
+					return &errCode, fmt.Errorf("exceed limit of active devices in a chain")
+				}
+			}
+
+			// Run until all device records are checked.
+			if !hasChangesRemaining {
+				break
+			}
+		}
+
+		// Insert initial records if needed.
 		err := InsertServerDefinedUniqueEntities(db, clientID)
 		if err != nil {
 			log.Error().Err(err).Msg("Create server defined unique entities failed")
