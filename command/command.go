@@ -25,7 +25,7 @@ const (
 	setSyncPollInterval        int32  = 30
 	nigoriTypeID               int32  = 47745
 	deviceInfoTypeID           int    = 154522
-	maxActiveDevices           int    = 20
+	maxActiveDevices           int    = 2
 )
 
 // handleGetUpdatesRequest handles GetUpdatesMessage and fills
