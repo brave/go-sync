@@ -39,8 +39,9 @@ type Dynamo struct {
 // NewDynamo returns a dynamoDB client to be used.
 func NewDynamo() (*Dynamo, error) {
 	config := &aws.Config{
-		Region:   aws.String(os.Getenv("AWS_REGION")),
-		Endpoint: aws.String(os.Getenv("AWS_ENDPOINT")),
+		Region:     aws.String(os.Getenv("AWS_REGION")),
+		Endpoint:   aws.String(os.Getenv("AWS_ENDPOINT")),
+		MaxRetries: aws.Int(0),
 	}
 
 	sess, err := session.NewSession(config)
