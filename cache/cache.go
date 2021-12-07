@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	ttl = 300 * time.Second
+	ttl = 600 * time.Second
 )
 
 // Cache is a wrapper for cache accesses.
