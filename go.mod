@@ -4,7 +4,7 @@ go 1.14
 
 require (
 	github.com/aws/aws-sdk-go v1.37.19
-	github.com/brave-intl/bat-go v0.5.0
+	github.com/brave-intl/bat-go v0.5.1
 	github.com/getsentry/sentry-go v0.11.0
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-redis/redis/v8 v8.10.0
