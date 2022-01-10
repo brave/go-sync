@@ -25,7 +25,7 @@ const (
 	setSyncPollInterval        int32  = 30
 	nigoriTypeID               int32  = 47745
 	deviceInfoTypeID           int    = 154522
-	maxActiveDevices           int    = 20
+	maxActiveDevices           int    = 50
 )
 
 // handleGetUpdatesRequest handles GetUpdatesMessage and fills
@@ -36,7 +36,7 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 	isNewClient := guMsg.GetUpdatesOrigin != nil && *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_NEW_CLIENT
 	isPoll := guMsg.GetUpdatesOrigin != nil && *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_PERIODIC
 	if isNewClient {
-		// Reject the request if client has >= 20 devices in the chain.
+		// Reject the request if client has >= 50 devices in the chain.
 		activeDevices := 0
 		for {
 			hasChangesRemaining, syncEntities, err := db.GetUpdatesForType(deviceInfoTypeID, 0, false, clientID, int64(maxGUBatchSize))
