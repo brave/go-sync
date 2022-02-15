@@ -207,4 +207,7 @@ message NigoriSpecifics {
 
   // Boolean corresponding to whether OS preferences should be encrypted.
   optional bool encrypt_os_preferences = 49;
+
+  // Boolean corresponding to whether pairs should be encrypted.
+  optional bool encrypt_pairs = 52;
 }
