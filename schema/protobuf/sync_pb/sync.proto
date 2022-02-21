@@ -62,6 +62,7 @@ import "typed_url_specifics.proto";
 import "unique_position.proto";
 import "user_consent_specifics.proto";
 import "user_event_specifics.proto";
+import "vg_specifics.proto";
 import "web_app_specifics.proto";
 import "wifi_configuration_specifics.proto";
 
@@ -170,6 +171,8 @@ message EntitySpecifics {
     OsPriorityPreferenceSpecifics os_priority_preference = 703915;
     SharingMessageSpecifics sharing_message = 728866;
     AutofillOfferSpecifics autofill_offer = 774329;
+    VgBodySpecifics vg_body = 967732;
+    VgSpendStatusSpecifics vg_spend_status = 967832;
   }
   reserved 218175;
   reserved "wifi_credential";
