@@ -12,12 +12,22 @@ Currently we use dynamoDB as the datastore, the schema could be found in `schema
 ## Developer Setup
 1. [Install Go 1.14](https://golang.org/doc/install)
 2. [Install GolangCI-Lint](https://github.com/golangci/golangci-lint#install)
-3. Clone this repo
-4. [Install protobuf protocol compiler](https://github.com/protocolbuffers/protobuf#protocol-compiler-installation) if you need to compile protobuf files, which could be built using `make protobuf`.
-5. Build via `make`
+3. [Install gowrap](https://github.com/hexdigest/gowrap#installation)
+4. Clone this repo
+5. [Install protobuf protocol compiler](https://github.com/protocolbuffers/protobuf#protocol-compiler-installation) if you need to compile protobuf files, which could be built using `make protobuf`.
+6. Build via `make`
 
 ## Local development using Docker and DynamoDB Local
 1. Clone this repo
 2. Run `make docker`
 3. Run `make docker-up`
 4. For running unit tests, run `make docker-test`
+
+## Prometheus Instrumentation
+The instrumented datastore and redis interfaces are generated, providing integration with Prometheus.  The following will re-generate the instrumented code:
+
+```
+make instrumented
+```
+
+Changes to `datastore/datastore.go` or `cache/cache.go` should be followed with the above command.

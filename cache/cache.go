@@ -22,14 +22,15 @@ func NewCache(r RedisClient) *Cache {
 	return &Cache{r}
 }
 
-func getTypeMtimeKey(clientID string, dataType int) string {
+// GetTypeMtimeKey returns derived cache key clientID#dataType
+func (c *Cache) GetTypeMtimeKey(clientID string, dataType int) string {
 	return clientID + "#" + strconv.Itoa(dataType)
 }
 
 // SetTypeMtime add an entry into cache where key is clientID#dataType, value
 // is the lastest mtime seen on this type for the client.
 func (c *Cache) SetTypeMtime(ctx context.Context, clientID string, dataType int, mtime int64) {
-	key := getTypeMtimeKey(clientID, dataType)
+	key := c.GetTypeMtimeKey(clientID, dataType)
 	val := strconv.FormatInt(mtime, 10)
 	err := c.Set(ctx, key, val, ttl)
 	if err != nil {
@@ -43,7 +44,7 @@ func (c *Cache) SetTypeMtime(ctx context.Context, clientID string, dataType int,
 // older or equal to client's token, which means the client is already
 // up-to-date. In any other cases, it will return false.
 func (c *Cache) IsTypeMtimeUpdated(ctx context.Context, clientID string, dataType int, token int64) bool {
-	key := getTypeMtimeKey(clientID, dataType)
+	key := c.GetTypeMtimeKey(clientID, dataType)
 	cachedTokenStr, err := c.Get(ctx, key)
 
 	// If operation failed or cache missed, return true to proceed to querying
