@@ -16,12 +16,13 @@ import (
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 	"github.com/brave/go-sync/utils"
 	"github.com/rs/zerolog/log"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/proto"
 )
 
 const (
 	maxBatchGetItemSize    = 100 // Limited by AWS.
+	maxBatchDeleteItemSize = 25  // Limited by AWS.
 	clientTagItemPrefix    = "Client#"
 	serverTagItemPrefix    = "Server#"
 	conditionalCheckFailed = "ConditionalCheckFailed"
@@ -261,6 +262,123 @@ func (dynamo *Dynamo) InsertSyncEntitiesWithServerTags(entities []*SyncEntity) e
 		return fmt.Errorf("error writing sync entities with server tags in a transaction: %w", err)
 	}
 	return nil
+}
+
+// Delete all items for a given clientID
+func (dynamo *Dynamo) DeleteClientItems(clientID string) error {
+	pkb := expression.Key(pk)
+	pkv := expression.Value(clientID)
+	keyCond := expression.KeyEqual(pkb, pkv)
+	exprs := expression.NewBuilder().WithKeyCondition(keyCond)
+	expr, err := exprs.Build()
+	if err != nil {
+		return fmt.Errorf("error building expression to get updates: %w", err)
+	}
+
+	input := &dynamodb.QueryInput{
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		KeyConditionExpression:    expr.KeyCondition(),
+		FilterExpression:          expr.Filter(),
+		ProjectionExpression:      aws.String(projPk),
+		TableName:                 aws.String(Table),
+	}
+
+	out, err := dynamo.Query(input)
+	if err != nil {
+		return fmt.Errorf("error doing query to get updates: %w", err)
+	}
+	count := *out.Count
+	var i, j int64
+	for i = 0; i < count; i += maxBatchDeleteItemSize {
+		j = i + maxBatchDeleteItemSize
+		if j > count {
+			j = count
+		}
+
+		tableItems := []*dynamodb.WriteRequest{}
+		for _, item := range out.Items[i:j] {
+			writeRequest := dynamodb.WriteRequest{
+				DeleteRequest: &dynamodb.DeleteRequest{
+					Key: map[string]*dynamodb.AttributeValue{
+						pk: {
+							S: aws.String(*item[pk].S),
+						},
+						sk: {
+							S: aws.String(*item[sk].S),
+						},
+					},
+				},
+			}
+			tableItems = append(tableItems, &writeRequest)
+		}
+		delInput := &dynamodb.BatchWriteItemInput{
+			RequestItems: map[string][]*dynamodb.WriteRequest{
+				Table: tableItems,
+			},
+		}
+
+		_, err = dynamo.BatchWriteItem(delInput)
+		if err != nil {
+			return fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
+		}
+	}
+
+	now := aws.Int64(utils.UnixMilli(time.Now()))
+	disabledMarker := SyncEntity{
+		ClientID:      clientID,
+		ID:            clientID,
+		Deleted:       aws.Bool(true),
+		Version:       aws.Int64(0),
+		Mtime:         now,
+		Ctime:         now,
+		Specifics:     []byte{},
+		DataType:      aws.Int(3),
+		Folder:        aws.Bool(false),
+		DataTypeMtime: aws.String(fmt.Sprintf("3#%d", now)),
+	}
+
+	av, err := dynamodbattribute.MarshalMap(disabledMarker)
+	if err != nil {
+		return fmt.Errorf("error marshalling sync item to insert sync entity: %w", err)
+	}
+
+	markerInput := &dynamodb.PutItemInput{
+		Item:      av,
+		TableName: aws.String(Table),
+	}
+
+	_, err = dynamo.PutItem(markerInput)
+	if err != nil {
+		fmt.Println(err)
+		return fmt.Errorf("error calling PutItem to insert sync item: %w", err)
+	}
+
+	return nil
+}
+
+// IsSyncChainDisabled checks whether a given sync chain has been deleted
+func (dynamo *Dynamo) IsSyncChainDisabled(clientID string) (bool, error) {
+	key, err := dynamodbattribute.MarshalMap(PrimaryKey{
+		ClientID: clientID,
+		ID:       clientID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("error marshalling key to check if server tag existed: %w", err)
+	}
+
+	input := &dynamodb.GetItemInput{
+		Key:                  key,
+		ProjectionExpression: aws.String("Deleted"),
+		TableName:            aws.String(Table),
+	}
+
+	out, err := dynamo.GetItem(input)
+	if err != nil {
+		return false, fmt.Errorf("error calling GetItem to check if sync chain disabled: %w", err)
+	}
+
+	return len(out.Item) > 0, nil
 }
 
 // UpdateSyncEntity updates a sync item in dynamoDB.
