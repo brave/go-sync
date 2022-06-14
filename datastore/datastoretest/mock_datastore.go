@@ -44,7 +44,12 @@ func (m *MockDatastore) UpdateClientItemCount(clientID string, count int) error 
 	return args.Error(0)
 }
 
-func (m *MockDatastore) DeleteClientItems(clientID string) error {
+func (m *MockDatastore) ClearServerData(clientID string) ([]datastore.SyncEntity, error) {
+	args := m.Called(clientID)
+	return args.Get(0).([]datastore.SyncEntity), args.Error(1)
+}
+
+func (m *MockDatastore) DisableSyncChain(clientID string) error {
 	args := m.Called(clientID)
 	return args.Error(0)
 }

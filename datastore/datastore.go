@@ -19,8 +19,10 @@ type Datastore interface {
 	GetClientItemCount(clientID string) (int, error)
 	// Update the count of sync items for a client.
 	UpdateClientItemCount(clientID string, count int) error
-	// Delete all items for a given clientID
-	DeleteClientItems(clientID string) error
+	// ClearServerData deletes all items for a given clientID
+	ClearServerData(clientID string) ([]SyncEntity, error)
+	// DisableSyncChain marks a chain as disabled so no further updates or commits can happen
+	DisableSyncChain(clientID string) error
 	// IsSyncChainDisabled checks whether a given sync chain is deleted
 	IsSyncChainDisabled(clientID string) (bool, error)
 }

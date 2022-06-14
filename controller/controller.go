@@ -8,8 +8,6 @@ import (
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/closers"
-	"github.com/brave/go-sync/account"
-	"github.com/brave/go-sync/auth"
 	"github.com/brave/go-sync/cache"
 	"github.com/brave/go-sync/command"
 	"github.com/brave/go-sync/datastore"
@@ -27,40 +25,7 @@ const (
 func SyncRouter(cache *cache.Cache, datastore datastore.Datastore) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/command/", middleware.InstrumentHandler("Command", Command(cache, datastore)))
-	r.Method("DELETE", "/account/{clientId}", middleware.InstrumentHandler("Account", Account(cache, datastore)))
 	return r
-}
-
-// Account handles delete account requests from sync clients.
-func Account(cache *cache.Cache, db datastore.Datastore) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		clientID, ok := ctx.Value("clientID").(string)
-		if !ok {
-			http.Error(w, "Missing client id", http.StatusUnauthorized)
-			return
-		}
-
-		err := account.HandleDelete(clientID, db)
-		if err != nil {
-			http.Error(w, "Error deleting account", http.StatusInternalServerError)
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-	})
-}
-
-func authorize(w http.ResponseWriter, r *http.Request) (string, error) {
-	clientID, err := auth.Authorize(r)
-	if clientID == "" {
-		if err != nil {
-			log.Error().Err(err).Msg("Authorization failed")
-		}
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		return "", err
-	}
-	return clientID, nil
 }
 
 // Command handles GetUpdates and Commit requests from sync clients.

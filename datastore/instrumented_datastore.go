@@ -37,8 +37,8 @@ func NewDatastoreWithPrometheus(base Datastore, instanceName string) DatastoreWi
 	}
 }
 
-// DeleteClientItems implements Datastore
-func (_d DatastoreWithPrometheus) DeleteClientItems(clientID string) (err error) {
+// ClearServerData implements Datastore
+func (_d DatastoreWithPrometheus) ClearServerData(clientID string) (sa1 []SyncEntity, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -46,9 +46,23 @@ func (_d DatastoreWithPrometheus) DeleteClientItems(clientID string) (err error)
 			result = "error"
 		}
 
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DeleteClientItems", result).Observe(time.Since(_since).Seconds())
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "ClearServerData", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.DeleteClientItems(clientID)
+	return _d.base.ClearServerData(clientID)
+}
+
+// DisableSyncChain implements Datastore
+func (_d DatastoreWithPrometheus) DisableSyncChain(clientID string) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DisableSyncChain", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.DisableSyncChain(clientID)
 }
 
 // GetClientItemCount implements Datastore

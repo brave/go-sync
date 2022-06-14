@@ -21,11 +21,11 @@ import (
 )
 
 const (
-	maxBatchGetItemSize    = 100 // Limited by AWS.
-	maxBatchDeleteItemSize = 25  // Limited by AWS.
-	clientTagItemPrefix    = "Client#"
-	serverTagItemPrefix    = "Server#"
-	conditionalCheckFailed = "ConditionalCheckFailed"
+	maxBatchGetItemSize       = 100 // Limited by AWS.
+	maxTransactDeleteItemSize = 10  // Limited by AWS.
+	clientTagItemPrefix       = "Client#"
+	serverTagItemPrefix       = "Server#"
+	conditionalCheckFailed    = "ConditionalCheckFailed"
 )
 
 // SyncEntity is used to marshal and unmarshal sync items in dynamoDB.
@@ -74,6 +74,15 @@ func (a SyncEntityByMtime) Less(i, j int) bool {
 type ServerClientUniqueTagItem struct {
 	ClientID string // Hash key
 	ID       string // Range key
+	Mtime    *int64
+	Ctime    *int64
+}
+
+// ServerClientUniqueTagItemQuery is used to query for unique tag items in
+// dynamoDB.
+type ServerClientUniqueTagItemQuery struct {
+	ClientID string // Hash key
+	ID       string // Range key
 }
 
 // TagItemByClientIDID implements sort.Interface for []ServerClientUniqueTagItem
@@ -86,15 +95,35 @@ func (a TagItemByClientIDID) Less(i, j int) bool {
 	return a[i].ClientID+a[i].ID < a[j].ClientID+a[j].ID
 }
 
+// getTagPrefix is a helper method to give the proper prefix for unique tag
+func getTagPrefix(isServer bool) string {
+	if isServer {
+		return serverTagItemPrefix
+	} else {
+		return clientTagItemPrefix
+	}
+}
+
 // NewServerClientUniqueTagItem creates a tag item which is used to ensure the
 // uniqueness of server-defined or client-defined unique tags for a client.
 func NewServerClientUniqueTagItem(clientID string, tag string, isServer bool) *ServerClientUniqueTagItem {
-	prefix := clientTagItemPrefix
-	if isServer {
-		prefix = serverTagItemPrefix
-	}
+	prefix := getTagPrefix(isServer)
+	now := aws.Int64(utils.UnixMilli(time.Now()))
 
 	return &ServerClientUniqueTagItem{
+		ClientID: clientID,
+		ID:       prefix + tag,
+		Mtime:    now,
+		Ctime:    now,
+	}
+}
+
+// NewServerclientUniqueTagItemQuery creates a tag item query which is used to
+// determine whether a sync entity has a unique tag item or not
+func NewServerClientUniqueTagItemQuery(clientID string, tag string, isServer bool) *ServerClientUniqueTagItemQuery {
+	prefix := getTagPrefix(isServer)
+
+	return &ServerClientUniqueTagItemQuery{
 		ClientID: clientID,
 		ID:       prefix + tag,
 	}
@@ -187,8 +216,8 @@ func (dynamo *Dynamo) InsertSyncEntity(entity *SyncEntity) (bool, error) {
 // HasServerDefinedUniqueTag check the tag item to see if there is already a
 // tag item exists with the tag value for a specific client.
 func (dynamo *Dynamo) HasServerDefinedUniqueTag(clientID string, tag string) (bool, error) {
-	key, err := dynamodbattribute.MarshalMap(
-		NewServerClientUniqueTagItem(clientID, tag, true))
+	tagItem := NewServerClientUniqueTagItemQuery(clientID, tag, true)
+	key, err := dynamodbattribute.MarshalMap(tagItem)
 	if err != nil {
 		return false, fmt.Errorf("error marshalling key to check if server tag existed: %w", err)
 	}
@@ -264,66 +293,8 @@ func (dynamo *Dynamo) InsertSyncEntitiesWithServerTags(entities []*SyncEntity) e
 	return nil
 }
 
-// Delete all items for a given clientID
-func (dynamo *Dynamo) DeleteClientItems(clientID string) error {
-	pkb := expression.Key(pk)
-	pkv := expression.Value(clientID)
-	keyCond := expression.KeyEqual(pkb, pkv)
-	exprs := expression.NewBuilder().WithKeyCondition(keyCond)
-	expr, err := exprs.Build()
-	if err != nil {
-		return fmt.Errorf("error building expression to get updates: %w", err)
-	}
-
-	input := &dynamodb.QueryInput{
-		ExpressionAttributeNames:  expr.Names(),
-		ExpressionAttributeValues: expr.Values(),
-		KeyConditionExpression:    expr.KeyCondition(),
-		FilterExpression:          expr.Filter(),
-		ProjectionExpression:      aws.String(projPk),
-		TableName:                 aws.String(Table),
-	}
-
-	out, err := dynamo.Query(input)
-	if err != nil {
-		return fmt.Errorf("error doing query to get updates: %w", err)
-	}
-	count := *out.Count
-	var i, j int64
-	for i = 0; i < count; i += maxBatchDeleteItemSize {
-		j = i + maxBatchDeleteItemSize
-		if j > count {
-			j = count
-		}
-
-		tableItems := []*dynamodb.WriteRequest{}
-		for _, item := range out.Items[i:j] {
-			writeRequest := dynamodb.WriteRequest{
-				DeleteRequest: &dynamodb.DeleteRequest{
-					Key: map[string]*dynamodb.AttributeValue{
-						pk: {
-							S: aws.String(*item[pk].S),
-						},
-						sk: {
-							S: aws.String(*item[sk].S),
-						},
-					},
-				},
-			}
-			tableItems = append(tableItems, &writeRequest)
-		}
-		delInput := &dynamodb.BatchWriteItemInput{
-			RequestItems: map[string][]*dynamodb.WriteRequest{
-				Table: tableItems,
-			},
-		}
-
-		_, err = dynamo.BatchWriteItem(delInput)
-		if err != nil {
-			return fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
-		}
-	}
-
+// DisableSyncChain marks a chain as disabled so no further updates or commits can happen
+func (dynamo *Dynamo) DisableSyncChain(clientID string) error {
 	now := aws.Int64(utils.UnixMilli(time.Now()))
 	disabledMarker := SyncEntity{
 		ClientID:      clientID,
@@ -350,11 +321,102 @@ func (dynamo *Dynamo) DeleteClientItems(clientID string) error {
 
 	_, err = dynamo.PutItem(markerInput)
 	if err != nil {
-		fmt.Println(err)
 		return fmt.Errorf("error calling PutItem to insert sync item: %w", err)
 	}
 
 	return nil
+}
+
+// ClearServerData deletes all items for a given clientID
+func (dynamo *Dynamo) ClearServerData(clientID string) ([]SyncEntity, error) {
+	syncEntities := []SyncEntity{}
+	pkb := expression.Key(pk)
+	pkv := expression.Value(clientID)
+	keyCond := expression.KeyEqual(pkb, pkv)
+	exprs := expression.NewBuilder().WithKeyCondition(keyCond)
+	expr, err := exprs.Build()
+	if err != nil {
+		return syncEntities, fmt.Errorf("error building expression to get updates: %w", err)
+	}
+
+	input := &dynamodb.QueryInput{
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		KeyConditionExpression:    expr.KeyCondition(),
+		FilterExpression:          expr.Filter(),
+		TableName:                 aws.String(Table),
+	}
+
+	out, err := dynamo.Query(input)
+	if err != nil {
+		return syncEntities, fmt.Errorf("error doing query to get updates: %w", err)
+	}
+	count := *out.Count
+
+	err = dynamodbattribute.UnmarshalListOfMaps(out.Items, &syncEntities)
+	if err != nil {
+		return syncEntities, fmt.Errorf("error unmarshalling updated sync entities: %w", err)
+	}
+
+	var i, j int64
+	for i = 0; i < count; i += maxTransactDeleteItemSize {
+		j = i + maxTransactDeleteItemSize
+		if j > count {
+			j = count
+		}
+
+		items := []*dynamodb.TransactWriteItem{}
+		for _, item := range syncEntities[i:j] {
+			var cond expression.ConditionBuilder
+			var expr expression.Expression
+			var err error
+
+			// Fail delete if race condition detected (either version or modified time has changed).
+			// Because some rows are just the ClientID and ID, there's no way to detect a race
+			// condition for those, and we just fall back to nil values for relevant Delete request
+			// fields.
+			if item.Version != nil {
+				cond = expression.Name("Version").Equal(expression.Value(*item.Version))
+				expr, err = expression.NewBuilder().WithCondition(cond).Build()
+			} else if item.Mtime != nil {
+				cond = expression.Name("Mtime").Equal(expression.Value(*item.Mtime))
+				expr, err = expression.NewBuilder().WithCondition(cond).Build()
+			} else {
+				expr, err = expression.NewBuilder().Build()
+			}
+			if err != nil {
+				return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
+			}
+
+			writeItem := dynamodb.TransactWriteItem{
+				Delete: &dynamodb.Delete{
+					ConditionExpression:       expr.Condition(),
+					ExpressionAttributeNames:  expr.Names(),
+					ExpressionAttributeValues: expr.Values(),
+					TableName:                 aws.String(Table),
+					Key: map[string]*dynamodb.AttributeValue{
+						pk: {
+							S: aws.String(item.ClientID),
+						},
+						sk: {
+							S: aws.String(item.ID),
+						},
+					},
+				},
+			}
+
+			items = append(items, &writeItem)
+		}
+
+		fmt.Println("done transaction prep")
+
+		_, err = dynamo.TransactWriteItems(&dynamodb.TransactWriteItemsInput{TransactItems: items})
+		if err != nil {
+			return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
+		}
+	}
+
+	return syncEntities, nil
 }
 
 // IsSyncChainDisabled checks whether a given sync chain has been deleted

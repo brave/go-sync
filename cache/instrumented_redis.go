@@ -38,6 +38,20 @@ func NewRedisClientWithPrometheus(base RedisClient, instanceName string) RedisCl
 	}
 }
 
+// Del implements RedisClient
+func (_d RedisClientWithPrometheus) Del(ctx context.Context, keys ...string) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		redisclientDurationSummaryVec.WithLabelValues(_d.instanceName, "Del", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.Del(ctx, keys...)
+}
+
 // FlushAll implements RedisClient
 func (_d RedisClientWithPrometheus) FlushAll(ctx context.Context) (err error) {
 	_since := time.Now()

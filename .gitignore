@@ -17,3 +17,7 @@
 # vim files
 *.swp
 *.swo
+
+# Temp files
+
+tmp/
