@@ -323,7 +323,6 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 // handleClearServerDataRequest handles clearing user data from the datastore and cache
 // and fills the response
 func handleClearServerDataRequest(cache *cache.Cache, db datastore.Datastore, msg *sync_pb.ClearServerDataMessage, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
-	fmt.Println("handleClearServerDataRequest")
 	errCode := sync_pb.SyncEnums_SUCCESS
 
 	syncEntities, err := db.ClearServerData(clientID)

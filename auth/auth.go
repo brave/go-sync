@@ -40,7 +40,6 @@ func abs(n int64) int64 {
 // timestamp is within +/- 1 day. The acccess token format is:
 // base64_encode(timestamp_hex_encoded|signed_timestamp_hex_encoded|public_key_hex_encoded)
 func authenticate(tkn string) (string, error) {
-	fmt.Println(tkn)
 	base64DecodedBytes, err := base64.URLEncoding.DecodeString(tkn)
 	if err != nil {
 		return "", fmt.Errorf("error doing base64 decoding: %w", err)

@@ -408,8 +408,6 @@ func (dynamo *Dynamo) ClearServerData(clientID string) ([]SyncEntity, error) {
 			items = append(items, &writeItem)
 		}
 
-		fmt.Println("done transaction prep")
-
 		_, err = dynamo.TransactWriteItems(&dynamodb.TransactWriteItemsInput{TransactItems: items})
 		if err != nil {
 			return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
