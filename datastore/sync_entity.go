@@ -369,7 +369,7 @@ func (dynamo *Dynamo) ClearServerData(clientID string) ([]SyncEntity, error) {
 		for _, item := range syncEntities[i:j] {
 			// Fail delete if race condition detected (modified time has changed).
 			if item.Version != nil {
-				cond := expression.Name("Mtime").Equal(expression.Value(*item.Version))
+				cond := expression.Name("Mtime").Equal(expression.Value(*item.Mtime))
 				expr, err := expression.NewBuilder().WithCondition(cond).Build()
 				if err != nil {
 					return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
