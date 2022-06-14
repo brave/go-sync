@@ -367,45 +367,51 @@ func (dynamo *Dynamo) ClearServerData(clientID string) ([]SyncEntity, error) {
 
 		items := []*dynamodb.TransactWriteItem{}
 		for _, item := range syncEntities[i:j] {
-			var cond expression.ConditionBuilder
-			var expr expression.Expression
-			var err error
-
-			// Fail delete if race condition detected (either version or modified time has changed).
-			// Because some rows are just the ClientID and ID, there's no way to detect a race
-			// condition for those, and we just fall back to nil values for relevant Delete request
-			// fields.
+			// Fail delete if race condition detected (modified time has changed).
 			if item.Version != nil {
-				cond = expression.Name("Version").Equal(expression.Value(*item.Version))
-				expr, err = expression.NewBuilder().WithCondition(cond).Build()
-			} else if item.Mtime != nil {
-				cond = expression.Name("Mtime").Equal(expression.Value(*item.Mtime))
-				expr, err = expression.NewBuilder().WithCondition(cond).Build()
-			} else {
-				expr, err = expression.NewBuilder().Build()
-			}
-			if err != nil {
-				return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
-			}
+				cond := expression.Name("Mtime").Equal(expression.Value(*item.Version))
+				expr, err := expression.NewBuilder().WithCondition(cond).Build()
+				if err != nil {
+					return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
+				}
 
-			writeItem := dynamodb.TransactWriteItem{
-				Delete: &dynamodb.Delete{
-					ConditionExpression:       expr.Condition(),
-					ExpressionAttributeNames:  expr.Names(),
-					ExpressionAttributeValues: expr.Values(),
-					TableName:                 aws.String(Table),
-					Key: map[string]*dynamodb.AttributeValue{
-						pk: {
-							S: aws.String(item.ClientID),
-						},
-						sk: {
-							S: aws.String(item.ID),
+				writeItem := dynamodb.TransactWriteItem{
+					Delete: &dynamodb.Delete{
+						ConditionExpression:       expr.Condition(),
+						ExpressionAttributeNames:  expr.Names(),
+						ExpressionAttributeValues: expr.Values(),
+						TableName:                 aws.String(Table),
+						Key: map[string]*dynamodb.AttributeValue{
+							pk: {
+								S: aws.String(item.ClientID),
+							},
+							sk: {
+								S: aws.String(item.ID),
+							},
 						},
 					},
-				},
+				}
+
+				items = append(items, &writeItem)
+			} else {
+				// If row doesn't hold Mtime, delete as usual.
+				writeItem := dynamodb.TransactWriteItem{
+					Delete: &dynamodb.Delete{
+						TableName: aws.String(Table),
+						Key: map[string]*dynamodb.AttributeValue{
+							pk: {
+								S: aws.String(item.ClientID),
+							},
+							sk: {
+								S: aws.String(item.ID),
+							},
+						},
+					},
+				}
+
+				items = append(items, &writeItem)
 			}
 
-			items = append(items, &writeItem)
 		}
 
 		_, err = dynamo.TransactWriteItems(&dynamodb.TransactWriteItemsInput{TransactItems: items})
