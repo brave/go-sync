@@ -4,6 +4,9 @@ import (
 	"net/http"
 
 	"github.com/brave/go-sync/datastore"
+	"github.com/brave/go-sync/schema/protobuf/sync_pb"
+	"github.com/rs/zerolog/log"
+	"google.golang.org/protobuf/proto"
 )
 
 // DisabledChain is a middleware to check for disabled sync chains referenced in a request,
@@ -31,7 +34,22 @@ func DisabledChain(next http.Handler) http.Handler {
 		}
 
 		if disabled {
-			http.Error(w, "sync chain not found", http.StatusGone)
+			errCode := sync_pb.SyncEnums_DISABLED_BY_ADMIN
+			csRsp := sync_pb.ClientToServerResponse{
+				ErrorCode: &errCode,
+			}
+			out, err := proto.Marshal(&csRsp)
+			if err != nil {
+				log.Error().Err(err).Msg("Marshall ClientToServerResponse failed")
+				http.Error(w, "Marshal Error", http.StatusInternalServerError)
+				return
+			}
+
+			w.WriteHeader(http.StatusOK)
+			_, err = w.Write(out)
+			if err != nil {
+				log.Error().Err(err).Msg("Write HTTP response body failed")
+			}
 			return
 		}
 
