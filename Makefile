@@ -6,8 +6,9 @@ BUILD_TIME := $(shell date +%s)
 
 all: lint test build
 
+goopt := $(shell basename schema/protobuf/sync_pb/*.proto | xargs printf "\-\-go_opt=M%s=./schema/protobuf/sync_pb ")
 protobuf:
-	protoc -I schema/protobuf/sync_pb/ schema/protobuf/sync_pb/*.proto --go_out=schema/protobuf/sync_pb/
+	@protoc $(goopt) -I schema/protobuf/sync_pb/ schema/protobuf/sync_pb/*.proto --go_out=.
 
 build:
 	go run main.go
