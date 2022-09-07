@@ -4,7 +4,7 @@ package cache
 // This code is generated with http://github.com/hexdigest/gowrap tool
 // using ../.prom-gowrap.tmpl template
 
-//go:generate gowrap gen -p github.com/brave/go-sync/cache -i RedisClient -t ../.prom-gowrap.tmpl -o instrumented_redis.go
+//go:generate gowrap gen -p github.com/odedlaz/go-sync/cache -i RedisClient -t ../.prom-gowrap.tmpl -o instrumented_redis.go
 
 import (
 	"context"

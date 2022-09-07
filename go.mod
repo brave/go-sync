@@ -1,4 +1,4 @@
-module github.com/brave/go-sync
+module github.com/odedlaz/go-sync
 
 go 1.19
 

@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/brave/go-sync/datastore"
-	"github.com/brave/go-sync/schema/protobuf/sync_pb"
-	"github.com/brave/go-sync/utils"
-	"github.com/satori/go.uuid"
+	"github.com/odedlaz/go-sync/datastore"
+	"github.com/odedlaz/go-sync/schema/protobuf/sync_pb"
+	"github.com/odedlaz/go-sync/utils"
+	uuid "github.com/satori/go.uuid"
 )
 
 const (

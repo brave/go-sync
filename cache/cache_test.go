@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/brave/go-sync/cache"
+	"github.com/odedlaz/go-sync/cache"
 	"github.com/stretchr/testify/suite"
 )
 

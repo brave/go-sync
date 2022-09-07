@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/brave/go-sync/datastore"
-	"github.com/brave/go-sync/datastore/datastoretest"
-	"github.com/brave/go-sync/schema/protobuf/sync_pb"
-	"github.com/brave/go-sync/utils"
+	"github.com/odedlaz/go-sync/datastore"
+	"github.com/odedlaz/go-sync/datastore/datastoretest"
+	"github.com/odedlaz/go-sync/schema/protobuf/sync_pb"
+	"github.com/odedlaz/go-sync/utils"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/proto"
 )

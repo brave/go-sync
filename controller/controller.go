@@ -8,12 +8,12 @@ import (
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/closers"
-	"github.com/brave/go-sync/auth"
-	"github.com/brave/go-sync/cache"
-	"github.com/brave/go-sync/command"
-	"github.com/brave/go-sync/datastore"
-	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 	"github.com/go-chi/chi"
+	"github.com/odedlaz/go-sync/auth"
+	"github.com/odedlaz/go-sync/cache"
+	"github.com/odedlaz/go-sync/command"
+	"github.com/odedlaz/go-sync/datastore"
+	"github.com/odedlaz/go-sync/schema/protobuf/sync_pb"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/protobuf/proto"
 )

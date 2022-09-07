@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave/go-sync/auth"
-	"github.com/brave/go-sync/auth/authtest"
-	"github.com/brave/go-sync/utils"
+	"github.com/odedlaz/go-sync/auth"
+	"github.com/odedlaz/go-sync/auth/authtest"
+	"github.com/odedlaz/go-sync/utils"
 	"github.com/stretchr/testify/suite"
 )
 

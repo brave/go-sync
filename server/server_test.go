@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/brave/go-sync/server"
 	"github.com/go-chi/chi"
+	"github.com/odedlaz/go-sync/server"
 	"github.com/stretchr/testify/assert"
 )
 

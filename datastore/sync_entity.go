@@ -13,10 +13,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/aws/aws-sdk-go/service/dynamodb/expression"
-	"github.com/brave/go-sync/schema/protobuf/sync_pb"
-	"github.com/brave/go-sync/utils"
+	"github.com/odedlaz/go-sync/schema/protobuf/sync_pb"
+	"github.com/odedlaz/go-sync/utils"
 	"github.com/rs/zerolog/log"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/proto"
 )
 

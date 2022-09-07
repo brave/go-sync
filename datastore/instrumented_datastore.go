@@ -4,7 +4,7 @@ package datastore
 // This code is generated with http://github.com/hexdigest/gowrap tool
 // using ../.prom-gowrap.tmpl template
 
-//go:generate gowrap gen -p github.com/brave/go-sync/datastore -i Datastore -t ../.prom-gowrap.tmpl -o instrumented_datastore.go
+//go:generate gowrap gen -p github.com/odedlaz/go-sync/datastore -i Datastore -t ../.prom-gowrap.tmpl -o instrumented_datastore.go
 
 import (
 	"time"

@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/brave/go-sync/utils"
+	"github.com/odedlaz/go-sync/utils"
 )
 
 func saneTimeMillsHeaderFunc(w http.ResponseWriter) {
