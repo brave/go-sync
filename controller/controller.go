@@ -76,6 +76,7 @@ func Command(cache *cache.Cache, db datastore.Datastore) http.HandlerFunc {
 		if err != nil {
 			log.Error().Err(err).Msg("Handle command message failed")
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 
 		out, err := proto.Marshal(pbRsp)
