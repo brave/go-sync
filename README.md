@@ -10,7 +10,7 @@ This server supports endpoints as bellow.
 Currently we use dynamoDB as the datastore, the schema could be found in `schema/dynamodb/table.json`.
 
 ## Developer Setup
-1. [Install Go 1.14](https://golang.org/doc/install)
+1. [Install Go 1.19](https://golang.org/doc/install)
 2. [Install GolangCI-Lint](https://github.com/golangci/golangci-lint#install)
 3. Clone this repo
 4. [Install protobuf protocol compiler](https://github.com/protocolbuffers/protobuf#protocol-compiler-installation) if you need to compile protobuf files, which could be built using `make protobuf`.

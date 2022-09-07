@@ -8,7 +8,7 @@ branches:
     - stg
     - prod
 go:
-  - 1.14
+  - "1.19"
 services:
   - docker
 before_install:
