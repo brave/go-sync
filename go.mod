@@ -8,12 +8,11 @@ require (
 	github.com/getsentry/sentry-go v0.11.0
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-redis/redis/v8 v8.10.0
-	github.com/golang/protobuf v1.4.3
 	github.com/prometheus/client_golang v1.11.0
 	github.com/rs/zerolog v1.23.0
 	github.com/satori/go.uuid v1.2.0
 	github.com/stretchr/testify v1.7.0
-	google.golang.org/protobuf v1.26.0-rc.1
+	google.golang.org/protobuf v1.28.1
 )
 
 require (
@@ -22,6 +21,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
+	github.com/golang/protobuf v1.5.0 // indirect
 	github.com/gomodule/redigo v2.0.0+incompatible // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
