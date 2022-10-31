@@ -169,9 +169,7 @@ message GetUpdatesMessage {
 // Message from a client asking the server to clear its data. This causes the
 // server to generate a new store birthday, which allows dealing reliably with
 // in-flight requests (in particular commits) from other clients.
-message ClearServerDataMessage {
-  optional bool disable_sync_chain = 1000;
-}
+message ClearServerDataMessage {}
 
 // Response to a ClearServerData request.
 message ClearServerDataResponse {

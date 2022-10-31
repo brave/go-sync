@@ -597,15 +597,11 @@ func (x *GetUpdatesMessage) GetClientContexts() []*DataTypeContext {
 	return nil
 }
 
-// Message from a client asking the server to clear its data. This causes the
-// server to generate a new store birthday, which allows dealing reliably with
-// in-flight requests (in particular commits) from other clients.
+// Message from a client asking the server to clear its data.
 type ClearServerDataMessage struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
-
-	DisableSyncChain *bool `protobuf:"varint,1000,opt,name=disable_sync_chain,json=disableSyncChain" json:"disable_sync_chain,omitempty"`
 }
 
 func (x *ClearServerDataMessage) Reset() {
@@ -638,13 +634,6 @@ func (x *ClearServerDataMessage) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ClearServerDataMessage.ProtoReflect.Descriptor instead.
 func (*ClearServerDataMessage) Descriptor() ([]byte, []int) {
 	return file_sync_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *ClearServerDataMessage) GetDisableSyncChain() bool {
-	if x != nil && x.DisableSyncChain != nil {
-		return *x.DisableSyncChain
-	}
-	return false
 }
 
 // Response to a ClearServerData request.

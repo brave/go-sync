@@ -326,13 +326,11 @@ func handleClearServerDataRequest(cache *cache.Cache, db datastore.Datastore, ms
 	errCode := sync_pb.SyncEnums_SUCCESS
 	var err error = nil
 
-	if *msg.DisableSyncChain {
-		err = db.DisableSyncChain(clientID)
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to disable sync chain")
-			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-			return &errCode, err
-		}
+	err = db.DisableSyncChain(clientID)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to disable sync chain")
+		errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
+		return &errCode, err
 	}
 
 	syncEntities, err := db.ClearServerData(clientID)
