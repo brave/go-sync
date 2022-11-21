@@ -8,7 +8,6 @@ import (
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/closers"
-	"github.com/brave/go-sync/auth"
 	"github.com/brave/go-sync/cache"
 	"github.com/brave/go-sync/command"
 	"github.com/brave/go-sync/datastore"
@@ -32,13 +31,10 @@ func SyncRouter(cache *cache.Cache, datastore datastore.Datastore) chi.Router {
 // Command handles GetUpdates and Commit requests from sync clients.
 func Command(cache *cache.Cache, db datastore.Datastore) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Authorize
-		clientID, err := auth.Authorize(r)
-		if clientID == "" {
-			if err != nil {
-				log.Error().Err(err).Msg("Authorization failed")
-			}
-			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		ctx := r.Context()
+		clientID, ok := ctx.Value("clientID").(string)
+		if !ok {
+			http.Error(w, "missing client id", http.StatusUnauthorized)
 			return
 		}
 

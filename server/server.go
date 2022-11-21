@@ -54,6 +54,8 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(chiware.Timeout(60 * time.Second))
 	r.Use(batware.BearerToken)
 	r.Use(middleware.CommonResponseHeaders)
+	r.Use(middleware.Auth)
+	r.Use(middleware.DisabledChain)
 
 	db, err := datastore.NewDynamo()
 	if err != nil {
@@ -63,6 +65,10 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	redis := cache.NewRedisClient()
 	cache := cache.NewCache(cache.NewRedisClientWithPrometheus(redis, "redis"))
+
+	// Provide datastore & cache via context
+	ctx = context.WithValue(ctx, "datastore", db)
+	ctx = context.WithValue(ctx, "cache", &cache)
 
 	r.Mount("/v2", controller.SyncRouter(
 		cache,

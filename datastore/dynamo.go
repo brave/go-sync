@@ -12,6 +12,7 @@ import (
 const (
 	// Strings for the primary key
 	pk     string = "ClientID"
+	sk     string = "ID"
 	projPk string = "ClientID, ID"
 
 	// Strings for (ClientID, DataTypeMtime) GSI
