@@ -49,7 +49,7 @@ func (suite *MiddlewareTestSuite) TestDisabledChainMiddleware() {
 	suite.Require().NoError(err, "NewRequestWithContext should succeed")
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	suite.Require().Equal(http.StatusGone, rr.Code)
+	suite.Require().Equal(http.StatusOK, rr.Code)
 
 	// DB error
 	datastore = new(datastoretest.MockDatastore)

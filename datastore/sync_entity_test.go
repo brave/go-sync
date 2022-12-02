@@ -47,10 +47,23 @@ func (suite *SyncEntityTestSuite) TestNewServerClientUniqueTagItem() {
 		ClientID: "id",
 		ID:       "Client#clientTag",
 	}
-	suite.Assert().Equal(
-		*datastore.NewServerClientUniqueTagItem("id", "serverTag", true), expectedServerTag)
-	suite.Assert().Equal(
-		*datastore.NewServerClientUniqueTagItem("id", "clientTag", false), expectedClientTag)
+	actualClientTag := *datastore.NewServerClientUniqueTagItem("id", "clientTag", false)
+	actualServerTag := *datastore.NewServerClientUniqueTagItem("id", "serverTag", true)
+
+	// We can't know the exact value for Mtime & Ctime.  Make sure they're set,
+	// set zero value for subsequent tests
+	suite.Assert().NotNil(actualClientTag.Mtime)
+	suite.Assert().NotNil(actualClientTag.Ctime)
+	suite.Assert().NotNil(actualServerTag.Mtime)
+	suite.Assert().NotNil(actualServerTag.Ctime)
+
+	actualClientTag.Mtime = nil
+	actualClientTag.Ctime = nil
+	actualServerTag.Mtime = nil
+	actualServerTag.Ctime = nil
+
+	suite.Assert().Equal(expectedServerTag, actualServerTag)
+	suite.Assert().Equal(expectedClientTag, actualClientTag)
 }
 
 func (suite *SyncEntityTestSuite) TestInsertSyncEntity() {
@@ -122,6 +135,17 @@ func (suite *SyncEntityTestSuite) TestInsertSyncEntity() {
 
 	// Check tag items should be saved for entity3, entity4, entity5.
 	tagItems, err = datastoretest.ScanTagItems(suite.dynamo)
+
+	// Check that Ctime and Mtime have been set, reset to zero value for subsequent
+	// tests
+	for i := 0; i < len(tagItems); i++ {
+		suite.Assert().NotNil(tagItems[i].Ctime)
+		suite.Assert().NotNil(tagItems[i].Mtime)
+
+		tagItems[i].Ctime = nil
+		tagItems[i].Mtime = nil
+	}
+
 	suite.Require().NoError(err, "ScanTagItems should succeed")
 	expectedTagItems := []datastore.ServerClientUniqueTagItem{
 		{ClientID: "client1", ID: "Client#tag1"},
@@ -129,7 +153,7 @@ func (suite *SyncEntityTestSuite) TestInsertSyncEntity() {
 		{ClientID: "client2", ID: "Client#tag1"},
 	}
 	sort.Sort(datastore.TagItemByClientIDID(tagItems))
-	suite.Assert().Equal(tagItems, expectedTagItems)
+	suite.Assert().Equal(expectedTagItems, tagItems)
 }
 
 func (suite *SyncEntityTestSuite) TestHasServerDefinedUniqueTag() {
@@ -218,13 +242,24 @@ func (suite *SyncEntityTestSuite) TestInsertSyncEntitiesWithServerTags() {
 	suite.Assert().Equal(syncItems, expectedSyncItems)
 	tagItems, err = datastoretest.ScanTagItems(suite.dynamo)
 	suite.Require().NoError(err, "ScanTagItems should succeed")
+
+	// Check that Ctime and Mtime have been set, reset to zero value for subsequent
+	// tests
+	for i := 0; i < len(tagItems); i++ {
+		suite.Assert().NotNil(tagItems[i].Ctime)
+		suite.Assert().NotNil(tagItems[i].Mtime)
+
+		tagItems[i].Ctime = nil
+		tagItems[i].Mtime = nil
+	}
+
 	expectedTagItems := []datastore.ServerClientUniqueTagItem{
 		{ClientID: "client1", ID: "Server#tag1"},
 		{ClientID: "client1", ID: "Server#tag2"},
 		{ClientID: "client2", ID: "Server#tag1"},
 	}
 	sort.Sort(datastore.TagItemByClientIDID(tagItems))
-	suite.Assert().Equal(tagItems, expectedTagItems)
+	suite.Assert().Equal(expectedTagItems, tagItems)
 }
 
 func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_Basic() {
@@ -690,6 +725,102 @@ func (suite *SyncEntityTestSuite) TestCreatePBSyncEntity() {
 	pbEntity, err = datastore.CreatePBSyncEntity(&dbEntity)
 	suite.Require().NoError(err, "CreatePBSyncEntity should succeed")
 	suite.Assert().Nil(pbEntity.Specifics)
+}
+
+func (suite *SyncEntityTestSuite) TestDisableSyncChain() {
+	clientID := "client1"
+	id := "disabled_chain"
+	err := suite.dynamo.DisableSyncChain(clientID)
+	suite.Require().NoError(err, "DisableSyncChain should succeed")
+	e, err := datastoretest.ScanTagItems(suite.dynamo)
+	suite.Require().NoError(err, "ScanTagItems should succeed")
+	suite.Assert().Equal(1, len(e))
+	suite.Assert().Equal(clientID, e[0].ClientID)
+	suite.Assert().Equal(id, e[0].ID)
+}
+
+func (suite *SyncEntityTestSuite) TestIsSyncChainDisabled() {
+	clientID := "client1"
+
+	disabled, err := suite.dynamo.IsSyncChainDisabled(clientID)
+	suite.Require().NoError(err, "IsSyncChainDisabled should succeed")
+	suite.Assert().Equal(false, disabled)
+
+	err = suite.dynamo.DisableSyncChain(clientID)
+	suite.Require().NoError(err, "DisableSyncChain should succeed")
+	disabled, err = suite.dynamo.IsSyncChainDisabled(clientID)
+	suite.Require().NoError(err, "IsSyncChainDisabled should succeed")
+	suite.Assert().Equal(true, disabled)
+}
+
+func (suite *SyncEntityTestSuite) TestClearServerData() {
+	// Test clear sync entities
+	entity := datastore.SyncEntity{
+		ClientID:      "client1",
+		ID:            "id1",
+		Version:       aws.Int64(1),
+		Ctime:         aws.Int64(12345678),
+		Mtime:         aws.Int64(12345678),
+		DataType:      aws.Int(123),
+		Folder:        aws.Bool(false),
+		Deleted:       aws.Bool(false),
+		DataTypeMtime: aws.String("123#12345678"),
+	}
+	_, err := suite.dynamo.InsertSyncEntity(&entity)
+	suite.Require().NoError(err, "InsertSyncEntity should succeed")
+
+	e, err := datastoretest.ScanSyncEntities(suite.dynamo)
+	suite.Require().NoError(err, "ScanSyncEntities should succeed")
+	suite.Assert().Equal(1, len(e))
+
+	e, err = suite.dynamo.ClearServerData(entity.ClientID)
+	suite.Require().NoError(err, "ClearServerData should succeed")
+	suite.Assert().Equal(1, len(e))
+
+	e, err = datastoretest.ScanSyncEntities(suite.dynamo)
+	suite.Require().NoError(err, "ScanSyncEntities should succeed")
+	suite.Assert().Equal(0, len(e))
+
+	// Test clear tagged items
+	entity1 := datastore.SyncEntity{
+		ClientID:               "client1",
+		ID:                     "id1",
+		Version:                aws.Int64(1),
+		Ctime:                  aws.Int64(12345678),
+		Mtime:                  aws.Int64(12345678),
+		DataType:               aws.Int(123),
+		Folder:                 aws.Bool(false),
+		Deleted:                aws.Bool(false),
+		DataTypeMtime:          aws.String("123#12345678"),
+		ServerDefinedUniqueTag: aws.String("tag1"),
+	}
+	entity2 := entity1
+	entity2.ID = "id2"
+	entity2.ServerDefinedUniqueTag = aws.String("tag2")
+	entities := []*datastore.SyncEntity{&entity1, &entity2}
+	suite.Require().NoError(
+		suite.dynamo.InsertSyncEntitiesWithServerTags(entities),
+		"InsertSyncEntitiesWithServerTags should succeed")
+
+	e, err = datastoretest.ScanSyncEntities(suite.dynamo)
+	suite.Require().NoError(err, "ScanSyncEntities should succeed")
+	suite.Assert().Equal(2, len(e), "No items should be written if fail")
+
+	t, err := datastoretest.ScanTagItems(suite.dynamo)
+	suite.Require().NoError(err, "ScanTagItems should succeed")
+	suite.Assert().Equal(2, len(t), "No items should be written if fail")
+
+	e, err = suite.dynamo.ClearServerData(entity.ClientID)
+	suite.Require().NoError(err, "ClearServerData should succeed")
+	suite.Assert().Equal(4, len(e))
+
+	e, err = datastoretest.ScanSyncEntities(suite.dynamo)
+	suite.Require().NoError(err, "ScanSyncEntities should succeed")
+	suite.Assert().Equal(0, len(e), "No items should be written if fail")
+
+	t, err = datastoretest.ScanTagItems(suite.dynamo)
+	suite.Require().NoError(err, "ScanTagItems should succeed")
+	suite.Assert().Equal(0, len(t), "No items should be written if fail")
 }
 
 func TestSyncEntityTestSuite(t *testing.T) {

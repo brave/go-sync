@@ -8,6 +8,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// Auth verifies the token provided is valid, and sets the client id in context
 func Auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		clientID, err := auth.Authorize(r)
