@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/brave/go-sync/auth"
+	syncContext "github.com/brave/go-sync/context"
 	"github.com/rs/zerolog/log"
 )
 
@@ -20,7 +21,7 @@ func Auth(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), "clientID", clientID)
+		ctx := context.WithValue(r.Context(), syncContext.ContextKeyClientID, clientID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

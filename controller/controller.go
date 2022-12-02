@@ -10,6 +10,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave/go-sync/cache"
 	"github.com/brave/go-sync/command"
+	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 	"github.com/go-chi/chi"
@@ -32,7 +33,7 @@ func SyncRouter(cache *cache.Cache, datastore datastore.Datastore) chi.Router {
 func Command(cache *cache.Cache, db datastore.Datastore) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		clientID, ok := ctx.Value("clientID").(string)
+		clientID, ok := ctx.Value(syncContext.ContextKeyClientID).(string)
 		if !ok {
 			http.Error(w, "missing client id", http.StatusUnauthorized)
 			return

@@ -13,6 +13,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave/go-sync/cache"
+	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/controller"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/middleware"
@@ -67,8 +68,8 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	cache := cache.NewCache(cache.NewRedisClientWithPrometheus(redis, "redis"))
 
 	// Provide datastore & cache via context
-	ctx = context.WithValue(ctx, "datastore", db)
-	ctx = context.WithValue(ctx, "cache", &cache)
+	ctx = context.WithValue(ctx, syncContext.ContextKeyDatastore, db)
+	ctx = context.WithValue(ctx, syncContext.ContextKeyCache, &cache)
 
 	r.Mount("/v2", controller.SyncRouter(
 		cache,

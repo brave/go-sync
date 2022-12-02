@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 
+	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 	"github.com/rs/zerolog/log"
@@ -14,13 +15,13 @@ import (
 func DisabledChain(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		clientID, ok := ctx.Value("clientID").(string)
+		clientID, ok := ctx.Value(syncContext.ContextKeyClientID).(string)
 		if !ok {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 
-		db, ok := ctx.Value("datastore").(datastore.Datastore)
+		db, ok := ctx.Value(syncContext.ContextKeyDatastore).(datastore.Datastore)
 		if !ok {
 			http.Error(w, "unable to complete request", http.StatusInternalServerError)
 			return
