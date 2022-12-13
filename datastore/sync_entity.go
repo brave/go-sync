@@ -26,6 +26,7 @@ const (
 	clientTagItemPrefix       = "Client#"
 	serverTagItemPrefix       = "Server#"
 	conditionalCheckFailed    = "ConditionalCheckFailed"
+	disabledChainID           = "disabled_chain"
 )
 
 // SyncEntity is used to marshal and unmarshal sync items in dynamoDB.
@@ -312,7 +313,7 @@ func (dynamo *Dynamo) DisableSyncChain(clientID string) error {
 	now := aws.Int64(utils.UnixMilli(time.Now()))
 	disabledMarker := DisabledMarkerItem{
 		ClientID: clientID,
-		ID:       "disabled_chain",
+		ID:       disabledChainID,
 		Mtime:    now,
 		Ctime:    now,
 	}
@@ -375,7 +376,7 @@ func (dynamo *Dynamo) ClearServerData(clientID string) ([]SyncEntity, error) {
 
 		items := []*dynamodb.TransactWriteItem{}
 		for _, item := range syncEntities[i:j] {
-			if item.ID == "disabled_chain" {
+			if item.ID == disabledChainID {
 				continue
 			}
 
@@ -439,7 +440,7 @@ func (dynamo *Dynamo) ClearServerData(clientID string) ([]SyncEntity, error) {
 func (dynamo *Dynamo) IsSyncChainDisabled(clientID string) (bool, error) {
 	key, err := dynamodbattribute.MarshalMap(DisabledMarkerItemQuery{
 		ClientID: clientID,
-		ID:       "disabled_chain",
+		ID:       disabledChainID,
 	})
 	if err != nil {
 		return false, fmt.Errorf("error marshalling key to check if server tag existed: %w", err)

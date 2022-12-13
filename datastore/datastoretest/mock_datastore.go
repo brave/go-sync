@@ -5,7 +5,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// MockDatastore is use to mock datastorein tests
+// MockDatastore is used to mock datastorein tests
 type MockDatastore struct {
 	mock.Mock
 }
