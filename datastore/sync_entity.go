@@ -26,6 +26,7 @@ const (
 	clientTagItemPrefix       = "Client#"
 	serverTagItemPrefix       = "Server#"
 	conditionalCheckFailed    = "ConditionalCheckFailed"
+	disabledChainID           = "disabled_chain"
 )
 
 // SyncEntity is used to marshal and unmarshal sync items in dynamoDB.
@@ -69,6 +70,21 @@ func (a SyncEntityByMtime) Less(i, j int) bool {
 	return *a[i].Mtime < *a[j].Mtime
 }
 
+// DisabledMarkerItem is used to mark sync chain as deleted in Dynamodb
+type DisabledMarkerItem struct {
+	ClientID string
+	ID       string
+	Mtime    *int64
+	Ctime    *int64
+}
+
+// DisabledMarkerItemQuery is used to query for disabled marker item in
+// DynamoDB
+type DisabledMarkerItemQuery struct {
+	ClientID string
+	ID       string
+}
+
 // ServerClientUniqueTagItem is used to marshal and unmarshal tag items in
 // dynamoDB.
 type ServerClientUniqueTagItem struct {
@@ -99,9 +115,8 @@ func (a TagItemByClientIDID) Less(i, j int) bool {
 func getTagPrefix(isServer bool) string {
 	if isServer {
 		return serverTagItemPrefix
-	} else {
-		return clientTagItemPrefix
 	}
+	return clientTagItemPrefix
 }
 
 // NewServerClientUniqueTagItem creates a tag item which is used to ensure the
@@ -118,7 +133,7 @@ func NewServerClientUniqueTagItem(clientID string, tag string, isServer bool) *S
 	}
 }
 
-// NewServerclientUniqueTagItemQuery creates a tag item query which is used to
+// NewServerClientUniqueTagItemQuery creates a tag item query which is used to
 // determine whether a sync entity has a unique tag item or not
 func NewServerClientUniqueTagItemQuery(clientID string, tag string, isServer bool) *ServerClientUniqueTagItemQuery {
 	prefix := getTagPrefix(isServer)
@@ -296,22 +311,16 @@ func (dynamo *Dynamo) InsertSyncEntitiesWithServerTags(entities []*SyncEntity) e
 // DisableSyncChain marks a chain as disabled so no further updates or commits can happen
 func (dynamo *Dynamo) DisableSyncChain(clientID string) error {
 	now := aws.Int64(utils.UnixMilli(time.Now()))
-	disabledMarker := SyncEntity{
-		ClientID:      clientID,
-		ID:            clientID,
-		Deleted:       aws.Bool(true),
-		Version:       aws.Int64(0),
-		Mtime:         now,
-		Ctime:         now,
-		Specifics:     []byte{},
-		DataType:      aws.Int(3),
-		Folder:        aws.Bool(false),
-		DataTypeMtime: aws.String(fmt.Sprintf("3#%d", now)),
+	disabledMarker := DisabledMarkerItem{
+		ClientID: clientID,
+		ID:       disabledChainID,
+		Mtime:    now,
+		Ctime:    now,
 	}
 
 	av, err := dynamodbattribute.MarshalMap(disabledMarker)
 	if err != nil {
-		return fmt.Errorf("error marshalling sync item to insert sync entity: %w", err)
+		return fmt.Errorf("error marshalling disabled marker: %w", err)
 	}
 
 	markerInput := &dynamodb.PutItemInput{
@@ -367,7 +376,7 @@ func (dynamo *Dynamo) ClearServerData(clientID string) ([]SyncEntity, error) {
 
 		items := []*dynamodb.TransactWriteItem{}
 		for _, item := range syncEntities[i:j] {
-			if item.ClientID == item.ID && item.Deleted != nil && *item.Deleted {
+			if item.ID == disabledChainID {
 				continue
 			}
 
@@ -429,18 +438,17 @@ func (dynamo *Dynamo) ClearServerData(clientID string) ([]SyncEntity, error) {
 
 // IsSyncChainDisabled checks whether a given sync chain has been deleted
 func (dynamo *Dynamo) IsSyncChainDisabled(clientID string) (bool, error) {
-	key, err := dynamodbattribute.MarshalMap(PrimaryKey{
+	key, err := dynamodbattribute.MarshalMap(DisabledMarkerItemQuery{
 		ClientID: clientID,
-		ID:       clientID,
+		ID:       disabledChainID,
 	})
 	if err != nil {
 		return false, fmt.Errorf("error marshalling key to check if server tag existed: %w", err)
 	}
 
 	input := &dynamodb.GetItemInput{
-		Key:                  key,
-		ProjectionExpression: aws.String("Deleted"),
-		TableName:            aws.String(Table),
+		Key:       key,
+		TableName: aws.String(Table),
 	}
 
 	out, err := dynamo.GetItem(input)

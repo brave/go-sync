@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/brave/go-sync/auth/authtest"
 	"github.com/brave/go-sync/cache"
+	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/controller"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
@@ -89,7 +90,7 @@ func (suite *ControllerTestSuite) TestCommand() {
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusUnauthorized, rr.Code)
 
-	ctx := context.WithValue(context.Background(), "clientID", "clientID")
+	ctx := context.WithValue(context.Background(), syncContext.ContextKeyClientID, "clientID")
 	req, err = http.NewRequestWithContext(ctx, "POST", "v2/command/", bytes.NewBuffer(body))
 	suite.Require().NoError(err, "NewRequestWithContext should succeed")
 

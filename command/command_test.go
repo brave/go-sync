@@ -668,12 +668,12 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ba
 	commitSuccess := sync_pb.CommitResponse_SUCCESS
 	var latestBookmarkMtime int64
 	var latestNigoriMtime int64
-	for _, entryRsp := range rsp.Commit.Entryresponse {
+	for i, entryRsp := range rsp.Commit.Entryresponse {
 		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
-		if strings.Contains(*entryRsp.Name, "bookmark") {
+		if i < 2 {
 			latestBookmarkMtime = *entryRsp.Mtime
 		}
-		if strings.Contains(*entryRsp.Name, "nigori") {
+		if i == 2 {
 			latestNigoriMtime = *entryRsp.Mtime
 		}
 	}

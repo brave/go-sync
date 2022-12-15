@@ -5,9 +5,11 @@ import (
 	"net/http"
 
 	"github.com/brave/go-sync/auth"
+	syncContext "github.com/brave/go-sync/context"
 	"github.com/rs/zerolog/log"
 )
 
+// Auth verifies the token provided is valid, and sets the client id in context
 func Auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		clientID, err := auth.Authorize(r)
@@ -19,7 +21,7 @@ func Auth(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), "clientID", clientID)
+		ctx := context.WithValue(r.Context(), syncContext.ContextKeyClientID, clientID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

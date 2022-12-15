@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/brave/go-sync/auth/authtest"
+	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/datastore/datastoretest"
 	"github.com/brave/go-sync/middleware"
 	"github.com/brave/go-sync/utils"
@@ -26,8 +27,8 @@ func (suite *MiddlewareTestSuite) TestDisabledChainMiddleware() {
 	// Active Chain
 	datastore := new(datastoretest.MockDatastore)
 	datastore.On("IsSyncChainDisabled", clientID).Return(false, nil)
-	ctx := context.WithValue(context.Background(), "clientID", clientID)
-	ctx = context.WithValue(ctx, "datastore", datastore)
+	ctx := context.WithValue(context.Background(), syncContext.ContextKeyClientID, clientID)
+	ctx = context.WithValue(ctx, syncContext.ContextKeyDatastore, datastore)
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
 	handler := middleware.DisabledChain(next)
 	req, err := http.NewRequestWithContext(ctx, "POST", "v2/command/", bytes.NewBuffer([]byte{}))
@@ -39,8 +40,8 @@ func (suite *MiddlewareTestSuite) TestDisabledChainMiddleware() {
 	// Disabled chain
 	datastore = new(datastoretest.MockDatastore)
 	datastore.On("IsSyncChainDisabled", clientID).Return(true, nil)
-	ctx = context.WithValue(context.Background(), "clientID", clientID)
-	ctx = context.WithValue(ctx, "datastore", datastore)
+	ctx = context.WithValue(context.Background(), syncContext.ContextKeyClientID, clientID)
+	ctx = context.WithValue(ctx, syncContext.ContextKeyDatastore, datastore)
 	next = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		suite.Require().Equal(false, true)
 	})
@@ -49,13 +50,13 @@ func (suite *MiddlewareTestSuite) TestDisabledChainMiddleware() {
 	suite.Require().NoError(err, "NewRequestWithContext should succeed")
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	suite.Require().Equal(http.StatusGone, rr.Code)
+	suite.Require().Equal(http.StatusOK, rr.Code)
 
 	// DB error
 	datastore = new(datastoretest.MockDatastore)
 	datastore.On("IsSyncChainDisabled", clientID).Return(false, fmt.Errorf("unable to query db"))
-	ctx = context.WithValue(context.Background(), "clientID", clientID)
-	ctx = context.WithValue(ctx, "datastore", datastore)
+	ctx = context.WithValue(context.Background(), syncContext.ContextKeyClientID, clientID)
+	ctx = context.WithValue(ctx, syncContext.ContextKeyDatastore, datastore)
 	next = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
 	handler = middleware.DisabledChain(next)
 	rr = httptest.NewRecorder()
@@ -70,7 +71,7 @@ func (suite *MiddlewareTestSuite) TestAuthMiddleware() {
 	// Happy path
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		clientID := ctx.Value("clientID")
+		clientID := ctx.Value(syncContext.ContextKeyClientID)
 		suite.Require().NotNil(clientID, "Client ID should be set by auth middleware")
 	})
 	handler := middleware.Auth(next)

@@ -14,8 +14,8 @@ import (
 
 var (
 	// Could be modified in tests.
-	maxGUBatchSize       int32 = 500
-	maxClientObjectQuota int   = 50000
+	maxGUBatchSize       = 500
+	maxClientObjectQuota = 50000
 )
 
 const (
@@ -87,8 +87,8 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 	}
 
 	maxSize := maxGUBatchSize
-	if guMsg.BatchSize != nil && *guMsg.BatchSize < maxGUBatchSize {
-		maxSize = *guMsg.BatchSize
+	if guMsg.BatchSize != nil && int(*guMsg.BatchSize) < maxGUBatchSize {
+		maxSize = int(*guMsg.BatchSize)
 	}
 
 	// Process from_progress_marker
@@ -120,7 +120,7 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 		// of break because we need to prepare NewProgressMarker for all entries in
 		// FromProgressMarker, where the returned token stays the same as the one
 		// passed in FromProgressMarker.
-		if int32(len(guRsp.Entries)) >= maxSize {
+		if len(guRsp.Entries) >= maxSize {
 			continue
 		}
 
@@ -324,7 +324,7 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 // and fills the response
 func handleClearServerDataRequest(cache *cache.Cache, db datastore.Datastore, msg *sync_pb.ClearServerDataMessage, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
 	errCode := sync_pb.SyncEnums_SUCCESS
-	var err error = nil
+	var err error
 
 	err = db.DisableSyncChain(clientID)
 	if err != nil {

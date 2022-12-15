@@ -104,6 +104,17 @@ func (suite *ServerDefinedUniqueEntityTestSuite) TestInsertServerDefinedUniqueEn
 	}
 	tagItems, err := datastoretest.ScanTagItems(suite.dynamo)
 	suite.Require().NoError(err, "ScanTagItems should succeed")
+
+	// Check that Ctime and Mtime have been set, reset to zero value for subsequent
+	// tests
+	for i := 0; i < len(tagItems); i++ {
+		suite.Assert().NotNil(tagItems[i].Ctime)
+		suite.Assert().NotNil(tagItems[i].Mtime)
+
+		tagItems[i].Ctime = nil
+		tagItems[i].Mtime = nil
+	}
+
 	sort.Sort(datastore.TagItemByClientIDID(tagItems))
 	sort.Sort(datastore.TagItemByClientIDID(expectedTagItems))
 	suite.Assert().Equal(tagItems, expectedTagItems)
