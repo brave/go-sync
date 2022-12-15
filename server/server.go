@@ -55,8 +55,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(chiware.Timeout(60 * time.Second))
 	r.Use(batware.BearerToken)
 	r.Use(middleware.CommonResponseHeaders)
-	r.Use(middleware.Auth)
-	r.Use(middleware.DisabledChain)
 
 	db, err := datastore.NewDynamo()
 	if err != nil {

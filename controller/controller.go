@@ -12,6 +12,7 @@ import (
 	"github.com/brave/go-sync/command"
 	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/datastore"
+	syncMiddleware "github.com/brave/go-sync/middleware"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 	"github.com/go-chi/chi"
 	"github.com/rs/zerolog/log"
@@ -25,6 +26,8 @@ const (
 // SyncRouter add routers for command and auth endpoint requests.
 func SyncRouter(cache *cache.Cache, datastore datastore.Datastore) chi.Router {
 	r := chi.NewRouter()
+	r.Use(syncMiddleware.Auth)
+	r.Use(syncMiddleware.DisabledChain)
 	r.Method("POST", "/command/", middleware.InstrumentHandler("Command", Command(cache, datastore)))
 	return r
 }
