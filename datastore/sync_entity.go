@@ -27,6 +27,7 @@ const (
 	serverTagItemPrefix       = "Server#"
 	conditionalCheckFailed    = "ConditionalCheckFailed"
 	disabledChainID           = "disabled_chain"
+	reasonDeleted             = "deleted"
 )
 
 // SyncEntity is used to marshal and unmarshal sync items in dynamoDB.
@@ -74,6 +75,7 @@ func (a SyncEntityByMtime) Less(i, j int) bool {
 type DisabledMarkerItem struct {
 	ClientID string
 	ID       string
+	Reason   string
 	Mtime    *int64
 	Ctime    *int64
 }
@@ -314,6 +316,7 @@ func (dynamo *Dynamo) DisableSyncChain(clientID string) error {
 	disabledMarker := DisabledMarkerItem{
 		ClientID: clientID,
 		ID:       disabledChainID,
+		Reason:   reasonDeleted,
 		Mtime:    now,
 		Ctime:    now,
 	}
