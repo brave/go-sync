@@ -12,6 +12,7 @@ import (
 const (
 	// Strings for the primary key
 	pk     string = "ClientID"
+	sk     string = "ID"
 	projPk string = "ClientID, ID"
 
 	// Strings for (ClientID, DataTypeMtime) GSI
@@ -22,7 +23,7 @@ const (
 
 var (
 	// Table is the name of the table in dynamoDB, could be modified in tests.
-	Table string = os.Getenv("TABLE_NAME")
+	Table = os.Getenv("TABLE_NAME")
 )
 
 // PrimaryKey struct is used to represent the primary key of our table.

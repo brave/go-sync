@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/brave/go-sync/auth/authtest"
 	"github.com/brave/go-sync/cache"
+	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/controller"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
@@ -47,6 +48,8 @@ func (suite *ControllerTestSuite) TearDownTest() {
 	suite.Require().NoError(
 		suite.cache.FlushAll(context.Background()), "Failed to clear cache")
 }
+
+func (suite *ControllerTestSuite) TestAccount() {}
 
 func (suite *ControllerTestSuite) TestCommand() {
 	// Generate request body.
@@ -87,6 +90,10 @@ func (suite *ControllerTestSuite) TestCommand() {
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusUnauthorized, rr.Code)
 
+	ctx := context.WithValue(context.Background(), syncContext.ContextKeyClientID, "clientID")
+	req, err = http.NewRequestWithContext(ctx, "POST", "v2/command/", bytes.NewBuffer(body))
+	suite.Require().NoError(err, "NewRequestWithContext should succeed")
+
 	// Generate a valid token to use.
 	token, _, _, err := authtest.GenerateToken(utils.UnixMilli(time.Now()))
 	suite.Require().NoError(err, "generate token should succeed")
@@ -105,7 +112,7 @@ func (suite *ControllerTestSuite) TestCommand() {
 	err = zw.Close()
 	suite.Require().NoError(err, "gzip close should succeed")
 
-	req, err = http.NewRequest("POST", "v2/command/", buf)
+	req, err = http.NewRequestWithContext(ctx, "POST", "v2/command/", buf)
 	suite.Require().NoError(err, "NewRequest should succeed")
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Encoding", "gzip")

@@ -8,7 +8,6 @@ require (
 	github.com/getsentry/sentry-go v0.11.0
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-redis/redis/v8 v8.10.0
-	github.com/golang/protobuf v1.4.3
 	github.com/prometheus/client_golang v1.11.0
 	github.com/rs/zerolog v1.23.0
 	github.com/satori/go.uuid v1.2.0

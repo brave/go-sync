@@ -8,10 +8,11 @@ import (
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/closers"
-	"github.com/brave/go-sync/auth"
 	"github.com/brave/go-sync/cache"
 	"github.com/brave/go-sync/command"
+	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/datastore"
+	syncMiddleware "github.com/brave/go-sync/middleware"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 	"github.com/go-chi/chi"
 	"github.com/rs/zerolog/log"
@@ -25,6 +26,8 @@ const (
 // SyncRouter add routers for command and auth endpoint requests.
 func SyncRouter(cache *cache.Cache, datastore datastore.Datastore) chi.Router {
 	r := chi.NewRouter()
+	r.Use(syncMiddleware.Auth)
+	r.Use(syncMiddleware.DisabledChain)
 	r.Method("POST", "/command/", middleware.InstrumentHandler("Command", Command(cache, datastore)))
 	return r
 }
@@ -32,13 +35,10 @@ func SyncRouter(cache *cache.Cache, datastore datastore.Datastore) chi.Router {
 // Command handles GetUpdates and Commit requests from sync clients.
 func Command(cache *cache.Cache, db datastore.Datastore) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Authorize
-		clientID, err := auth.Authorize(r)
-		if clientID == "" {
-			if err != nil {
-				log.Error().Err(err).Msg("Authorization failed")
-			}
-			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		ctx := r.Context()
+		clientID, ok := ctx.Value(syncContext.ContextKeyClientID).(string)
+		if !ok {
+			http.Error(w, "missing client id", http.StatusUnauthorized)
 			return
 		}
 
@@ -76,6 +76,7 @@ func Command(cache *cache.Cache, db datastore.Datastore) http.HandlerFunc {
 		if err != nil {
 			log.Error().Err(err).Msg("Handle command message failed")
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 
 		out, err := proto.Marshal(pbRsp)
