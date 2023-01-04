@@ -6,6 +6,8 @@ import (
 	"net/http"
 	_ "net/http/pprof" // pprof magic
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	batware "github.com/brave-intl/bat-go/middleware"
@@ -26,9 +28,10 @@ import (
 )
 
 var (
-	commit    string
-	version   string
-	buildTime string
+	commit            string
+	version           string
+	buildTime         string
+	healthCheckActive = true
 )
 
 func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
@@ -79,7 +82,15 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		Str("commit", commit).
 		Str("buildTime", buildTime).
 		Msg("server starting up")
-	r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit))
+
+	healthCheckHandler := func(w http.ResponseWriter, r *http.Request) {
+		if healthCheckActive {
+			handlers.HealthCheckHandler(version, buildTime, commit)(w, r)
+		} else {
+			w.WriteHeader(http.StatusGone)
+		}
+	}
+	r.Get("/health-check", healthCheckHandler)
 
 	// Add profiling flag to enable profiling routes.
 	if os.Getenv("PPROF_ENABLED") != "" {
@@ -116,8 +127,23 @@ func StartServer() {
 
 	port := ":8295"
 	srv := http.Server{Addr: port, Handler: chi.ServerBaseContext(serverCtx, r)}
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGTERM)
+	go func() {
+		<-sig
+		log.Info().Msg("SIGTERM received, disabling health check")
+
+		healthCheckActive = false // disable health check
+
+		time.Sleep(60 * time.Second)
+		srv.Shutdown(serverCtx)
+	}()
+
 	err := srv.ListenAndServe()
-	if err != nil {
+	if err == http.ErrServerClosed {
+		log.Info().Msg("HTTP server closed")
+	} else if err != nil {
 		sentry.CaptureException(err)
 		log.Panic().Err(err).Msg("HTTP server start failed!")
 	}
