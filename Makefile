@@ -16,7 +16,7 @@ test:
 	go test -v ./...
 
 lint:
-	golangci-lint run -E gofmt -E golint --exclude-use-default=false
+	docker run -t --rm -v "$$(pwd):/app" -w /app golangci/golangci-lint golangci-lint run -v
 
 clean:
 	rm -f sync-server
