@@ -2,7 +2,7 @@
 
 A sync server implemented in go to communicate with Brave sync clients using
 [components/sync/protocol/sync.proto](https://cs.chromium.org/chromium/src/components/sync/protocol/sync.proto).
-Current Chromium version for sync protocol buffer files used in this repo is Chromium 88.0.4324.96.
+Current Chromium version for sync protocol buffer files used in this repo is Chromium 109.0.5414.46.
 
 This server supports endpoints as bellow.
 - The `POST /v2/command/` endpoint handles Commit and GetUpdates requests from sync clients and return corresponding responses both in protobuf format. Detailed of requests and their corresponding responses are defined in `schema/protobuf/sync_pb/sync.proto`. Sync clients are responsible for generating valid access tokens and present them to the server in the Authorization header of requests.
