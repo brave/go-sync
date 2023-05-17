@@ -273,7 +273,7 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 
 			count++
 		} else { // Update
-			conflict, delete, err := db.UpdateSyncEntity(entityToCommit, oldVersion)
+			conflict, deleted, err := db.UpdateSyncEntity(entityToCommit, oldVersion)
 			if err != nil {
 				log.Error().Err(err).Msg("Update sync entity failed")
 				rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
@@ -286,7 +286,7 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 				entryRsp.ResponseType = &rspType
 				continue
 			}
-			if delete {
+			if deleted {
 				count--
 			}
 		}
@@ -322,7 +322,7 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 
 // handleClearServerDataRequest handles clearing user data from the datastore and cache
 // and fills the response
-func handleClearServerDataRequest(cache *cache.Cache, db datastore.Datastore, msg *sync_pb.ClearServerDataMessage, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
+func handleClearServerDataRequest(cache *cache.Cache, db datastore.Datastore, _ *sync_pb.ClearServerDataMessage, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
 	errCode := sync_pb.SyncEnums_SUCCESS
 	var err error
 
