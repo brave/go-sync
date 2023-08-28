@@ -16,7 +16,7 @@ import (
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 	"github.com/brave/go-sync/utils"
 	"github.com/rs/zerolog/log"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -500,6 +500,10 @@ func validatePBEntity(entity *sync_pb.SyncEntity) error {
 
 	if entity.Specifics == nil {
 		return fmt.Errorf("validate SyncEntity error: nil Specifics")
+	}
+
+	if entity.Specifics.SpecificsVariant == nil {
+		return fmt.Errorf("validate SyncEntity error: nil SpecificsVariant")
 	}
 
 	return nil
