@@ -616,6 +616,12 @@ func (suite *SyncEntityTestSuite) TestCreateDBSyncEntity() {
 	pbEntity.Specifics = nil
 	_, err = datastore.CreateDBSyncEntity(&pbEntity, guid, "client1")
 	suite.Assert().NotNil(err.Error(), "empty specifics should fail")
+
+	// Empty specifics variant should report marshal error.
+	specifics = &sync_pb.EntitySpecifics{}
+	pbEntity.Specifics = nil
+	_, err = datastore.CreateDBSyncEntity(&pbEntity, guid, "client1")
+	suite.Assert().NotNil(err.Error(), "empty specifics variant should fail")
 }
 
 func (suite *SyncEntityTestSuite) TestCreatePBSyncEntity() {
