@@ -147,7 +147,6 @@ func getClientToServerGUMsg(marker []*sync_pb.DataTypeProgressMarker,
 		FetchFolders:       aws.Bool(fetchFolders),
 		FromProgressMarker: marker,
 		GetUpdatesOrigin:   &origin,
-		BatchSize:          batchSize,
 	}
 	contents := sync_pb.ClientToServerMessage_GET_UPDATES
 	return &sync_pb.ClientToServerMessage{
