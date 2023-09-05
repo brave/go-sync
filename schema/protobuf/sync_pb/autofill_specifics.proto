@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -45,13 +45,25 @@ message AutofillProfileSpecifics {
   }
 
   optional string guid = 15;
-  optional string origin = 16;
+  // Starting from M115, Autofill ignores the origin and doesn't distinguish
+  // between verified (meaning `deprecated_origin == kSettingsOrigin`) and
+  // unverified profiles anymore. However, clients prior to this milestone only
+  // accept updates to verified profiles through Sync if the remote profile is
+  // verified as well. For this reason, M115 clients and above always set the
+  // origin to kSettingsOrigin.
+  // TODO(crbug.com/1441905): Remove in a few milestones.
+  optional string deprecated_origin = 16;
   optional int64 use_count = 22;
 
   // The time_t value of the last time this profile was used. This
   // value makes sense wrt base::Time::To/FromTimeT, which measures
   // from the Windows epoch.
   optional int64 use_date = 23;
+
+  // A user chosen profile label that is used to identify the profile.
+  // The value of the label can be freely chosen by the user. Two possible label
+  // values are '$HOME$' or '$WORK$' which have a special meaning.
+  optional string profile_label = 62;
 
   // Contact info name fields.
   repeated string name_honorific = 26;
@@ -68,6 +80,9 @@ message AutofillProfileSpecifics {
   repeated string name_last_conjunction = 28;
   repeated string name_last_second = 29;
   repeated string name_full = 21;
+  // This value contains the combination of the full name and the honorific
+  // prefix.
+  repeated string name_full_with_honorific = 60;
 
   // Validation status records for name fields.
   repeated VerificationStatus name_honorific_status = 30;
@@ -78,6 +93,7 @@ message AutofillProfileSpecifics {
   repeated VerificationStatus name_last_conjunction_status = 35;
   repeated VerificationStatus name_last_second_status = 36;
   repeated VerificationStatus name_full_status = 37;
+  repeated VerificationStatus name_full_with_honorific_status = 61;
 
   // Contact info additional fields.
   repeated string email_address = 5;
@@ -97,6 +113,9 @@ message AutofillProfileSpecifics {
   optional string address_home_state = 10;
   optional string address_home_zip = 11;
   optional string address_home_country = 12;
+  optional string address_home_landmark = 67;
+  optional string address_home_between_streets = 69;
+  optional string address_home_admin_level_2 = 71;
 
   // Additional address fields for i18n.
   optional string address_home_street_address = 17;
@@ -108,12 +127,17 @@ message AutofillProfileSpecifics {
   optional string address_home_dependent_thoroughfare_name = 40;
   optional string address_home_premise_name = 41;
   optional string address_home_subpremise_name = 42;
+  optional string address_home_apt_num = 56;
+  optional string address_home_floor = 57;
 
   // Validation status records for address fields.
   optional VerificationStatus address_home_city_status = 43;
   optional VerificationStatus address_home_state_status = 44;
   optional VerificationStatus address_home_zip_status = 45;
   optional VerificationStatus address_home_country_status = 46;
+  optional VerificationStatus address_home_landmark_status = 68;
+  optional VerificationStatus address_home_between_streets_status = 70;
+  optional VerificationStatus address_home_admin_level_2_status = 72;
   optional VerificationStatus address_home_street_address_status = 47;
   optional VerificationStatus address_home_sorting_code_status = 48;
   optional VerificationStatus address_home_dependent_locality_status = 49;
@@ -124,22 +148,28 @@ message AutofillProfileSpecifics {
       53;
   optional VerificationStatus address_home_premise_name_status = 54;
   optional VerificationStatus address_home_subpremise_name_status = 55;
+  optional VerificationStatus address_home_apt_num_status = 58;
+  optional VerificationStatus address_home_floor_status = 59;
 
   // Phone.
   repeated string phone_home_whole_number = 13;
 
-  // Validity bitfield.
-  // Each set of two bits represents the validity state of a specific part of
-  // the Autofill address. For more info please refer to autofill_profile.h.
-  optional int64 validity_state_bitfield = 24;
+  reserved 63;
+  reserved "disallow_settings_visible_updates";
 
-  // Denotes whether the validity_state_bitfield is updated according to the
-  // changes in the autofill profile values.
-  optional bool is_client_validity_states_updated = 25;
+  // Birthdate fields.
+  optional int32 birthdate_day = 64;
+  optional int32 birthdate_month = 65;
+  optional int32 birthdate_year = 66;  // 4 digits.
 
   // Deprecated.
-  optional string label = 1 [deprecated = true];
+  optional string deprecated_label = 1 [deprecated = true];
   optional string phone_fax_whole_number = 14 [deprecated = true];
+  // The following validity-related fields have only been used in combination
+  // with an experimental features that are disabled for all clients and have
+  // been removed in M100.
+  optional int64 validity_state_bitfield = 24 [deprecated = true];
+  optional bool is_client_validity_states_updated = 25 [deprecated = true];
 }
 
 message AutofillSpecifics {
@@ -155,9 +185,10 @@ message AutofillSpecifics {
   // name/value or credit_card) should be present.
   optional AutofillProfileSpecifics profile = 4;
 
-  // Obsolete credit card fields.
-  // optional bytes deprecated_encrypted_credit_card = 5;
-  // optional AutofillCreditCardSpecifics deprecated_credit_card = 6;
+  reserved 5;
+  reserved "encrypted_credit_card";
+  reserved 6;
+  reserved "credit_card";
 }
 
 // TODO(crbug.com/1020740): Deprecated, remove this once dependent change is
@@ -185,8 +216,15 @@ message CardIssuer {
     ISSUER_UNKNOWN = 0;
     // Card where the issuer is Google.
     GOOGLE = 1;
+    // Card where the issuer is external.
+    EXTERNAL_ISSUER = 2;
   }
   optional Issuer issuer = 1;
+
+  // Uniquely identifies the issuer of the card. This field is required when
+  // Issuer is EXTERNAL_ISSUER.
+  // Example: capitalone, amex.
+  optional string issuer_id = 2;
 }
 
 message WalletMaskedCreditCard {
@@ -209,6 +247,21 @@ message WalletMaskedCreditCard {
     SWITCH = 7;
     VISA = 8;
     UNIONPAY = 9;
+    ELO = 10;
+  }
+
+  enum VirtualCardEnrollmentState {
+    UNSPECIFIED = 0;
+    UNENROLLED = 1 [deprecated = true];
+    ENROLLED = 2;
+    UNENROLLED_AND_NOT_ELIGIBLE = 3;
+    UNENROLLED_AND_ELIGIBLE = 4;
+  }
+
+  enum VirtualCardEnrollmentType {
+    TYPE_UNSPECIFIED = 0;
+    ISSUER = 1;
+    NETWORK = 2;
   }
 
   // Server-generated unique ID string. This is opaque to the client.
@@ -252,6 +305,19 @@ message WalletMaskedCreditCard {
   // Server-generated unique ID. This is opaque to the client.
   // |id| is the legacy version of this.
   optional int64 instrument_id = 15;
+
+  // The state of virtual card enrollment.
+  optional VirtualCardEnrollmentState virtual_card_enrollment_state = 16;
+
+  // The URL for the client to fetch the card art image.
+  optional string card_art_url = 17;
+
+  // The product description for the card. Used to be shown in the UI.
+  optional string product_description = 18;
+
+  // The type of virtual card enrollment. TYPE_UNSPECIFIED indicates that the
+  // card is unenrolled.
+  optional VirtualCardEnrollmentType virtual_card_enrollment_type = 19;
 }
 
 // Different than an AutofillProfile because this represents some known address

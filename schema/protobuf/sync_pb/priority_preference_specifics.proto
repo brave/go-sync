@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -16,7 +16,7 @@ option optimize_for = LITE_RUNTIME;
 
 package sync_pb;
 
-import "preference_specifics.proto";
+import "components/sync/protocol/preference_specifics.proto";
 
 // Properties of a synced priority preference.
 message PriorityPreferenceSpecifics {
