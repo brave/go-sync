@@ -4,6 +4,8 @@
 
 syntax = "proto2";
 
+option go_package = "./sync_pb";
+
 option optimize_for = LITE_RUNTIME;
 
 option java_package = "sync_pb";
