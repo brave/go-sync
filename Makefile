@@ -7,7 +7,7 @@ BUILD_TIME := $(shell date +%s)
 all: lint test build
 
 protobuf:
-	protoc -I schema/protobuf/sync_pb/ schema/protobuf/sync_pb/*.proto --go_out=schema/protobuf/sync_pb/
+	protoc -I schema/protobuf/sync_pb/ schema/protobuf/sync_pb/*.proto --go_out=schema/protobuf/
 
 build:
 	go run main.go
