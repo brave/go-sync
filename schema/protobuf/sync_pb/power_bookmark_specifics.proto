@@ -11,7 +11,7 @@ option optimize_for = LITE_RUNTIME;
 
 package sync_pb;
 
-import "components/sync/protocol/note_entity.proto";
+import "note_entity.proto";
 
 // Data structure dedicated to each power type.
 // Should keep the field numbers of specifics in sync with the ones in PowerType

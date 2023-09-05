@@ -16,7 +16,7 @@ option optimize_for = LITE_RUNTIME;
 
 package sync_pb;
 
-import "components/sync/protocol/unique_position.proto";
+import "unique_position.proto";
 
 // Corresponds to a single meta info key/value pair for a bookmark node.
 message MetaInfo {

@@ -16,7 +16,7 @@ option optimize_for = LITE_RUNTIME;
 
 package sync_pb;
 
-import "components/sync/protocol/sync_enums.proto";
+import "sync_enums.proto";
 
 // A history sync entity - this roughly represents one navigation, including its
 // full redirect chain (but not referrals). Fields correspond to similarly named

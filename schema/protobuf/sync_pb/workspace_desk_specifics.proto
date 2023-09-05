@@ -16,7 +16,7 @@ option optimize_for = LITE_RUNTIME;
 
 package sync_pb;
 
-import "components/sync/protocol/sync_enums.proto";
+import "sync_enums.proto";
 
 // A workspace desk entry. This proto contains the fields synced to represent
 // a saved desk in user's workspace.

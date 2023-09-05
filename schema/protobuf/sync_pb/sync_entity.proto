@@ -11,8 +11,8 @@ option optimize_for = LITE_RUNTIME;
 
 package sync_pb;
 
-import "components/sync/protocol/entity_specifics.proto";
-import "components/sync/protocol/unique_position.proto";
+import "entity_specifics.proto";
+import "unique_position.proto";
 
 message SyncEntity {
   // This item's identifier.  In a commit of a new item, this will be a

@@ -16,7 +16,7 @@ option optimize_for = LITE_RUNTIME;
 
 package sync_pb;
 
-import "components/sync/protocol/preference_specifics.proto";
+import "preference_specifics.proto";
 
 // Properties of a synced priority preference.
 message PriorityPreferenceSpecifics {
