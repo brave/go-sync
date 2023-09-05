@@ -142,7 +142,7 @@ func getMarker(suite *CommandTestSuite, tokens []int64) []*sync_pb.DataTypeProgr
 
 func getClientToServerGUMsg(marker []*sync_pb.DataTypeProgressMarker,
 	origin sync_pb.SyncEnums_GetUpdatesOrigin, fetchFolders bool,
-	batchSize *int32) *sync_pb.ClientToServerMessage {
+	_ *int32) *sync_pb.ClientToServerMessage {
 	guMsg := &sync_pb.GetUpdatesMessage{
 		FetchFolders:       aws.Bool(fetchFolders),
 		FromProgressMarker: marker,
