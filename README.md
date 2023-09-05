@@ -23,8 +23,14 @@ Currently we use dynamoDB as the datastore, the schema could be found in `schema
 3. Run `make docker-up`
 4. For running unit tests, run `make docker-test`
 
+# Updating protocol definitions
+1. Copy the contents of `components/sync/protocol` from `chromium` to `schema/protobuf/sync_pb` in `go-sync`.
+2. Run `make repath-proto` to set correct import paths in `.proto` files.
+3. Run `make proto-go-module` to add the `go_module` option to `.proto` files.
+4. Run `make protobuf` to generate the Go code from `.proto` definitions.
+
 ## Prometheus Instrumentation
-The instrumented datastore and redis interfaces are generated, providing integration with Prometheus.  The following will re-generate the instrumented code:
+The instrumented datastore and redis interfaces are generated, providing integration with Prometheus.  The following will re-generate the instrumented code, required when updating protocl definitions:
 
 ```
 make instrumented
