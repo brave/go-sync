@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -9,6 +9,8 @@
 
 syntax = "proto2";
 
+option go_package = "./sync_pb";
+
 option java_multiple_files = true;
 option java_package = "org.chromium.components.sync.protocol";
 
@@ -18,7 +20,7 @@ package sync_pb;
 
 import "user_consent_types.proto";
 
-// Next id: 14
+// Next id: 17
 message UserConsentSpecifics {
   // ===========================================================================
   // Fields common to all Chrome User Consents.
@@ -62,6 +64,8 @@ message UserConsentSpecifics {
   }
   reserved "arc_metrics_and_usage_consent";
   reserved 11;
+  reserved "autofill_assistant_consent";
+  reserved 16;
 
   // ===========================================================================
   // Client only fields.

@@ -87,9 +87,6 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 	}
 
 	maxSize := maxGUBatchSize
-	if guMsg.BatchSize != nil && int(*guMsg.BatchSize) < maxGUBatchSize {
-		maxSize = int(*guMsg.BatchSize)
-	}
 
 	// Process from_progress_marker
 	guRsp.NewProgressMarker = make([]*sync_pb.DataTypeProgressMarker, len(guMsg.FromProgressMarker))
