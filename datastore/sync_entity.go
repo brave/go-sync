@@ -584,15 +584,15 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (bo
 	if err != nil {
 		return false, false, fmt.Errorf("error unmarshalling old sync entity: %w", err)
 	}
-	var delete bool
+	var deleted bool
 	if entity.Deleted == nil { // No updates on Deleted this time.
-		delete = false
+		deleted = false
 	} else if oldEntity.Deleted == nil { // Consider it as Deleted = false.
-		delete = *entity.Deleted
+		deleted = *entity.Deleted
 	} else {
-		delete = !*oldEntity.Deleted && *entity.Deleted
+		deleted = !*oldEntity.Deleted && *entity.Deleted
 	}
-	return false, delete, nil
+	return false, deleted, nil
 }
 
 // GetUpdatesForType returns sync entities of a data type where it's mtime is
@@ -782,7 +782,7 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 		Deleted:                deleted,
 		OriginatorCacheGUID:    originatorCacheGUID,
 		OriginatorClientItemID: originatorClientItemID,
-		ClientDefinedUniqueTag: entity.ClientDefinedUniqueTag,
+		ClientDefinedUniqueTag: entity.ClientTagHash,
 		Specifics:              specifics,
 		Folder:                 folder,
 		UniquePosition:         uniquePosition,
@@ -802,7 +802,7 @@ func CreatePBSyncEntity(entity *SyncEntity) (*sync_pb.SyncEntity, error) {
 		Name:                   entity.Name,
 		NonUniqueName:          entity.NonUniqueName,
 		ServerDefinedUniqueTag: entity.ServerDefinedUniqueTag,
-		ClientDefinedUniqueTag: entity.ClientDefinedUniqueTag,
+		ClientTagHash:          entity.ClientDefinedUniqueTag,
 		OriginatorCacheGuid:    entity.OriginatorCacheGUID,
 		OriginatorClientItemId: entity.OriginatorClientItemID,
 		Deleted:                entity.Deleted,

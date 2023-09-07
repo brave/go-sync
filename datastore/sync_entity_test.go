@@ -299,10 +299,10 @@ func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_Basic() {
 	updateEntity1.Deleted = aws.Bool(true)
 	updateEntity1.DataTypeMtime = aws.String("123#23456789")
 	updateEntity1.Specifics = []byte{3, 4}
-	conflict, delete, err := suite.dynamo.UpdateSyncEntity(&updateEntity1, *entity1.Version)
+	conflict, deleted, err := suite.dynamo.UpdateSyncEntity(&updateEntity1, *entity1.Version)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().False(conflict, "Successful update should not have conflict")
-	suite.Assert().True(delete, "Delete operation should return true")
+	suite.Assert().True(deleted, "Delete operation should return true")
 
 	// Update with optional fields.
 	updateEntity2 := updateEntity1
@@ -313,30 +313,30 @@ func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_Basic() {
 	updateEntity2.ParentID = aws.String("parentID")
 	updateEntity2.Name = aws.String("name")
 	updateEntity2.NonUniqueName = aws.String("non_unique_name")
-	conflict, delete, err = suite.dynamo.UpdateSyncEntity(&updateEntity2, *entity2.Version)
+	conflict, deleted, err = suite.dynamo.UpdateSyncEntity(&updateEntity2, *entity2.Version)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().False(conflict, "Successful update should not have conflict")
-	suite.Assert().False(delete, "Non-delete operation should return false")
+	suite.Assert().False(deleted, "Non-delete operation should return false")
 
 	// Update with nil Folder and Deleted
 	updateEntity3 := updateEntity1
 	updateEntity3.ID = "id3"
 	updateEntity3.Folder = nil
 	updateEntity3.Deleted = nil
-	conflict, delete, err = suite.dynamo.UpdateSyncEntity(&updateEntity3, *entity3.Version)
+	conflict, deleted, err = suite.dynamo.UpdateSyncEntity(&updateEntity3, *entity3.Version)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().False(conflict, "Successful update should not have conflict")
-	suite.Assert().False(delete, "Non-delete operation should return false")
+	suite.Assert().False(deleted, "Non-delete operation should return false")
 	// Reset these back to false because they will be the expected value in DB.
 	updateEntity3.Folder = aws.Bool(false)
 	updateEntity3.Deleted = aws.Bool(false)
 
 	// Update entity again with the wrong old version as (version mismatch)
 	// should return false.
-	conflict, delete, err = suite.dynamo.UpdateSyncEntity(&updateEntity2, 12345678)
+	conflict, deleted, err = suite.dynamo.UpdateSyncEntity(&updateEntity2, 12345678)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().True(conflict, "Update with the same version should return conflict")
-	suite.Assert().False(delete, "Conflict operation should return false for delete")
+	suite.Assert().False(deleted, "Conflict operation should return false for delete")
 
 	// Check sync entities are updated correctly in DB.
 	syncItems, err = datastoretest.ScanSyncEntities(suite.dynamo)
@@ -375,24 +375,24 @@ func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_ReuseClientTag() {
 	updateEntity1.Folder = aws.Bool(true)
 	updateEntity1.DataTypeMtime = aws.String("123#23456789")
 	updateEntity1.Specifics = []byte{3, 4}
-	conflict, delete, err := suite.dynamo.UpdateSyncEntity(&updateEntity1, *entity1.Version)
+	conflict, deleted, err := suite.dynamo.UpdateSyncEntity(&updateEntity1, *entity1.Version)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().False(conflict, "Successful update should not have conflict")
-	suite.Assert().False(delete, "Non-delete operation should return false")
+	suite.Assert().False(deleted, "Non-delete operation should return false")
 
 	// Soft-delete the item with wrong version should get conflict.
 	updateEntity1.Deleted = aws.Bool(true)
-	conflict, delete, err = suite.dynamo.UpdateSyncEntity(&updateEntity1, *entity1.Version)
+	conflict, deleted, err = suite.dynamo.UpdateSyncEntity(&updateEntity1, *entity1.Version)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().True(conflict, "Version mismatched update should have conflict")
-	suite.Assert().False(delete, "Failed delete operation should return false")
+	suite.Assert().False(deleted, "Failed delete operation should return false")
 
 	// Soft-delete the item with matched version.
 	updateEntity1.Version = aws.Int64(34567890)
-	conflict, delete, err = suite.dynamo.UpdateSyncEntity(&updateEntity1, 23456789)
+	conflict, deleted, err = suite.dynamo.UpdateSyncEntity(&updateEntity1, 23456789)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().False(conflict, "Successful update should not have conflict")
-	suite.Assert().True(delete, "Delete operation should return true")
+	suite.Assert().True(deleted, "Delete operation should return true")
 
 	// Check tag item is deleted.
 	tagItems, err = datastoretest.ScanTagItems(suite.dynamo)
@@ -564,7 +564,7 @@ func (suite *SyncEntityTestSuite) TestCreateDBSyncEntity() {
 		Name:                   aws.String("name"),
 		NonUniqueName:          aws.String("non_unique_name"),
 		ServerDefinedUniqueTag: aws.String("server_tag"),
-		ClientDefinedUniqueTag: aws.String("client_tag"),
+		ClientTagHash:          aws.String("client_tag"),
 		Deleted:                aws.Bool(false),
 		Folder:                 aws.Bool(false),
 		Specifics:              specifics,
@@ -577,7 +577,7 @@ func (suite *SyncEntityTestSuite) TestCreateDBSyncEntity() {
 		Name:                   pbEntity.Name,
 		NonUniqueName:          pbEntity.NonUniqueName,
 		ServerDefinedUniqueTag: pbEntity.ServerDefinedUniqueTag,
-		ClientDefinedUniqueTag: pbEntity.ClientDefinedUniqueTag,
+		ClientDefinedUniqueTag: pbEntity.ClientTagHash,
 		Deleted:                pbEntity.Deleted,
 		Folder:                 pbEntity.Folder,
 		Specifics:              specificsBytes,
@@ -695,7 +695,7 @@ func (suite *SyncEntityTestSuite) TestCreatePBSyncEntity() {
 		Name:                   dbEntity.Name,
 		NonUniqueName:          dbEntity.NonUniqueName,
 		ServerDefinedUniqueTag: dbEntity.ServerDefinedUniqueTag,
-		ClientDefinedUniqueTag: dbEntity.ClientDefinedUniqueTag,
+		ClientTagHash:          dbEntity.ClientDefinedUniqueTag,
 		OriginatorCacheGuid:    dbEntity.OriginatorCacheGUID,
 		OriginatorClientItemId: dbEntity.OriginatorClientItemID,
 		Deleted:                dbEntity.Deleted,

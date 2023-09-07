@@ -6,8 +6,15 @@ BUILD_TIME := $(shell date +%s)
 
 all: lint test build
 
+repath-proto:
+	find ./schema/protobuf/sync_pb | grep "\.proto$\" | xargs sed -i 's/import \"components\/sync\/protocol\//import \"/g'
+	find ./schema/protobuf/sync_pb | grep "\.proto$\" | xargs sed -i 's/import \"brave\/components\/sync\/protocol\//import \"/g'
+
+proto-go-module:
+	find ./schema/protobuf/sync_pb | grep "\.proto$\" | xargs sed -i 's/syntax = \"proto2\";/syntax = \"proto2\";\n\noption go_package = \"\.\/sync_pb\";/'
+
 protobuf:
-	protoc -I schema/protobuf/sync_pb/ schema/protobuf/sync_pb/*.proto --go_out=schema/protobuf/sync_pb/
+	protoc -I schema/protobuf/sync_pb/ schema/protobuf/sync_pb/*.proto --go_out=schema/protobuf/
 
 build:
 	go run main.go
@@ -16,7 +23,7 @@ test:
 	go test -v ./...
 
 lint:
-	golangci-lint run -E gofmt -E golint --exclude-use-default=false
+	docker run -t --rm -v "$$(pwd):/app" -w /app golangci/golangci-lint golangci-lint run -v
 
 clean:
 	rm -f sync-server

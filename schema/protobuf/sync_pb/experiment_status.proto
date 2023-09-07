@@ -1,12 +1,14 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file
+// found in the LICENSE file.
 
 // NOTE: This API is not used in Chromium anymore, but the server still needs to
 // support it for the benefit of older clients (Chrome versions up to and
 // including M80 rely on it, see crbug.com/1009361).
 
 syntax = "proto2";
+
+option go_package = "./sync_pb";
 
 option java_multiple_files = true;
 option java_package = "org.chromium.components.sync.protocol";

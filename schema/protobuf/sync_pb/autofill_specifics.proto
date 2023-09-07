@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -8,6 +8,8 @@
 // potentially proto_enum_conversions.{h, cc}.
 
 syntax = "proto2";
+
+option go_package = "./sync_pb";
 
 option java_multiple_files = true;
 option java_package = "org.chromium.components.sync.protocol";
@@ -45,7 +47,14 @@ message AutofillProfileSpecifics {
   }
 
   optional string guid = 15;
-  optional string origin = 16;
+  // Starting from M115, Autofill ignores the origin and doesn't distinguish
+  // between verified (meaning `deprecated_origin == kSettingsOrigin`) and
+  // unverified profiles anymore. However, clients prior to this milestone only
+  // accept updates to verified profiles through Sync if the remote profile is
+  // verified as well. For this reason, M115 clients and above always set the
+  // origin to kSettingsOrigin.
+  // TODO(crbug.com/1441905): Remove in a few milestones.
+  optional string deprecated_origin = 16;
   optional int64 use_count = 22;
 
   // The time_t value of the last time this profile was used. This
@@ -106,6 +115,9 @@ message AutofillProfileSpecifics {
   optional string address_home_state = 10;
   optional string address_home_zip = 11;
   optional string address_home_country = 12;
+  optional string address_home_landmark = 67;
+  optional string address_home_between_streets = 69;
+  optional string address_home_admin_level_2 = 71;
 
   // Additional address fields for i18n.
   optional string address_home_street_address = 17;
@@ -125,6 +137,9 @@ message AutofillProfileSpecifics {
   optional VerificationStatus address_home_state_status = 44;
   optional VerificationStatus address_home_zip_status = 45;
   optional VerificationStatus address_home_country_status = 46;
+  optional VerificationStatus address_home_landmark_status = 68;
+  optional VerificationStatus address_home_between_streets_status = 70;
+  optional VerificationStatus address_home_admin_level_2_status = 72;
   optional VerificationStatus address_home_street_address_status = 47;
   optional VerificationStatus address_home_sorting_code_status = 48;
   optional VerificationStatus address_home_dependent_locality_status = 49;
@@ -141,11 +156,8 @@ message AutofillProfileSpecifics {
   // Phone.
   repeated string phone_home_whole_number = 13;
 
-  // The state indicates if the profile qualifies to get merged with a
-  // profile observed in a form submission. If true, the profile can still be
-  // updated silently, but it should not be considered for merges that need to
-  // involve user interactions.
-  optional bool disallow_settings_visible_updates = 63;
+  reserved 63;
+  reserved "disallow_settings_visible_updates";
 
   // Birthdate fields.
   optional int32 birthdate_day = 64;
@@ -175,9 +187,10 @@ message AutofillSpecifics {
   // name/value or credit_card) should be present.
   optional AutofillProfileSpecifics profile = 4;
 
-  // Obsolete credit card fields.
-  // optional bytes deprecated_encrypted_credit_card = 5;
-  // optional AutofillCreditCardSpecifics deprecated_credit_card = 6;
+  reserved 5;
+  reserved "encrypted_credit_card";
+  reserved 6;
+  reserved "credit_card";
 }
 
 // TODO(crbug.com/1020740): Deprecated, remove this once dependent change is
@@ -205,8 +218,15 @@ message CardIssuer {
     ISSUER_UNKNOWN = 0;
     // Card where the issuer is Google.
     GOOGLE = 1;
+    // Card where the issuer is external.
+    EXTERNAL_ISSUER = 2;
   }
   optional Issuer issuer = 1;
+
+  // Uniquely identifies the issuer of the card. This field is required when
+  // Issuer is EXTERNAL_ISSUER.
+  // Example: capitalone, amex.
+  optional string issuer_id = 2;
 }
 
 message WalletMaskedCreditCard {
@@ -238,6 +258,12 @@ message WalletMaskedCreditCard {
     ENROLLED = 2;
     UNENROLLED_AND_NOT_ELIGIBLE = 3;
     UNENROLLED_AND_ELIGIBLE = 4;
+  }
+
+  enum VirtualCardEnrollmentType {
+    TYPE_UNSPECIFIED = 0;
+    ISSUER = 1;
+    NETWORK = 2;
   }
 
   // Server-generated unique ID string. This is opaque to the client.
@@ -285,11 +311,15 @@ message WalletMaskedCreditCard {
   // The state of virtual card enrollment.
   optional VirtualCardEnrollmentState virtual_card_enrollment_state = 16;
 
-  // The URL for the client to fetche the card art image.
+  // The URL for the client to fetch the card art image.
   optional string card_art_url = 17;
 
   // The product description for the card. Used to be shown in the UI.
   optional string product_description = 18;
+
+  // The type of virtual card enrollment. TYPE_UNSPECIFIED indicates that the
+  // card is unenrolled.
+  optional VirtualCardEnrollmentType virtual_card_enrollment_type = 19;
 }
 
 // Different than an AutofillProfile because this represents some known address
