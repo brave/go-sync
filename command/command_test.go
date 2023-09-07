@@ -142,12 +142,11 @@ func getMarker(suite *CommandTestSuite, tokens []int64) []*sync_pb.DataTypeProgr
 
 func getClientToServerGUMsg(marker []*sync_pb.DataTypeProgressMarker,
 	origin sync_pb.SyncEnums_GetUpdatesOrigin, fetchFolders bool,
-	batchSize *int32) *sync_pb.ClientToServerMessage {
+	_ *int32) *sync_pb.ClientToServerMessage {
 	guMsg := &sync_pb.GetUpdatesMessage{
 		FetchFolders:       aws.Bool(fetchFolders),
 		FromProgressMarker: marker,
 		GetUpdatesOrigin:   &origin,
-		BatchSize:          batchSize,
 	}
 	contents := sync_pb.ClientToServerMessage_GET_UPDATES
 	return &sync_pb.ClientToServerMessage{
@@ -400,49 +399,6 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_GUBatchSize() {
 		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
 		suite.Assert().Equal(*entryRsp.Mtime, *entryRsp.Version)
 	}
-
-	// Test maxGUBatchSize from client side should be respected when smaller than
-	// the server one.
-	clientBatchSize := 3
-	marker := getMarker(suite, []int64{0, 0})
-	msg = getClientToServerGUMsg(
-		marker, sync_pb.SyncEnums_GU_TRIGGER, false, aws.Int32(int32(clientBatchSize)))
-	rsp = &sync_pb.ClientToServerResponse{}
-	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
-		"HandleClientToServerMessage should succeed")
-	assertCommonResponse(suite, rsp, false)
-	suite.Assert().Equal(clientBatchSize, len(rsp.GetUpdates.Entries))
-	suite.Assert().Equal(
-		int64(len(entries)-clientBatchSize), *rsp.GetUpdates.ChangesRemaining)
-	// nigori1, nigori2, bookmark1
-	expectedName := []*string{entries[1].Name, entries[3].Name, entries[0].Name}
-	for i, entry := range rsp.GetUpdates.Entries {
-		suite.Assert().Equal(expectedName[i], entry.Name)
-	}
-	expectedNewMarker := getMarker(suite,
-		[]int64{*rsp.GetUpdates.Entries[1].Mtime, *rsp.GetUpdates.Entries[2].Mtime})
-	suite.Assert().Equal(expectedNewMarker, rsp.GetUpdates.NewProgressMarker)
-
-	// Test maxGUBatchSize from server side should be respected when smaller than
-	// the client one.
-	defaultServerGUBatchSize := *command.MaxGUBatchSize
-	*command.MaxGUBatchSize = 2
-	rsp = &sync_pb.ClientToServerResponse{}
-	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
-		"HandleClientToServerMessage should succeed")
-	assertCommonResponse(suite, rsp, false)
-	suite.Assert().Equal(int(*command.MaxGUBatchSize), len(rsp.GetUpdates.Entries))
-	suite.Assert().Equal(int64(1), *rsp.GetUpdates.ChangesRemaining)
-	// nigori1, nigori2
-	expectedName = []*string{entries[1].Name, entries[3].Name}
-	for i, entry := range rsp.GetUpdates.Entries {
-		suite.Assert().Equal(expectedName[i], entry.Name)
-	}
-	expectedNewMarker = getMarker(suite, []int64{*rsp.GetUpdates.Entries[1].Mtime, 0})
-	suite.Assert().Equal(expectedNewMarker, rsp.GetUpdates.NewProgressMarker)
-	*command.MaxGUBatchSize = defaultServerGUBatchSize
 }
 
 func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
@@ -828,7 +784,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ch
 	// Send a GU with batch size set to 1, changesRemaining in rsp should be 1
 	// and cache should not be updated.
 	marker := getMarker(suite, []int64{0, 0})
-	clientBatch := int32(1)
+	clientBatch := int32(2)
 	msg = getClientToServerGUMsg(
 		marker, sync_pb.SyncEnums_PERIODIC, true, &clientBatch)
 	rsp = &sync_pb.ClientToServerResponse{}
@@ -836,8 +792,8 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ch
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
-	suite.Require().Equal(1, len(rsp.GetUpdates.Entries))
-	suite.Require().Equal(int64(1), *rsp.GetUpdates.ChangesRemaining)
+	suite.Require().Equal(2, len(rsp.GetUpdates.Entries))
+	suite.Require().Equal(int64(0), *rsp.GetUpdates.ChangesRemaining)
 	mtime := *rsp.GetUpdates.Entries[0].Mtime
 	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
 		latestBookmarkMtime,

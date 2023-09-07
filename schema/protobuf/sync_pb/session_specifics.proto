@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -8,6 +8,8 @@
 // potentially proto_enum_conversions.{h, cc}.
 
 syntax = "proto2";
+
+option go_package = "./sync_pb";
 
 option java_multiple_files = true;
 option java_package = "org.chromium.components.sync.protocol";
@@ -36,7 +38,11 @@ message SessionHeader {
   // A non-unique but human-readable name to describe this client.
   optional string client_name = 3;
   // The type of device.
-  optional SyncEnums.DeviceType device_type = 4;
+  // Mandatory until M115. Replaced by device_form_factor afterwards, but still
+  // populated for backward compatibility.
+  optional SyncEnums.DeviceType device_type = 4 [deprecated = true];
+  // The form factor of device.
+  optional SyncEnums.DeviceFormFactor device_form_factor = 5;
 }
 
 message SessionWindow {
@@ -45,13 +51,7 @@ message SessionWindow {
   // Index of the selected tab in tabs; -1 if no tab is selected.
   optional int32 selected_tab_index = 2 [default = -1];
   // Type of the window.
-  enum BrowserType {
-    TYPE_TABBED = 1;      // A normal tabbed window.
-    TYPE_POPUP = 2;       // A popup window.
-    TYPE_CUSTOM_TAB = 3;  // A custom tab within an app. Not restored
-                          // automatically on sync startup.
-  }
-  optional BrowserType browser_type = 3 [default = TYPE_TABBED];
+  optional SyncEnums.BrowserType browser_type = 3 [default = TYPE_TABBED];
   // The tabs that compose a window (correspond to tab id's).
   repeated int32 tab = 4;
 }
@@ -85,13 +85,10 @@ message SessionTab {
   // Ids of the currently assigned variations which should be sent to sync.
   repeated uint64 variation_id = 12 [deprecated = true];
 
-  optional SessionWindow.BrowserType browser_type = 13;
+  optional SyncEnums.BrowserType browser_type = 13;
 }
 
 message TabNavigation {
-  // The index in the NavigationController. If this is -1, it means this
-  // TabNavigation is bogus.
-  // optional int32 index = 1 [default = -1];  // obsolete.
   // The virtual URL, when nonempty, will override the actual URL of the page
   // when we display it to the user.
   optional string virtual_url = 2;
@@ -99,10 +96,6 @@ message TabNavigation {
   optional string referrer = 3;
   // The title of the page.
   optional string title = 4;
-  // Content state is an opaque blob created by WebKit that represents the
-  // state of the page. This includes form entries and scroll position for each
-  // frame.
-  // optional string state = 5;  // obsolete.
   // The core transition type.
   optional SyncEnums.PageTransition page_transition = 6 [default = LINK];
   // If this transition was triggered by a redirect, the redirect type.
@@ -118,10 +111,11 @@ message TabNavigation {
   optional bool navigation_from_address_bar = 11;
   // User is navigating to the home page.
   optional bool navigation_home_page = 12;
-  // The beginning of a navigation chain.
-  optional bool navigation_chain_start = 13;
-  // The last transition in a redirect chain.
-  optional bool navigation_chain_end = 14;
+  // The start/end of a redirect chain. Deprecated because they were always
+  // set to false in practice, and don't make sense in the first place - this
+  // message corresponds to a complete chain.
+  optional bool navigation_chain_start = 13 [deprecated = true];
+  optional bool navigation_chain_end = 14 [deprecated = true];
   // The id for this navigation, which is globally unique with high
   // probability.
   optional int64 global_id = 15;
@@ -154,13 +148,8 @@ message TabNavigation {
   // third_party/WebKit/public/platform/WebReferrerPolicy.h.
   optional int32 correct_referrer_policy = 25 [default = 1];
 
-  enum PasswordState {
-    PASSWORD_STATE_UNKNOWN = 0;
-    NO_PASSWORD_FIELD = 1;
-    HAS_PASSWORD_FIELD = 2;
-  }
   // Whether the Password Manager saw a password field on the page.
-  optional PasswordState password_state = 26;
+  optional SyncEnums.PasswordState password_state = 26;
 
   // The id for the task associated with this navigation, which is globally
   // unique with high probability.
@@ -183,6 +172,11 @@ message TabNavigation {
   // The page language as determined by its textual content. An ISO 639 language
   // code (two letters, except for Chinese where a localization is necessary).
   optional string page_language = 30;
+
+  reserved 1;
+  reserved "index";
+  reserved 5;
+  reserved "state";
 }
 
 // Navigation information for a single redirection within a single navigation.
