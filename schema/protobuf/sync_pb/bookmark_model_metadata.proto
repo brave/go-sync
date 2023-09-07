@@ -1,8 +1,10 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 syntax = "proto2";
+
+option go_package = "./sync_pb";
 
 option java_multiple_files = true;
 option java_package = "org.chromium.components.sync.protocol";
@@ -71,4 +73,9 @@ message BookmarkModelMetadata {
   // time the last update was ignored. To distinguish between these two, the
   // field above can be used.
   optional int64 max_version_among_ignored_updates_due_to_missing_parent = 8;
+
+  // Indicates whether the count of remote updates during the latest initial
+  // merge exceeded the bookmark limit. This field is mutually exclusive to all
+  // the other fields and is managed completely by the processor.
+  optional bool last_initial_merge_remote_updates_exceeded_limit = 9;
 }

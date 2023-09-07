@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,8 @@
 // potentially proto_enum_conversions.{h, cc}.
 
 syntax = "proto2";
+
+option go_package = "./sync_pb";
 
 option java_multiple_files = true;
 option java_package = "org.chromium.components.sync.protocol";
@@ -18,6 +20,26 @@ import "data_type_progress_marker.proto";
 
 // Sync proto to store data type global metadata in model type storage.
 message ModelTypeState {
+  enum InitialSyncState {
+    // Default value, typically used when there is no metadata (e.g. because
+    // Sync is disabled).
+    INITIAL_SYNC_STATE_UNSPECIFIED = 0;
+
+    // Note: Value "1" is reserved, in case we ever want to introduce an
+    // INITIAL_SYNC_STARTED state.
+
+    // Indicates that syncing has started and some, but not all updates from the
+    // initial download/sync have been delivered. This is only used for data
+    // types in ApplyUpdatesImmediatelyTypes().
+    INITIAL_SYNC_PARTIALLY_DONE = 2;
+
+    // Indicates that the initial sync (download + merge) has been completed.
+    INITIAL_SYNC_DONE = 3;
+
+    // Indicates that no initial sync is necessary, used for CommitOnlyTypes().
+    INITIAL_SYNC_UNNECESSARY = 4;
+  }
+
   // The latest progress markers received from the server.
   optional DataTypeProgressMarker progress_marker = 1;
 
@@ -32,10 +54,15 @@ message ModelTypeState {
   // data to the server using the new encryption key.
   optional string encryption_key_name = 3;
 
-  // This flag is set to true when the first download cycle is complete.  The
-  // ModelTypeProcessor should not attempt to commit any items until this
-  // flag is set.
-  optional bool initial_sync_done = 4;
+  // Deprecated in M113 and replaced by `initial_sync_state`.
+  // As of M115, this is not populated anymore, but existing values are still
+  // migrated to `initial_sync_state`.
+  // TODO(crbug.com/1423338): Fully remove this field after a migration period.
+  optional bool initial_sync_done_deprecated = 4 [deprecated = true];
+
+  // Indicates the status of "initial sync", i.e. whether the first download
+  // cycle and initial merge are complete.
+  optional InitialSyncState initial_sync_state = 9;
 
   // A GUID that identifies the committing sync client. It's persisted within
   // the sync metadata and should be used to check the integrity of the
@@ -46,4 +73,27 @@ message ModelTypeState {
 
   // Syncing account ID, representing the user.
   optional string authenticated_account_id = 6;
+
+  message Invalidation {
+    // Opaque field, which has to be provided as part of resulting GetUpdates
+    // back to the server.
+    optional bytes hint = 1;
+
+    // Version of invalidation, used to order incoming invalidations.
+    optional int64 version = 2;
+  }
+
+  // The latest unprocessed invalidations received from the server.
+  // All incoming invalidations are stored in this message and persist until
+  // they are used in GetUpdate() message.
+  repeated Invalidation invalidations = 7;
+
+  // This is relevant for the passwords datatype. This indicates that the
+  // initial sync flow (downling all passwords from the server) has been run at
+  // least once after the password notes features is enabled. It is used to
+  // enforce redownload of passwords upon upgrading the browser to a version
+  // that supports password notes if necessary. It is false by default and set
+  // to true upon downloading passwords to make sure this download is executed
+  // only once.
+  optional bool notes_enabled_before_initial_sync_for_passwords = 8;
 }
