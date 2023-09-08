@@ -7,7 +7,7 @@ require (
 	github.com/brave-intl/bat-go v0.5.1
 	github.com/getsentry/sentry-go v0.24.0
 	github.com/go-chi/chi v4.1.2+incompatible
-	github.com/go-redis/redis/v8 v8.10.0
+	github.com/go-redis/redis/v8 v8.11.5
 	github.com/prometheus/client_golang v1.11.1
 	github.com/rs/zerolog v1.30.0
 	github.com/satori/go.uuid v1.2.0
@@ -18,7 +18,7 @@ require (
 require (
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/cespare/xxhash/v2 v2.1.1 // indirect
+	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/golang/protobuf v1.5.0 // indirect
