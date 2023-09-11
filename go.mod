@@ -7,7 +7,6 @@ require (
 	github.com/brave-intl/bat-go v0.5.1
 	github.com/getsentry/sentry-go v0.24.0
 	github.com/go-chi/chi v4.1.2+incompatible
-	github.com/go-chi/chi/v5 v5.0.10
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/prometheus/client_golang v1.16.0
 	github.com/rs/zerolog v1.30.0
@@ -37,9 +36,6 @@ require (
 	github.com/shengdoushi/base58 v1.0.0 // indirect
 	github.com/stretchr/objx v0.5.0 // indirect
 	github.com/throttled/throttled v2.2.4+incompatible // indirect
-	go.opentelemetry.io/otel v0.20.0 // indirect
-	go.opentelemetry.io/otel/metric v0.20.0 // indirect
-	go.opentelemetry.io/otel/trace v0.20.0 // indirect
 	golang.org/x/crypto v0.7.0 // indirect
 	golang.org/x/sys v0.8.0 // indirect
 	golang.org/x/text v0.8.0 // indirect
