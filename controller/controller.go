@@ -14,7 +14,7 @@ import (
 	"github.com/brave/go-sync/datastore"
 	syncMiddleware "github.com/brave/go-sync/middleware"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/protobuf/proto"
 )

@@ -8,16 +8,18 @@ import (
 	"testing"
 
 	"github.com/brave/go-sync/server"
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 )
 
-var handler http.Handler
+var (
+	mux       *chi.Mux
+	serverCtx context.Context
+)
 
 func init() {
 	testCtx, logger := server.SetupLogger(context.Background())
-	serverCtx, mux := server.SetupRouter(testCtx, logger)
-	handler = chi.ServerBaseContext(serverCtx, mux)
+	serverCtx, mux = server.SetupRouter(testCtx, logger)
 }
 
 func TestPing(t *testing.T) {
@@ -25,7 +27,7 @@ func TestPing(t *testing.T) {
 	assert.Nil(t, err)
 
 	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	mux.ServeHTTP(rr, req.WithContext(serverCtx))
 	assert.Equal(t, http.StatusOK, rr.Code)
 
 	expected := "."
@@ -39,7 +41,7 @@ func TestCommand(t *testing.T) {
 	assert.Nil(t, err)
 
 	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	mux.ServeHTTP(rr, req.WithContext(serverCtx))
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 	assert.NotEmpty(t, rr.Result().Header.Get("Sane-Time-Millis"))
 }
