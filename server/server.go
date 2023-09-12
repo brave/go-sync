@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	_ "net/http/pprof" // pprof magic
 	"os"
@@ -20,8 +21,8 @@ import (
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/middleware"
 	sentry "github.com/getsentry/sentry-go"
-	"github.com/go-chi/chi"
-	chiware "github.com/go-chi/chi/middleware"
+	"github.com/go-chi/chi/v5"
+	chiware "github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
@@ -33,6 +34,8 @@ var (
 	buildTime         string
 	healthCheckActive = true
 )
+
+type baseCtxFunc = func(net.Listener) context.Context
 
 func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, os.Getenv("ENV"))
@@ -104,6 +107,12 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	return ctx, r
 }
 
+func setupBaseCtx(ctx context.Context) baseCtxFunc {
+	return func(_ net.Listener) context.Context {
+		return ctx
+	}
+}
+
 // StartServer starts the translate proxy server on port 8195
 func StartServer() {
 	serverCtx, logger := setupLogger(context.Background())
@@ -126,7 +135,11 @@ func StartServer() {
 	serverCtx, r := setupRouter(serverCtx, logger)
 
 	port := ":8295"
-	srv := http.Server{Addr: port, Handler: chi.ServerBaseContext(serverCtx, r)}
+	srv := http.Server{
+		Addr:        port,
+		Handler:     r,
+		BaseContext: setupBaseCtx(serverCtx),
+	}
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGTERM)
