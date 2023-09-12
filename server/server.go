@@ -11,10 +11,10 @@ import (
 	"syscall"
 	"time"
 
-	batware "github.com/brave-intl/bat-go/middleware"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/handlers"
-	"github.com/brave-intl/bat-go/utils/logging"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/handlers"
+	"github.com/brave-intl/bat-go/libs/logging"
+	batware "github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave/go-sync/cache"
 	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/controller"
@@ -88,7 +88,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	healthCheckHandler := func(w http.ResponseWriter, r *http.Request) {
 		if healthCheckActive {
-			handlers.HealthCheckHandler(version, buildTime, commit)(w, r)
+			handlers.HealthCheckHandler(version, buildTime, commit, nil, nil)(w, r)
 		} else {
 			w.WriteHeader(http.StatusGone)
 		}
