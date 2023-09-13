@@ -1,4 +1,4 @@
-FROM bitnami/golang:1.18 as builder
+FROM bitnami/golang:1.20 as builder
 
 ARG VERSION
 ARG BUILD_TIME
@@ -13,7 +13,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags "-X github.com/brave/go-sync/server.version=${VERSION} -X github.com/brave/go-sync/server.buildTime=${BUILD_TIME} -X github.com/brave/go-sync/server.commit=${COMMIT}" \
     -o main .
 
-FROM alpine:3.6 as artifact
+FROM alpine:3.18 as artifact
 RUN apk add --update ca-certificates # Certificates for SSL
 COPY --from=builder /src/main main
 

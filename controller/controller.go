@@ -6,15 +6,15 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/brave-intl/bat-go/middleware"
-	"github.com/brave-intl/bat-go/utils/closers"
+	"github.com/brave-intl/bat-go/libs/closers"
+	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave/go-sync/cache"
 	"github.com/brave/go-sync/command"
 	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/datastore"
 	syncMiddleware "github.com/brave/go-sync/middleware"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/protobuf/proto"
 )
@@ -51,7 +51,7 @@ func Command(cache *cache.Cache, db datastore.Datastore) http.HandlerFunc {
 				http.Error(w, "Create gzip reader failed", http.StatusInternalServerError)
 				return
 			}
-			defer closers.Panic(gr)
+			defer closers.Panic(ctx, gr)
 			reader = gr
 		}
 
