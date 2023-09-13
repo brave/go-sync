@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/aws/aws-sdk-go v1.45.8
-	github.com/brave-intl/bat-go/libs v0.0.0-20230911092351-1d5d359ef563
+	github.com/brave-intl/bat-go/libs v0.0.0-20230913115141-8b4fe85da72c
 	github.com/getsentry/sentry-go v0.24.1
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/prometheus/client_golang v1.16.0
