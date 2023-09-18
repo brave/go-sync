@@ -3,7 +3,7 @@ module github.com/brave/go-sync
 go 1.18
 
 require (
-	github.com/aws/aws-sdk-go v1.45.8
+	github.com/aws/aws-sdk-go v1.45.11
 	github.com/brave-intl/bat-go/libs v0.0.0-20230913115141-8b4fe85da72c
 	github.com/getsentry/sentry-go v0.24.1
 	github.com/go-chi/chi/v5 v5.0.10
