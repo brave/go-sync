@@ -16,6 +16,7 @@ COPY schema/dynamodb/ .
 RUN mkdir -p ${DB_LOCATION} && \
       java -jar DynamoDBLocal.jar -sharedDb -dbPath ${DB_LOCATION} & \
       DYNAMO_PID=$! && \
+      sleep 60 && \
       aws dynamodb create-table --cli-input-json file://table.json \
       --endpoint-url ${AWS_ENDPOINT} --region ${AWS_REGION} && \
       kill $DYNAMO_PID
