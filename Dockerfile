@@ -1,4 +1,4 @@
-FROM bitnami/golang:1.20 as builder
+FROM bitnami/golang:1.21 as builder
 
 ARG VERSION
 ARG BUILD_TIME
