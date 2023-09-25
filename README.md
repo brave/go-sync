@@ -52,7 +52,7 @@ Changes to `datastore/datastore.go` or `cache/cache.go` should be followed with 
     docker tag go-sync_web:latest brave-sync:latest
     docker tag go-sync_dynamo-local:latest brave-dynamo:latest
     ```
-2. Copy the `docker-compose-self-host.yml` to whevever you wish to host your project as a `docker-compose.yml` file.
+2. Copy the `docker-compose-self-host.yml` to wherever you wish to host your project as a `docker-compose.yml` file.
 3. On your server, get a copy of the initial Brave Sync Dynamo DB out of the container:
     ```
     docker run --rm -t --name get-db -d brave-dynamo:latest
