@@ -493,11 +493,9 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (bo
 		return false, false, fmt.Errorf("error marshalling key to update sync entity: %w", err)
 	}
 
-	// condition to ensure to be update only and the version is matched.
-	// cond := expression.And(
-	// 	expression.AttributeExists(expression.Name(pk)),
-	// 	expression.Name("Version").Equal(expression.Value(oldVersion)))
+	// condition to ensure the request is update only...
 	cond := expression.AttributeExists(expression.Name(pk))
+	// ...and the version matches, if applicable
 	if *entity.DataType != historyTypeID {
 		cond = expression.And(cond, expression.Name("Version").Equal(expression.Value(oldVersion)))
 	}
