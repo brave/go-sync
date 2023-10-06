@@ -21,13 +21,14 @@ import (
 )
 
 const (
-	maxBatchGetItemSize       = 100 // Limited by AWS.
-	maxTransactDeleteItemSize = 10  // Limited by AWS.
-	clientTagItemPrefix       = "Client#"
-	serverTagItemPrefix       = "Server#"
-	conditionalCheckFailed    = "ConditionalCheckFailed"
-	disabledChainID           = "disabled_chain"
-	reasonDeleted             = "deleted"
+	maxBatchGetItemSize           = 100 // Limited by AWS.
+	maxTransactDeleteItemSize     = 10  // Limited by AWS.
+	clientTagItemPrefix           = "Client#"
+	serverTagItemPrefix           = "Server#"
+	conditionalCheckFailed        = "ConditionalCheckFailed"
+	disabledChainID               = "disabled_chain"
+	reasonDeleted                 = "deleted"
+	historyTypeID             int = 963985
 )
 
 // SyncEntity is used to marshal and unmarshal sync items in dynamoDB.
@@ -159,7 +160,7 @@ func (dynamo *Dynamo) InsertSyncEntity(entity *SyncEntity) (bool, error) {
 		return false, fmt.Errorf("error building expression to insert sync entity: %w", err)
 	}
 
-	if entity.ClientDefinedUniqueTag != nil {
+	if entity.ClientDefinedUniqueTag != nil && *entity.DataType != historyTypeID {
 		items := []*dynamodb.TransactWriteItem{}
 		// Additional item for ensuring tag's uniqueness for a specific client.
 		item := NewServerClientUniqueTagItem(entity.ClientID, *entity.ClientDefinedUniqueTag, false)
@@ -248,6 +249,28 @@ func (dynamo *Dynamo) HasServerDefinedUniqueTag(clientID string, tag string) (bo
 	out, err := dynamo.GetItem(input)
 	if err != nil {
 		return false, fmt.Errorf("error calling GetItem to check if server tag existed: %w", err)
+	}
+
+	return out.Item != nil, nil
+}
+
+func (dynamo *Dynamo) HasItem(clientID string, ID string) (bool, error) {
+	primaryKey := PrimaryKey{ClientID: clientID, ID: ID}
+	key, err := dynamodbattribute.MarshalMap(primaryKey)
+
+	if err != nil {
+		return false, fmt.Errorf("error marshalling key to check if client tag existed: %w", err)
+	}
+
+	input := &dynamodb.GetItemInput{
+		Key:                  key,
+		ProjectionExpression: aws.String(projPk),
+		TableName:            aws.String(Table),
+	}
+
+	out, err := dynamo.GetItem(input)
+	if err != nil {
+		return false, fmt.Errorf("error calling GetItem to check if client tag existed: %w", err)
 	}
 
 	return out.Item != nil, nil
@@ -471,9 +494,13 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (bo
 	}
 
 	// condition to ensure to be update only and the version is matched.
-	cond := expression.And(
-		expression.AttributeExists(expression.Name(pk)),
-		expression.Name("Version").Equal(expression.Value(oldVersion)))
+	// cond := expression.And(
+	// 	expression.AttributeExists(expression.Name(pk)),
+	// 	expression.Name("Version").Equal(expression.Value(oldVersion)))
+	cond := expression.AttributeExists(expression.Name(pk))
+	if *entity.DataType != historyTypeID {
+		cond = expression.And(cond, expression.Name("Version").Equal(expression.Value(oldVersion)))
+	}
 
 	update := expression.Set(expression.Name("Version"), expression.Value(entity.Version))
 	update = update.Set(expression.Name("Mtime"), expression.Value(entity.Mtime))
@@ -507,7 +534,7 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (bo
 
 	// Soft-delete a sync item with a client tag, use a transaction to delete its
 	// tag item too.
-	if entity.Deleted != nil && entity.ClientDefinedUniqueTag != nil && *entity.Deleted {
+	if entity.Deleted != nil && entity.ClientDefinedUniqueTag != nil && *entity.Deleted && *entity.DataType != historyTypeID {
 		pk := PrimaryKey{
 			ClientID: entity.ClientID, ID: clientTagItemPrefix + *entity.ClientDefinedUniqueTag}
 		tagItemKey, err := dynamodbattribute.MarshalMap(pk)
@@ -743,6 +770,10 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 		}
 		originatorCacheGUID = cacheGUID
 		originatorClientItemID = entity.IdString
+	}
+
+	if dataType == historyTypeID {
+		id = *entity.ClientTagHash
 	}
 
 	now := aws.Int64(utils.UnixMilli(time.Now()))

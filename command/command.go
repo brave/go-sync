@@ -25,6 +25,7 @@ const (
 	setSyncPollInterval        int32  = 30
 	nigoriTypeID               int32  = 47745
 	deviceInfoTypeID           int    = 154522
+	historyTypeID              int    = 963985
 	maxActiveDevices           int    = 50
 )
 
@@ -241,8 +242,25 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 		}
 
 		oldVersion := *entityToCommit.Version
+		isUpdateOp := oldVersion != 0
 		*entityToCommit.Version = *entityToCommit.Mtime
-		if oldVersion == 0 { // Create
+		if *entityToCommit.DataType == historyTypeID {
+			// Check if item exists using client_unique_tag
+			isUpdateOp, err = db.HasItem(clientID, *entityToCommit.ClientDefinedUniqueTag)
+			log.Info().
+				Str("Tag", *entityToCommit.ClientDefinedUniqueTag).
+				Bool("IsUpdate", isUpdateOp).
+				Msg("History Info")
+			if err != nil {
+				log.Error().Err(err).Msg("Insert sync entity failed")
+				rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
+				entryRsp.ResponseType = &rspType
+				entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Insert sync entity failed: %v", err.Error()))
+				continue
+			}
+		}
+
+		if !isUpdateOp { // Create
 			if itemCount+count >= maxClientObjectQuota {
 				rspType := sync_pb.CommitResponse_OVER_QUOTA
 				entryRsp.ResponseType = &rspType
