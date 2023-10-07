@@ -21,14 +21,18 @@ import (
 )
 
 const (
-	maxBatchGetItemSize           = 100 // Limited by AWS.
-	maxTransactDeleteItemSize     = 10  // Limited by AWS.
-	clientTagItemPrefix           = "Client#"
-	serverTagItemPrefix           = "Server#"
-	conditionalCheckFailed        = "ConditionalCheckFailed"
-	disabledChainID               = "disabled_chain"
-	reasonDeleted                 = "deleted"
-	historyTypeID             int = 963985
+	maxBatchGetItemSize              = 100 // Limited by AWS.
+	maxTransactDeleteItemSize        = 10  // Limited by AWS.
+	clientTagItemPrefix              = "Client#"
+	serverTagItemPrefix              = "Server#"
+	conditionalCheckFailed           = "ConditionalCheckFailed"
+	disabledChainID                  = "disabled_chain"
+	reasonDeleted                    = "deleted"
+	historyTypeID                int = 963985
+	historyDeleteDirectiveTypeID int = 150251
+	// Expiration time for history and history delete directive
+	// entities in seconds
+	HistoryExpirationIntervalSecs = 60 * 60 * 24 * 90 // 90 days
 )
 
 // SyncEntity is used to marshal and unmarshal sync items in dynamoDB.
@@ -51,6 +55,7 @@ type SyncEntity struct {
 	ClientDefinedUniqueTag *string `dynamodbav:",omitempty"`
 	UniquePosition         []byte  `dynamodbav:",omitempty"`
 	DataTypeMtime          *string
+	ExpirationTime         *int64
 }
 
 // SyncEntityByClientIDID implements sort.Interface for []SyncEntity based on
@@ -160,6 +165,8 @@ func (dynamo *Dynamo) InsertSyncEntity(entity *SyncEntity) (bool, error) {
 		return false, fmt.Errorf("error building expression to insert sync entity: %w", err)
 	}
 
+	// Write tag item for all data types, except for
+	// the history type, which does not use tag items.
 	if entity.ClientDefinedUniqueTag != nil && *entity.DataType != historyTypeID {
 		items := []*dynamodb.TransactWriteItem{}
 		// Additional item for ensuring tag's uniqueness for a specific client.
@@ -259,7 +266,7 @@ func (dynamo *Dynamo) HasItem(clientID string, ID string) (bool, error) {
 	key, err := dynamodbattribute.MarshalMap(primaryKey)
 
 	if err != nil {
-		return false, fmt.Errorf("error marshalling key to check if client tag existed: %w", err)
+		return false, fmt.Errorf("error marshalling key to check if item existed: %w", err)
 	}
 
 	input := &dynamodb.GetItemInput{
@@ -270,7 +277,7 @@ func (dynamo *Dynamo) HasItem(clientID string, ID string) (bool, error) {
 
 	out, err := dynamo.GetItem(input)
 	if err != nil {
-		return false, fmt.Errorf("error calling GetItem to check if client tag existed: %w", err)
+		return false, fmt.Errorf("error calling GetItem to check if item existed: %w", err)
 	}
 
 	return out.Item != nil, nil
@@ -638,12 +645,16 @@ func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFo
 		expression.Value(dataTypeMtimeLowerBound),
 		expression.Value(dataTypeMtimeUpperBound))
 	keyCond := expression.KeyAnd(pkCond, skCond)
-	exprs := expression.NewBuilder().WithKeyCondition(keyCond)
+
+	expirationTimeName := expression.Name("ExpirationTime")
+	filterCond := expression.Or(expression.AttributeNotExists(expirationTimeName),
+		expression.Equal(expirationTimeName, expression.Value(nil)),
+		expression.GreaterThan(expirationTimeName, expression.Value(time.Now().Unix())))
 	if !fetchFolders { // Filter folder entities out if fetchFolder is false.
-		exprs = exprs.WithFilter(
-			expression.Equal(expression.Name("Folder"), expression.Value(false)))
+		filterCond = expression.And(filterCond, expression.Equal(expression.Name("Folder"), expression.Value(false)))
 	}
-	expr, err := exprs.Build()
+
+	expr, err := expression.NewBuilder().WithKeyCondition(keyCond).WithFilter(filterCond).Build()
 	if err != nil {
 		return false, syncEntities, fmt.Errorf("error building expression to get updates: %w", err)
 	}
@@ -770,20 +781,29 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 		originatorClientItemID = entity.IdString
 	}
 
+	// The client tag hash must be used as the primary key
+	// for the history type.
 	if dataType == historyTypeID {
 		id = *entity.ClientTagHash
 	}
 
-	now := aws.Int64(utils.UnixMilli(time.Now()))
+	now := time.Now()
+
+	var expirationTime *int64
+	if dataType == historyTypeID || dataType == historyDeleteDirectiveTypeID {
+		expirationTime = aws.Int64(now.Unix() + HistoryExpirationIntervalSecs)
+	}
+
+	nowMillis := aws.Int64(now.UnixMilli())
 	// ctime is only used when inserting a new entity, here we use client passed
 	// ctime if it is passed, otherwise, use current server time as the creation
 	// time. When updating, ctime will be ignored later in the query statement.
-	cTime := now
+	cTime := nowMillis
 	if entity.Ctime != nil {
 		cTime = entity.Ctime
 	}
 
-	dataTypeMtime := strconv.Itoa(dataType) + "#" + strconv.FormatInt(*now, 10)
+	dataTypeMtime := strconv.Itoa(dataType) + "#" + strconv.FormatInt(*nowMillis, 10)
 
 	// Set default values on Deleted and Folder attributes for new entities, the
 	// default values are specified by sync.proto protocol.
@@ -804,7 +824,7 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 		ParentID:               entity.ParentIdString,
 		Version:                entity.Version,
 		Ctime:                  cTime,
-		Mtime:                  now,
+		Mtime:                  nowMillis,
 		Name:                   entity.Name,
 		NonUniqueName:          entity.NonUniqueName,
 		ServerDefinedUniqueTag: entity.ServerDefinedUniqueTag,
@@ -817,6 +837,7 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 		UniquePosition:         uniquePosition,
 		DataType:               aws.Int(dataType),
 		DataTypeMtime:          aws.String(dataTypeMtime),
+		ExpirationTime:         expirationTime,
 	}, nil
 }
 

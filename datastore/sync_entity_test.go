@@ -528,9 +528,17 @@ func (suite *SyncEntityTestSuite) TestGetUpdatesForType() {
 	entity3.DataType = aws.Int(124)
 	entity3.DataTypeMtime = aws.String("124#12345679")
 
+	// non-expired item
 	entity4 := entity2
 	entity4.ClientID = "client2"
 	entity4.ID = "id4"
+	entity4.ExpirationTime = aws.Int64(time.Now().Unix() + 300)
+
+	// expired item
+	entity5 := entity2
+	entity5.ClientID = "client2"
+	entity5.ID = "id5"
+	entity5.ExpirationTime = aws.Int64(time.Now().Unix() - 300)
 
 	_, err := suite.dynamo.InsertSyncEntity(&entity1)
 	suite.Require().NoError(err, "InsertSyncEntity should succeed")
@@ -539,6 +547,8 @@ func (suite *SyncEntityTestSuite) TestGetUpdatesForType() {
 	_, err = suite.dynamo.InsertSyncEntity(&entity3)
 	suite.Require().NoError(err, "InsertSyncEntity should succeed")
 	_, err = suite.dynamo.InsertSyncEntity(&entity4)
+	suite.Require().NoError(err, "InsertSyncEntity should succeed")
+	_, err = suite.dynamo.InsertSyncEntity(&entity5)
 	suite.Require().NoError(err, "InsertSyncEntity should succeed")
 
 	// Get all updates for type 123 and client1 using token = 0.
@@ -675,6 +685,7 @@ func (suite *SyncEntityTestSuite) TestCreateDBSyncEntity() {
 		DataType:               aws.Int(47745), // nigori type ID
 		OriginatorCacheGUID:    guid,
 		OriginatorClientItemID: pbEntity.IdString,
+		ExpirationTime:         nil,
 	}
 
 	dbEntity, err := datastore.CreateDBSyncEntity(&pbEntity, guid, "client1")
@@ -699,6 +710,7 @@ func (suite *SyncEntityTestSuite) TestCreateDBSyncEntity() {
 	expectedDBEntity.Mtime = dbEntity.Mtime
 	expectedDBEntity.DataTypeMtime = aws.String("47745#" + strconv.FormatInt(*dbEntity.Mtime, 10))
 	suite.Assert().Equal(dbEntity, &expectedDBEntity)
+	suite.Assert().Nil(dbEntity.ExpirationTime)
 
 	pbEntity.Deleted = nil
 	pbEntity.Folder = nil
@@ -706,6 +718,7 @@ func (suite *SyncEntityTestSuite) TestCreateDBSyncEntity() {
 	suite.Require().NoError(err, "CreateDBSyncEntity should succeed")
 	suite.Assert().False(*dbEntity.Deleted, "Default value should be set for Deleted for new entities")
 	suite.Assert().False(*dbEntity.Folder, "Default value should be set for Deleted for new entities")
+	suite.Assert().Nil(dbEntity.ExpirationTime)
 
 	// Check the case when Ctime and Mtime are provided by the client.
 	pbEntity.Ctime = aws.Int64(12345678)
@@ -714,6 +727,7 @@ func (suite *SyncEntityTestSuite) TestCreateDBSyncEntity() {
 	suite.Require().NoError(err, "CreateDBSyncEntity should succeed")
 	suite.Assert().Equal(*dbEntity.Ctime, *pbEntity.Ctime, "Client's Ctime should be respected")
 	suite.Assert().NotEqual(*dbEntity.Mtime, *pbEntity.Mtime, "Client's Mtime should be replaced")
+	suite.Assert().Nil(dbEntity.ExpirationTime)
 
 	// When cacheGUID is nil, ID should be kept and no originator info are filled.
 	dbEntity, err = datastore.CreateDBSyncEntity(&pbEntity, nil, "client1")
@@ -721,6 +735,7 @@ func (suite *SyncEntityTestSuite) TestCreateDBSyncEntity() {
 	suite.Assert().Equal(dbEntity.ID, *pbEntity.IdString)
 	suite.Assert().Nil(dbEntity.OriginatorCacheGUID)
 	suite.Assert().Nil(dbEntity.OriginatorClientItemID)
+	suite.Assert().Nil(dbEntity.ExpirationTime)
 
 	// Check that when updating from a previous version with guid, ID will not be
 	// replaced.
@@ -730,19 +745,25 @@ func (suite *SyncEntityTestSuite) TestCreateDBSyncEntity() {
 	suite.Assert().Equal(dbEntity.ID, *pbEntity.IdString)
 	suite.Assert().Nil(dbEntity.Deleted, "Deleted won't apply its default value for updated entities")
 	suite.Assert().Nil(dbEntity.Folder, "Deleted won't apply its default value for updated entities")
+	suite.Assert().Nil(dbEntity.ExpirationTime)
 
 	// Empty unique position should be marshalled to nil without error.
 	pbEntity.UniquePosition = nil
 	dbEntity, err = datastore.CreateDBSyncEntity(&pbEntity, guid, "client1")
 	suite.Require().NoError(err)
 	suite.Assert().Nil(dbEntity.UniquePosition)
+	suite.Assert().Nil(dbEntity.ExpirationTime)
 
-	// A history entity should have the client tag hash as the ID.
+	// A history entity should have the client tag hash as the ID,
+	// and an expiration time.
 	historyEntitySpecific := &sync_pb.EntitySpecifics_History{}
 	pbEntity.Specifics = &sync_pb.EntitySpecifics{SpecificsVariant: historyEntitySpecific}
 	dbEntity, err = datastore.CreateDBSyncEntity(&pbEntity, guid, "client1")
 	suite.Require().NoError(err)
 	suite.Assert().Equal(dbEntity.ID, "client_tag")
+	expectedExpirationTime := time.Now().Unix() + datastore.HistoryExpirationIntervalSecs
+	suite.Assert().Greater(*dbEntity.ExpirationTime+2, expectedExpirationTime)
+	suite.Assert().Less(*dbEntity.ExpirationTime-2, expectedExpirationTime)
 
 	// Empty specifics should report marshal error.
 	pbEntity.Specifics = nil

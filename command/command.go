@@ -247,15 +247,11 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 		if *entityToCommit.DataType == historyTypeID {
 			// Check if item exists using client_unique_tag
 			isUpdateOp, err = db.HasItem(clientID, *entityToCommit.ClientDefinedUniqueTag)
-			log.Info().
-				Str("Tag", *entityToCommit.ClientDefinedUniqueTag).
-				Bool("IsUpdate", isUpdateOp).
-				Msg("History Info")
 			if err != nil {
-				log.Error().Err(err).Msg("Insert sync entity failed")
+				log.Error().Err(err).Msg("Insert history sync entity failed")
 				rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
 				entryRsp.ResponseType = &rspType
-				entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Insert sync entity failed: %v", err.Error()))
+				entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Insert history sync entity failed: %v", err.Error()))
 				continue
 			}
 		}

@@ -12,7 +12,7 @@
   ],
   "GlobalSecondaryIndexes": [
     {
-      "IndexName": "ClientIDDataTypeMtimeIndex",
+      "IndexName": "ClientIDDataTypeMtimeIndexV2",
       "KeySchema": [
         {
           "KeyType": "HASH",
@@ -25,7 +25,7 @@
       ],
       "Projection": {
         "ProjectionType": "INCLUDE",
-        "NonKeyAttributes": ["Folder"]
+        "NonKeyAttributes": ["Folder", "ExpirationTime"]
       },
       "ProvisionedThroughput": {
         "ReadCapacityUnits": 1,
