@@ -16,7 +16,7 @@ const (
 	projPk string = "ClientID, ID"
 
 	// Strings for (ClientID, DataTypeMtime) GSI
-	clientIDDataTypeMtimeIdx   string = "ClientIDDataTypeMtimeIndexV2"
+	clientIDDataTypeMtimeIdx   string = "ClientIDDataTypeMtimeIndex"
 	clientIDDataTypeMtimeIdxPk string = "ClientID"
 	clientIDDataTypeMtimeIdxSk string = "DataTypeMtime"
 )

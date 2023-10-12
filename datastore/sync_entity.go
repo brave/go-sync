@@ -645,16 +645,14 @@ func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFo
 		expression.Value(dataTypeMtimeLowerBound),
 		expression.Value(dataTypeMtimeUpperBound))
 	keyCond := expression.KeyAnd(pkCond, skCond)
+	exprs := expression.NewBuilder().WithKeyCondition(keyCond)
 
-	expirationTimeName := expression.Name("ExpirationTime")
-	filterCond := expression.Or(expression.AttributeNotExists(expirationTimeName),
-		expression.Equal(expirationTimeName, expression.Value(nil)),
-		expression.GreaterThan(expirationTimeName, expression.Value(time.Now().Unix())))
 	if !fetchFolders { // Filter folder entities out if fetchFolder is false.
-		filterCond = expression.And(filterCond, expression.Equal(expression.Name("Folder"), expression.Value(false)))
+		exprs = exprs.WithFilter(
+			expression.Equal(expression.Name("Folder"), expression.Value(false)))
 	}
 
-	expr, err := expression.NewBuilder().WithKeyCondition(keyCond).WithFilter(filterCond).Build()
+	expr, err := exprs.Build()
 	if err != nil {
 		return false, syncEntities, fmt.Errorf("error building expression to get updates: %w", err)
 	}
@@ -716,8 +714,21 @@ func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFo
 	if err != nil {
 		return false, syncEntities, fmt.Errorf("error unmarshalling updated sync entities: %w", err)
 	}
-	sort.Sort(SyncEntityByMtime(syncEntities))
-	return hasChangesRemaining, syncEntities, nil
+
+	// filter out any expired items, i.e. history sync entities over 90 days old
+	nowUnix := time.Now().Unix()
+	var filteredSyncEntities []SyncEntity
+	for _, syncEntity := range syncEntities {
+		if syncEntity.ExpirationTime != nil && *syncEntity.ExpirationTime > 0 {
+			if *syncEntity.ExpirationTime < nowUnix {
+				continue
+			}
+		}
+		filteredSyncEntities = append(filteredSyncEntities, syncEntity)
+	}
+
+	sort.Sort(SyncEntityByMtime(filteredSyncEntities))
+	return hasChangesRemaining, filteredSyncEntities, nil
 }
 
 func validatePBEntity(entity *sync_pb.SyncEntity) error {
