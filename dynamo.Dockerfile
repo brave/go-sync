@@ -19,6 +19,9 @@ RUN mkdir -p ${DB_LOCATION} && \
     sleep 15 && \
     aws dynamodb create-table --cli-input-json file://table.json \
     --endpoint-url ${AWS_ENDPOINT} --region ${AWS_REGION} && \
+    aws dynamodb update-time-to-live --table-name client-entity-dev \
+    --time-to-live-specification "Enabled=true, AttributeName=ExpirationTime" \
+    --endpoint-url http://localhost:8000 && \
     kill $DYNAMO_PID
 
 FROM amazon/dynamodb-local:2.0.0

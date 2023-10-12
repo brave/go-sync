@@ -4,10 +4,16 @@ github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d h1:Byv0BzEl
 github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d/go.mod h1:WaHUgvxTVq04UNunO+XhnAqY/wQc+bxr74GqbsZ/Jqw=
 github.com/aws/aws-sdk-go v1.45.8 h1:QbOMBTuRYx11fBwNSAJuztXmQf47deFz+CVYjakqmRo=
 github.com/aws/aws-sdk-go v1.45.8/go.mod h1:aVsgQcEevwlmQ7qHE9I3h+dtQgpqhFB+i8Phjh7fkwI=
+github.com/aws/aws-sdk-go v1.45.11 h1:8qiSrA12+NRr+2MVpMApi3JxtiFFjDVU1NeWe+80bYg=
+github.com/aws/aws-sdk-go v1.45.11/go.mod h1:aVsgQcEevwlmQ7qHE9I3h+dtQgpqhFB+i8Phjh7fkwI=
+github.com/aws/aws-sdk-go v1.45.19 h1:+4yXWhldhCVXWFOQRF99ZTJ92t4DtoHROZIbN7Ujk/U=
+github.com/aws/aws-sdk-go v1.45.19/go.mod h1:aVsgQcEevwlmQ7qHE9I3h+dtQgpqhFB+i8Phjh7fkwI=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/brave-intl/bat-go/libs v0.0.0-20230911092351-1d5d359ef563 h1:1G4hpyfq1Rgeb3FO9LeXyACuX/zn6oDIssM0fma5z+A=
 github.com/brave-intl/bat-go/libs v0.0.0-20230911092351-1d5d359ef563/go.mod h1:sUyKgpr9uxg0SARewNEkNMStvBjOeWuWoLchHgyONGA=
+github.com/brave-intl/bat-go/libs v0.0.0-20230913115141-8b4fe85da72c h1:siIB7Odcs3x4CKYY8Nqdbkk+BEH+Js8yP6Kg1SjS3xo=
+github.com/brave-intl/bat-go/libs v0.0.0-20230913115141-8b4fe85da72c/go.mod h1:sUyKgpr9uxg0SARewNEkNMStvBjOeWuWoLchHgyONGA=
 github.com/bsm/ginkgo/v2 v2.9.5 h1:rtVBYPs3+TC5iLUVOis1B9tjLTup7Cj5IfzosKtvTJ0=
 github.com/bsm/gomega v1.26.0 h1:LhQm+AFcgV2M0WyKroMASzAzCAJVpAxQXv4SaI9a69Y=
 github.com/cespare/xxhash/v2 v2.2.0 h1:DC2CZ1Ep5Y4k3ZQ899DldepgrayRUGE6BBZ/cd9Cj44=
@@ -21,6 +27,8 @@ github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f h1:lO4WD4F/r
 github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cuUVRXasLTGF7a8hSLbxyZXjz+1KgoB3wDUb6vlszIc=
 github.com/getsentry/sentry-go v0.24.0 h1:02b7qEmJ56EHGe9KFgjArjU/vG/aywm7Efgu+iPc01Y=
 github.com/getsentry/sentry-go v0.24.0/go.mod h1:lc76E2QywIyW8WuBnwl8Lc4bkmQH4+w1gwTf25trprY=
+github.com/getsentry/sentry-go v0.24.1 h1:W6/0GyTy8J6ge6lVCc94WB6Gx2ZuLrgopnn9w8Hiwuk=
+github.com/getsentry/sentry-go v0.24.1/go.mod h1:lc76E2QywIyW8WuBnwl8Lc4bkmQH4+w1gwTf25trprY=
 github.com/go-chi/chi v4.1.2+incompatible h1:fGFk2Gmi/YKXk0OmGfBh0WgmN3XB8lVnEyNz34tQRec=
 github.com/go-chi/chi v4.1.2+incompatible/go.mod h1:eB3wogJHnLi3x/kFX2A+IbTBlXxmMeXJVKy9tTv1XzQ=
 github.com/go-chi/chi/v5 v5.0.10 h1:rLz5avzKpjqxrYwXNfmjkrYYXOyLJd37pz53UFHC6vk=

@@ -40,6 +40,11 @@ func (m *MockDatastore) HasServerDefinedUniqueTag(clientID string, tag string) (
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *MockDatastore) HasItem(clientID string, ID string) (bool, error) {
+	args := m.Called(clientID, ID)
+	return args.Bool(0), args.Error(1)
+}
+
 // GetClientItemCount mocks calls to GetClientItemCount
 func (m *MockDatastore) GetClientItemCount(clientID string) (int, error) {
 	args := m.Called(clientID)
