@@ -25,4 +25,6 @@ type Datastore interface {
 	DisableSyncChain(clientID string) error
 	// IsSyncChainDisabled checks whether a given sync chain is deleted
 	IsSyncChainDisabled(clientID string) (bool, error)
+	// Checks if sync item exists for a client
+	HasItem(clientID string, ID string) (bool, error)
 }
