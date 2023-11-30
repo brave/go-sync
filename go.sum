@@ -20,6 +20,8 @@ github.com/brave-intl/bat-go/libs v0.0.0-20230913115141-8b4fe85da72c h1:siIB7Odc
 github.com/brave-intl/bat-go/libs v0.0.0-20230913115141-8b4fe85da72c/go.mod h1:sUyKgpr9uxg0SARewNEkNMStvBjOeWuWoLchHgyONGA=
 github.com/brave-intl/bat-go/libs v0.0.0-20231020145457-cc9860c87bae h1:CGUFAtMXAsGajLeobq6ep+5wREYS+lepZSdPckY+Ba0=
 github.com/brave-intl/bat-go/libs v0.0.0-20231020145457-cc9860c87bae/go.mod h1:sUyKgpr9uxg0SARewNEkNMStvBjOeWuWoLchHgyONGA=
+github.com/brave-intl/bat-go/libs v0.0.0-20231130155425-a442e488a799 h1:THUVaxn0kJwS1QJ6GJsUrr/kcQz0jkxJzRvaQt2qG+0=
+github.com/brave-intl/bat-go/libs v0.0.0-20231130155425-a442e488a799/go.mod h1:sUyKgpr9uxg0SARewNEkNMStvBjOeWuWoLchHgyONGA=
 github.com/bsm/ginkgo/v2 v2.9.5 h1:rtVBYPs3+TC5iLUVOis1B9tjLTup7Cj5IfzosKtvTJ0=
 github.com/bsm/ginkgo/v2 v2.12.0 h1:Ny8MWAHyOepLGlLKYmXG4IEkioBysk6GpaRTLC8zwWs=
 github.com/bsm/gomega v1.26.0 h1:LhQm+AFcgV2M0WyKroMASzAzCAJVpAxQXv4SaI9a69Y=
