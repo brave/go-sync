@@ -32,7 +32,7 @@ const (
 	historyDeleteDirectiveTypeID int = 150251
 	// Expiration time for history and history delete directive
 	// entities in seconds
-	HistoryExpirationIntervalSecs = 60 * 60 * 24 * 90 // 90 days
+	HistoryExpirationIntervalSecs = 60 * 60 * 24 * 60 // 60 days
 )
 
 // SyncEntity is used to marshal and unmarshal sync items in dynamoDB.
