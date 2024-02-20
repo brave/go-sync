@@ -80,8 +80,8 @@ func authenticate(tkn string) (string, error) {
 		return "", fmt.Errorf("token is expired")
 	}
 
-	blockedIds := strings.Split(os.Getenv("BLOCKED_CLIENT_IDS"), ",")
-	for _, id := range blockedIds {
+	blockedIDs := strings.Split(os.Getenv("BLOCKED_CLIENT_IDS"), ",")
+	for _, id := range blockedIDs {
 		if token.PublicKeyHex == id {
 			return "", fmt.Errorf("This client ID is blocked")
 		}
