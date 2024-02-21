@@ -29,7 +29,7 @@ func (suite *MiddlewareTestSuite) TestDisabledChainMiddleware() {
 	datastore.On("IsSyncChainDisabled", clientID).Return(false, nil)
 	ctx := context.WithValue(context.Background(), syncContext.ContextKeyClientID, clientID)
 	ctx = context.WithValue(ctx, syncContext.ContextKeyDatastore, datastore)
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	next := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})
 	handler := middleware.DisabledChain(next)
 	req, err := http.NewRequestWithContext(ctx, "POST", "v2/command/", bytes.NewBuffer([]byte{}))
 	suite.Require().NoError(err, "NewRequestWithContext should succeed")
@@ -42,7 +42,7 @@ func (suite *MiddlewareTestSuite) TestDisabledChainMiddleware() {
 	datastore.On("IsSyncChainDisabled", clientID).Return(true, nil)
 	ctx = context.WithValue(context.Background(), syncContext.ContextKeyClientID, clientID)
 	ctx = context.WithValue(ctx, syncContext.ContextKeyDatastore, datastore)
-	next = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	next = http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		suite.Require().Equal(false, true)
 	})
 	handler = middleware.DisabledChain(next)
@@ -57,7 +57,7 @@ func (suite *MiddlewareTestSuite) TestDisabledChainMiddleware() {
 	datastore.On("IsSyncChainDisabled", clientID).Return(false, fmt.Errorf("unable to query db"))
 	ctx = context.WithValue(context.Background(), syncContext.ContextKeyClientID, clientID)
 	ctx = context.WithValue(ctx, syncContext.ContextKeyDatastore, datastore)
-	next = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	next = http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})
 	handler = middleware.DisabledChain(next)
 	rr = httptest.NewRecorder()
 	req, err = http.NewRequestWithContext(ctx, "POST", "v2/command/", bytes.NewBuffer([]byte{}))
@@ -69,7 +69,7 @@ func (suite *MiddlewareTestSuite) TestDisabledChainMiddleware() {
 
 func (suite *MiddlewareTestSuite) TestAuthMiddleware() {
 	// Happy path
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		clientID := ctx.Value(syncContext.ContextKeyClientID)
 		suite.Require().NotNil(clientID, "Client ID should be set by auth middleware")
@@ -86,7 +86,7 @@ func (suite *MiddlewareTestSuite) TestAuthMiddleware() {
 	handler.ServeHTTP(rr, req)
 
 	// Invalid bearer token, unauthorized
-	next = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	next = http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})
 	handler = middleware.Auth(next)
 	ctx = context.Background()
 	req, err = http.NewRequestWithContext(ctx, "POST", "v2/command/", bytes.NewBuffer([]byte{}))
