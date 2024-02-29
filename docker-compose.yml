@@ -63,7 +63,7 @@ services:
     networks:
       - sync
   redis:
-    image: public.ecr.aws/ubuntu/redis:latest
+    image: public.ecr.aws/ubuntu/redis:latest@sha256:6c317973bc9fb8911bf56d67ebc6efc425a203638673c08fb471503e9b308184
     ports:
       - "6379:6379"
     environment:
