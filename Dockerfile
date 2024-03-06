@@ -1,4 +1,4 @@
-FROM public.ecr.aws/bitnami/golang:1.20.10 as builder
+FROM public.ecr.aws/bitnami/golang:1.22.1 as builder
 
 ARG VERSION
 ARG BUILD_TIME
