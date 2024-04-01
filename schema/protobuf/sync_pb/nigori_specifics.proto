@@ -33,26 +33,35 @@ message CrossUserSharingPrivateKey {
   // The key version, used for key rotation.
   optional int32 version = 1;
   // Private key on Curve25519 (32 bytes).
-  optional bytes X25519_private_key = 2;
+  optional bytes x25519_private_key = 2;
 }
 
 message CrossUserSharingPublicKey {
   // The key version, used for key rotation and consensus.
   optional int32 version = 1;
   // Public key on Curve25519 (32 bytes).
-  optional bytes X25519_public_key = 2;
+  optional bytes x25519_public_key = 2;
 }
 
-message NigoriKeyBag {
-  // Used for encrypting within the sync account boundary.
+message EncryptionKeys {
+  // Used for encrypting data in the user's account.
   repeated NigoriKey key = 2;
   // Used for encrypting/authenticating using Public-private cryptography
-  // primarily across user accounts, e.g. sharing offers.
+  // primarily across user accounts, e.g. sharing invitations.
   repeated CrossUserSharingPrivateKey cross_user_sharing_private_key = 3;
+}
+
+// Deprecated: use EncryptionKeys instead.
+message NigoriKeyBag {
+  option deprecated = true;
+
+  // Used for encrypting data in the user's account.
+  repeated NigoriKey key = 2;
 }
 
 // Properties of nigori sync object.
 message NigoriSpecifics {
+  // Encrypted proto of type EncryptionKeys.
   optional EncryptedData encryption_keybag = 1;
   // Once keystore migration is performed, we have to freeze the keybag so that
   // older clients (that don't support keystore encryption) do not attempt to
@@ -231,6 +240,29 @@ message NigoriSpecifics {
   // Boolean corresponding to whether OS preferences should be encrypted.
   optional bool encrypt_os_preferences = 49 [deprecated = true];
 
+  // Information useful for auto-upgrade to trusted vault.
+  message AutoUpgradeDebugInfo {
+    enum AutoUpgradeState {
+      STATE_UNSPECIFIED = 0;
+      AUTO_UPGRADED = 1;
+      CONTROL = 2;
+      VALIDATION = 3;
+    }
+    // Current state of an account after it was processed by auto-upgrade.
+    optional AutoUpgradeState auto_upgrade_state = 1;
+
+    // Each eligibility group can be ramped in different stages (e.g. 1%,
+    // 10%, 100%).
+    // Every ramp stage is differentiated with its own entry in the enum.
+    enum EligibilityGroup {
+      GROUP_UNSPECIFIED = 0;
+      TEST_GROUP_1 = 1;
+    }
+    // ID of eligibility group account belongs to. Only use IDs defined
+    // within EligibilityGroup enum.
+    optional int32 eligibility_group_id = 2;
+  }
+
   // Some debug-only fields for passphrase type TRUSTED_VAULT_PASSPHRASE.
   message TrustedVaultDebugInfo {
     // The time (in milliseconds since Unix epoch) at which the trusted vault
@@ -239,6 +271,14 @@ message NigoriSpecifics {
 
     // The version (aka key epoch) corresponding to the Nigori keybag.
     optional int32 key_version = 2;
+
+    // DebugInfo written by a process that auto-upgrades to trusted vault.
+    optional AutoUpgradeDebugInfo auto_upgrade_debug_info = 3;
+
+    // The time (in milliseconds since Unix epoch) last update of the auto
+    // upgrade debug info was made.
+    optional int64
+      auto_upgrade_debug_info_modification_time_unix_epoch_millis = 4;
   }
 
   optional TrustedVaultDebugInfo trusted_vault_debug_info = 50;

@@ -20,8 +20,11 @@ import "app_specifics.proto";
 import "arc_package_specifics.proto";
 import "autofill_specifics.proto";
 import "autofill_offer_specifics.proto";
+import "autofill_wallet_credential_specifics.proto";
 import "autofill_wallet_usage_specifics.proto";
 import "bookmark_specifics.proto";
+import "collaboration_group_specifics.proto";
+import "compare_specifics.proto";
 import "contact_info_specifics.proto";
 import "device_info_specifics.proto";
 import "dictionary_specifics.proto";
@@ -39,6 +42,7 @@ import "os_preference_specifics.proto";
 import "os_priority_preference_specifics.proto";
 import "password_sharing_invitation_specifics.proto";
 import "password_specifics.proto";
+import "plus_address_specifics.proto";
 import "power_bookmark_specifics.proto";
 import "preference_specifics.proto";
 import "printer_specifics.proto";
@@ -51,6 +55,7 @@ import "security_event_specifics.proto";
 import "send_tab_to_self_specifics.proto";
 import "segmentation_specifics.proto";
 import "session_specifics.proto";
+import "shared_tab_group_data_specifics.proto";
 import "sharing_message_specifics.proto";
 import "theme_specifics.proto";
 import "typed_url_specifics.proto";
@@ -149,6 +154,14 @@ message EntitySpecifics {
         incoming_password_sharing_invitation = 1141935;
     OutgoingPasswordSharingInvitationSpecifics
         outgoing_password_sharing_invitation = 1142081;
+    AutofillWalletCredentialSpecifics autofill_wallet_credential = 1164238;
+    SharedTabGroupDataSpecifics shared_tab_group_data = 1239418;
+    CollaborationGroupSpecifics collaboration_group = 1259076;
+    CompareSpecifics compare = 1329438;
+    PlusAddressSpecifics plus_address = 1267844;
+    // When adding a new type, follow the docs below and keep this comment as
+    // the last entry.
+    // https://www.chromium.org/developers/design-documents/sync/integration-checklist/
 
     // No-longer-supported data types, in various stages of removal.
     // TODO(crbug.com/1395003): Eventually, these should all become "reserved"
