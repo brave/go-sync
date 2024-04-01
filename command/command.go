@@ -377,8 +377,7 @@ func HandleClientToServerMessage(cache *cache.Cache, pb *sync_pb.ClientToServerM
 	pbRsp.StoreBirthday = aws.String(storeBirthday)
 	pbRsp.ClientCommand = &sync_pb.ClientCommand{
 		SetSyncPollInterval:        aws.Int32(setSyncPollInterval),
-		MaxCommitBatchSize:         aws.Int32(maxCommitBatchSize),
-		SessionsCommitDelaySeconds: aws.Int32(sessionsCommitDelaySeconds)}
+		MaxCommitBatchSize:         aws.Int32(maxCommitBatchSize)}
 
 	var err error
 	if pb.MessageContents == nil {
