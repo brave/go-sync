@@ -111,7 +111,6 @@ func getClientCommand() *sync_pb.ClientCommand {
 	return &sync_pb.ClientCommand{
 		SetSyncPollInterval:        aws.Int32(command.SetSyncPollInterval),
 		MaxCommitBatchSize:         aws.Int32(command.MaxCommitBatchSize),
-		SessionsCommitDelaySeconds: aws.Int32(command.SessionsCommitDelaySeconds),
 	}
 }
 

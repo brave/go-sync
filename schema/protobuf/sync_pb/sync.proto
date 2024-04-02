@@ -23,6 +23,7 @@ import "client_commands.proto";
 import "client_debug_info.proto";
 import "data_type_progress_marker.proto";
 import "get_updates_caller_info.proto";
+import "password_sharing_invitation_specifics.proto";
 import "sync_entity.proto";
 import "sync_enums.proto";
 import "sharing_message_specifics.proto";
@@ -49,7 +50,8 @@ message ClientConfigParams {
   repeated int32 enabled_type_ids = 1;
 
   // Whether the PROXY_TABS proxy datatype is enabled on this client.
-  optional bool tabs_datatype_enabled = 2;
+  // Deprecated and not populated anymore since M120.
+  optional bool tabs_datatype_enabled = 2 [deprecated = true];
 
   // Whether the account(s) present in the content area's cookie jar match the
   // chrome account. If multiple accounts are present in the cookie jar, a
@@ -284,8 +286,6 @@ message ClientToServerMessage {
   reserved 6;
   reserved "authenticate";
 
-  reserved 9;
-
   // Opaque server-provided ID representing an "epoch" of the server-side data.
   // Clients must hand this opaque ID back to the server as part of all requests
   // within the same sync session (i.e. for all requests to the server except
@@ -293,9 +293,9 @@ message ClientToServerMessage {
   // ClientToServerResponse.store_birthday for more details about its lifetime.
   optional string store_birthday = 7;
 
-  // The client sets this if it detects a sync issue. The server will tell it
-  // if it should perform a refresh.
-  optional bool sync_problem_detected = 8 [default = false];
+  reserved 8;
+  reserved "sync_problem_detected";
+  reserved 9;
 
   // Client side state information for debugging purpose.
   // This is only sent on the first getupdates of every sync cycle,
@@ -317,7 +317,8 @@ message ClientToServerMessage {
   // The ID that our invalidation client used to identify itself to the server.
   // Sending the ID here allows the server to not send notifications of our own
   // changes to our invalidator.
-  optional string invalidator_client_id = 14;
+  // The field was deprecated in M117 and is no longer populated.
+  optional string invalidator_client_id = 14 [deprecated = true];
 
   // Identifies this ClientToServerMessage as a clear server data request. This
   // field is present when message_contents is CLEAR_SERVER_DATA.
@@ -367,6 +368,8 @@ message CommitResponse {
     message DatatypeSpecificError {
       oneof datatype_error {
         SharingMessageCommitError sharing_message_error = 1;
+        OutgoingPasswordSharingInvitationCommitError
+            outgoing_password_sharing_invitation_error = 2;
       }
     }
     // Datatype specific error (if any).
