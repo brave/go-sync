@@ -14,8 +14,16 @@ import (
 
 var (
 	// Could be modified in tests.
-	maxGUBatchSize       = 500
-	maxClientObjectQuota = 85000
+	// Original:
+	// maxGUBatchSize       = 500
+	// maxClientObjectQuota = 85000
+
+	// Test with small values
+	maxGUBatchSize       = 5
+	maxClientObjectQuota = 30
+	// new
+	clientObjectsToStartCleanup = 20
+	historyObjectsToCleanup     = 5
 )
 
 const (
@@ -214,6 +222,20 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 		return &errCode, fmt.Errorf("error getting client's item count: %w", err)
 	}
 
+	deletedHistoryEntriesCount := 0
+
+	if itemCount >= clientObjectsToStartCleanup {
+		_, historySyncEntities, err3 :=
+			db.GetUpdatesForType(historyTypeID, 0/*clientToken*/, false/*fetchFolders*/, clientID, int64(historyObjectsToCleanup)/*maxSize int64*/)
+		if err3 == nil && len(historySyncEntities) > 0 {
+			err4 := db.DeleteThese(historySyncEntities)
+			if err4 == nil {
+				deletedHistoryEntriesCount = len(historySyncEntities);
+				itemCount -= deletedHistoryEntriesCount
+			}
+		}
+	}
+
 	commitRsp.Entryresponse = make([]*sync_pb.CommitResponse_EntryResponse, len(commitMsg.Entries))
 
 	// Map client-generated ID to its server-generated ID.
@@ -315,7 +337,7 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 		cache.SetTypeMtime(context.Background(), clientID, dataType, mtime)
 	}
 
-	err = db.UpdateClientItemCount(clientID, count)
+	err = db.UpdateClientItemCount(clientID, count - deletedHistoryEntriesCount)
 	if err != nil {
 		// We only impose a soft quota limit on the item count for each client, so
 		// we only log the error without further actions here. The reason of this

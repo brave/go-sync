@@ -15,6 +15,8 @@ type Datastore interface {
 	GetUpdatesForType(dataType int, clientToken int64, fetchFolders bool, clientID string, maxSize int64) (bool, []SyncEntity, error)
 	// Check if a server-defined unique tag is in the datastore.
 	HasServerDefinedUniqueTag(clientID string, tag string) (bool, error)
+	// Deletes some entries
+	DeleteThese(entities []SyncEntity) error;
 	// Get the count of sync items for a client.
 	GetClientItemCount(clientID string) (int, error)
 	// Update the count of sync items for a client.

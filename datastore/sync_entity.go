@@ -469,6 +469,69 @@ func (dynamo *Dynamo) ClearServerData(clientID string) ([]SyncEntity, error) {
 	return syncEntities, nil
 }
 
+// Code is taken mostly from ClearServerData function
+func (dynamo *Dynamo) DeleteThese(entities []SyncEntity) error {
+	if len(entities) == 0 {
+		return fmt.Errorf("error deleting sync entities - none requested")
+	}
+
+	items := []*dynamodb.TransactWriteItem{}
+
+	for _, item := range entities {
+		// Fail delete if race condition detected (modified time has changed).
+		if item.Version != nil {
+			cond := expression.Name("Mtime").Equal(expression.Value(*item.Mtime))
+			expr, err := expression.NewBuilder().WithCondition(cond).Build()
+			if err != nil {
+				return fmt.Errorf("error deleting sync entities for client <???>: %w", err)
+			}
+
+			writeItem := dynamodb.TransactWriteItem{
+				Delete: &dynamodb.Delete{
+					ConditionExpression:       expr.Condition(),
+					ExpressionAttributeNames:  expr.Names(),
+					ExpressionAttributeValues: expr.Values(),
+					TableName:                 aws.String(Table),
+					Key: map[string]*dynamodb.AttributeValue{
+						pk: {
+							S: aws.String(item.ClientID),
+						},
+						sk: {
+							S: aws.String(item.ID),
+						},
+					},
+				},
+			}
+
+			items = append(items, &writeItem)
+		} else {
+			// If row doesn't hold Mtime, delete as usual.
+			writeItem := dynamodb.TransactWriteItem{
+				Delete: &dynamodb.Delete{
+					TableName: aws.String(Table),
+					Key: map[string]*dynamodb.AttributeValue{
+						pk: {
+							S: aws.String(item.ClientID),
+						},
+						sk: {
+							S: aws.String(item.ID),
+						},
+					},
+				},
+			}
+
+			items = append(items, &writeItem)
+		}
+	}
+	_, err := dynamo.TransactWriteItems(&dynamodb.TransactWriteItemsInput{TransactItems: items})
+
+	if err != nil {
+		return fmt.Errorf("error deleting sync entities for client <???>: %w", err)
+	}
+
+	return nil
+}
+
 // IsSyncChainDisabled checks whether a given sync chain has been deleted
 func (dynamo *Dynamo) IsSyncChainDisabled(clientID string) (bool, error) {
 	key, err := dynamodbattribute.MarshalMap(DisabledMarkerItemQuery{

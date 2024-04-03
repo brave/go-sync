@@ -45,6 +45,12 @@ func (m *MockDatastore) HasItem(clientID string, ID string) (bool, error) {
 	return args.Bool(0), args.Error(1)
 }
 
+// DeleteThese mocks calls to DeleteThese
+func (m *MockDatastore) DeleteThese(entities []datastore.SyncEntity) error {
+	args := m.Called(entities)
+	return args.Error(0)
+}
+
 // GetClientItemCount mocks calls to GetClientItemCount
 func (m *MockDatastore) GetClientItemCount(clientID string) (int, error) {
 	args := m.Called(clientID)
