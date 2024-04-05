@@ -3,7 +3,7 @@ module github.com/brave/go-sync
 go 1.20
 
 require (
-	github.com/aws/aws-sdk-go v1.50.20
+	github.com/aws/aws-sdk-go v1.51.10
 	github.com/brave-intl/bat-go/libs v0.0.0-20231020145457-cc9860c87bae
 	github.com/getsentry/sentry-go v0.27.0
 	github.com/go-chi/chi/v5 v5.0.10
@@ -11,8 +11,8 @@ require (
 	github.com/redis/go-redis/v9 v9.5.1
 	github.com/rs/zerolog v1.31.0
 	github.com/satori/go.uuid v1.2.0
-	github.com/stretchr/testify v1.8.4
-	google.golang.org/protobuf v1.31.0
+	github.com/stretchr/testify v1.9.0
+	google.golang.org/protobuf v1.33.0
 )
 
 require (
@@ -36,7 +36,7 @@ require (
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/rs/xid v1.5.0 // indirect
 	github.com/shengdoushi/base58 v1.0.0 // indirect
-	github.com/stretchr/objx v0.5.1 // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/throttled/throttled v2.2.5+incompatible // indirect
 	golang.org/x/crypto v0.17.0 // indirect
 	golang.org/x/sys v0.15.0 // indirect

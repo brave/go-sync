@@ -21,7 +21,6 @@ var (
 const (
 	storeBirthday              string = "1"
 	maxCommitBatchSize         int32  = 90
-	sessionsCommitDelaySeconds int32  = 11
 	setSyncPollInterval        int32  = 30
 	nigoriTypeID               int32  = 47745
 	deviceInfoTypeID           int    = 154522
@@ -377,8 +376,7 @@ func HandleClientToServerMessage(cache *cache.Cache, pb *sync_pb.ClientToServerM
 	pbRsp.StoreBirthday = aws.String(storeBirthday)
 	pbRsp.ClientCommand = &sync_pb.ClientCommand{
 		SetSyncPollInterval:        aws.Int32(setSyncPollInterval),
-		MaxCommitBatchSize:         aws.Int32(maxCommitBatchSize),
-		SessionsCommitDelaySeconds: aws.Int32(sessionsCommitDelaySeconds)}
+		MaxCommitBatchSize:         aws.Int32(maxCommitBatchSize)}
 
 	var err error
 	if pb.MessageContents == nil {

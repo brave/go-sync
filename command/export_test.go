@@ -13,7 +13,6 @@ var (
 	BookmarkBarTag             = bookmarkBarTag
 	StoreBirthday              = storeBirthday
 	MaxCommitBatchSize         = maxCommitBatchSize
-	SessionsCommitDelaySeconds = sessionsCommitDelaySeconds
 	SetSyncPollInterval        = setSyncPollInterval
 	MaxGUBatchSize             = &maxGUBatchSize
 	MaxClientObjectQuota       = &maxClientObjectQuota
