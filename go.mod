@@ -1,6 +1,6 @@
 module github.com/brave/go-sync
 
-go 1.20
+go 1.22
 
 require (
 	github.com/aws/aws-sdk-go v1.51.20
