@@ -10,7 +10,7 @@ This server supports endpoints as bellow.
 Currently we use dynamoDB as the datastore, the schema could be found in `schema/dynamodb/table.json`.
 
 ## Developer Setup
-1. [Install Go 1.18](https://golang.org/doc/install)
+1. [Install Go 1.22](https://golang.org/doc/install)
 2. [Install GolangCI-Lint](https://github.com/golangci/golangci-lint#install)
 3. [Install gowrap](https://github.com/hexdigest/gowrap#installation)
 4. Clone this repo
