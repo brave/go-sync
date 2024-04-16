@@ -65,6 +65,20 @@ func (_d DatastoreWithPrometheus) DisableSyncChain(clientID string) (err error) 
 	return _d.base.DisableSyncChain(clientID)
 }
 
+ // DeleteThese implements Datastore
+ func (_d DatastoreWithPrometheus) DeleteThese(entities []SyncEntity) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DeleteThese", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.DeleteThese(entities)
+}
+
 // GetClientItemCount implements Datastore
 func (_d DatastoreWithPrometheus) GetClientItemCount(clientID string) (i1 int, err error) {
 	_since := time.Now()
