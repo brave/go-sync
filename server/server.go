@@ -113,7 +113,7 @@ func setupBaseCtx(ctx context.Context) baseCtxFunc {
 	}
 }
 
-// StartServer starts the translate proxy server on port 8195
+// StartServer starts the sync proxy server on port 8295
 func StartServer() {
 	serverCtx, logger := setupLogger(context.Background())
 
