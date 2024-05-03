@@ -10,7 +10,7 @@ This server supports endpoints as bellow.
 Currently we use dynamoDB as the datastore, the schema could be found in `schema/dynamodb/table.json`.
 
 ## Developer Setup
-1. [Install Go 1.18](https://golang.org/doc/install)
+1. [Install Go 1.22](https://golang.org/doc/install)
 2. [Install GolangCI-Lint](https://github.com/golangci/golangci-lint#install)
 3. [Install gowrap](https://github.com/hexdigest/gowrap#installation)
 4. Clone this repo
@@ -21,7 +21,8 @@ Currently we use dynamoDB as the datastore, the schema could be found in `schema
 1. Clone this repo
 2. Run `make docker`
 3. Run `make docker-up`
-4. For running unit tests, run `make docker-test`
+4. To connect to your local server from a Brave browser client use `--sync-url="http://localhost:8295/v2"`
+5. For running unit tests, run `make docker-test`
 
 # Updating protocol definitions
 1. Copy the `.proto` files from `components/sync/protocol` in `chromium` to `schema/protobuf/sync_pb` in `go-sync`.
