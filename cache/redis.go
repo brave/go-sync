@@ -32,6 +32,8 @@ func NewRedisClient() RedisClient {
 	addrs := strings.Split(os.Getenv("REDIS_URL"), ",")
 	cluster := os.Getenv("ENV") != "local"
 	poolSize, err := strconv.Atoi(os.Getenv("REDIS_POOL_SIZE"))
+	disableIdentity, _ := strconv.ParseBool(os.Getenv("REDIS_DISABLE_IDENTITY"))
+
 	if err != nil {
 		poolSize = 100
 	}
@@ -46,14 +48,16 @@ func NewRedisClient() RedisClient {
 
 	if !cluster {
 		client := redis.NewClient(&redis.Options{
-			Addr: addrs[0],
+			Addr:             addrs[0],
+			DisableIndentity: disableIdentity,
 		})
 		r = &redisSimpleClient{client}
 	} else {
 		client := redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs:    addrs,
-			PoolSize: poolSize,
-			ReadOnly: true,
+			Addrs:            addrs,
+			PoolSize:         poolSize,
+			ReadOnly:         true,
+			DisableIndentity: disableIdentity,
 		})
 		r = &redisClusterClient{client}
 	}
