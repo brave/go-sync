@@ -2,7 +2,9 @@ package datastore
 
 import (
 	"fmt"
+	"net/http"
 	"os"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -39,12 +41,17 @@ type Dynamo struct {
 
 // NewDynamo returns a dynamoDB client to be used.
 func NewDynamo() (*Dynamo, error) {
-	config := &aws.Config{
-		Region:   aws.String(os.Getenv("AWS_REGION")),
-		Endpoint: aws.String(os.Getenv("AWS_ENDPOINT")),
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:        200,
+			MaxIdleConnsPerHost: 50,
+		},
 	}
 
-	sess, err := session.NewSession(config)
+	awsConfig := aws.NewConfig().WithRegion(os.Getenv("AWS_REGION")).WithEndpoint(os.Getenv("AWS_ENDPOINT")).WithHTTPClient(httpClient)
+	sess, err := session.NewSession(awsConfig)
+
 	if err != nil {
 		return nil, fmt.Errorf("error creating new AWS session: %w", err)
 	}
