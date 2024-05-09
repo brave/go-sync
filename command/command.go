@@ -14,8 +14,9 @@ import (
 
 var (
 	// Could be modified in tests.
-	maxGUBatchSize       = 500
-	maxClientObjectQuota = 60000
+	maxGUBatchSize              = 500
+	maxClientObjectQuota        = 60000
+	maxClientHistoryObjectQuota = 26000
 )
 
 const (
@@ -216,6 +217,16 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 	currentNormalItemCount := itemCounts.ItemCount
 	currentHistoryItemCount := itemCounts.SumHistoryCounts()
 
+	boostedQuotaAddition := 0
+	if currentHistoryItemCount > maxClientHistoryObjectQuota {
+		// Sync chains with history entities stored before the history count fix
+		// may have history counts greater than the new history item quota.
+		// "Boost" the quota with the difference between the history quota and count,
+		// so users can start syncing other entities immediately, instead of waiting for the
+		// history TTL to get rid of the excess items.
+		boostedQuotaAddition = currentHistoryItemCount - maxClientHistoryObjectQuota
+	}
+
 	commitRsp.Entryresponse = make([]*sync_pb.CommitResponse_EntryResponse, len(commitMsg.Entries))
 
 	// Map client-generated ID to its server-generated ID.
@@ -259,35 +270,40 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 		}
 
 		if !isUpdateOp { // Create
-			if currentNormalItemCount+currentHistoryItemCount+newNormalCount+newHistoryCount >= maxClientObjectQuota {
+			if currentNormalItemCount+currentHistoryItemCount+newNormalCount+newHistoryCount >= maxClientObjectQuota+boostedQuotaAddition {
 				rspType := sync_pb.CommitResponse_OVER_QUOTA
 				entryRsp.ResponseType = &rspType
 				entryRsp.ErrorMessage = aws.String(fmt.Sprintf("There are already %v non-deleted objects in store", currentNormalItemCount+currentHistoryItemCount))
 				continue
 			}
 
-			conflict, err := db.InsertSyncEntity(entityToCommit)
-			if err != nil {
-				log.Error().Err(err).Msg("Insert sync entity failed")
-				rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
-				if conflict {
-					rspType = sync_pb.CommitResponse_CONFLICT
+			if !isHistoryRelatedItem || currentHistoryItemCount+newHistoryCount < maxClientHistoryObjectQuota {
+				// Insert all non-history items. For history items, ignore any items above history quoto
+				// and lie to the client about the objects being synced instead of returning OVER_QUOTA
+				// so the client can continue to sync other entities.
+				conflict, err := db.InsertSyncEntity(entityToCommit)
+				if err != nil {
+					log.Error().Err(err).Msg("Insert sync entity failed")
+					rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
+					if conflict {
+						rspType = sync_pb.CommitResponse_CONFLICT
+					}
+					entryRsp.ResponseType = &rspType
+					entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Insert sync entity failed: %v", err.Error()))
+					continue
 				}
-				entryRsp.ResponseType = &rspType
-				entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Insert sync entity failed: %v", err.Error()))
-				continue
-			}
 
-			// Save client-generated to server-generated ID mapping when committing
-			// a new entry with OriginatorClientItemID (client-generated ID).
-			if entityToCommit.OriginatorClientItemID != nil {
-				idMap[*entityToCommit.OriginatorClientItemID] = entityToCommit.ID
-			}
+				// Save client-generated to server-generated ID mapping when committing
+				// a new entry with OriginatorClientItemID (client-generated ID).
+				if entityToCommit.OriginatorClientItemID != nil {
+					idMap[*entityToCommit.OriginatorClientItemID] = entityToCommit.ID
+				}
 
-			if isHistoryRelatedItem {
-				newHistoryCount++
-			} else {
-				newNormalCount++
+				if isHistoryRelatedItem {
+					newHistoryCount++
+				} else {
+					newNormalCount++
+				}
 			}
 		} else { // Update
 			conflict, deleted, err := db.UpdateSyncEntity(entityToCommit, oldVersion)
