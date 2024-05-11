@@ -94,16 +94,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		}
 	}
 	r.Get("/health-check", healthCheckHandler)
-
-	// Add profiling flag to enable profiling routes.
-	if os.Getenv("PPROF_ENABLED") != "" {
-		// pprof attaches routes to default serve mux
-		// host:6061/debug/pprof/
-		go func() {
-			log.Error().Err(http.ListenAndServe(":6061", http.DefaultServeMux))
-		}()
-	}
-
 	return ctx, r
 }
 
@@ -153,6 +143,15 @@ func StartServer() {
 		srv.Shutdown(serverCtx)
 	}()
 
+	// Add profiling flag to enable profiling routes.
+	if os.Getenv("PPROF_ENABLED") != "" {
+		// pprof attaches routes to default serve mux
+		// host:6061/debug/pprof/
+		go func() {
+			log.Error().Err(http.ListenAndServe(":6061", http.DefaultServeMux))
+		}()
+	}
+	
 	err := srv.ListenAndServe()
 	if err == http.ErrServerClosed {
 		log.Info().Msg("HTTP server closed")
