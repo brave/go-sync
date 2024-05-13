@@ -46,14 +46,14 @@ func (m *MockDatastore) HasItem(clientID string, ID string) (bool, error) {
 }
 
 // GetClientItemCount mocks calls to GetClientItemCount
-func (m *MockDatastore) GetClientItemCount(clientID string) (int, error) {
+func (m *MockDatastore) GetClientItemCount(clientID string) (*datastore.ClientItemCounts, error) {
 	args := m.Called(clientID)
-	return args.Int(0), args.Error(1)
+	return &datastore.ClientItemCounts{ClientID: clientID, ID: clientID}, args.Error(1)
 }
 
 // UpdateClientItemCount mocks calls to UpdateClientItemCount
-func (m *MockDatastore) UpdateClientItemCount(clientID string, count int) error {
-	args := m.Called(clientID, count)
+func (m *MockDatastore) UpdateClientItemCount(counts *datastore.ClientItemCounts, newNormalItemCount int, newHistoryItemCount int) error {
+	args := m.Called(counts, newNormalItemCount, newHistoryItemCount)
 	return args.Error(0)
 }
 

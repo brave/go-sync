@@ -28,8 +28,8 @@ const (
 	conditionalCheckFailed           = "ConditionalCheckFailed"
 	disabledChainID                  = "disabled_chain"
 	reasonDeleted                    = "deleted"
-	historyTypeID                int = 963985
-	historyDeleteDirectiveTypeID int = 150251
+	HistoryTypeID                int = 963985
+	HistoryDeleteDirectiveTypeID int = 150251
 	// Expiration time for history and history delete directive
 	// entities in seconds
 	HistoryExpirationIntervalSecs = 14 * 24 * 60 * 60 // 14 days
@@ -167,7 +167,7 @@ func (dynamo *Dynamo) InsertSyncEntity(entity *SyncEntity) (bool, error) {
 
 	// Write tag item for all data types, except for
 	// the history type, which does not use tag items.
-	if entity.ClientDefinedUniqueTag != nil && *entity.DataType != historyTypeID {
+	if entity.ClientDefinedUniqueTag != nil && *entity.DataType != HistoryTypeID {
 		items := []*dynamodb.TransactWriteItem{}
 		// Additional item for ensuring tag's uniqueness for a specific client.
 		item := NewServerClientUniqueTagItem(entity.ClientID, *entity.ClientDefinedUniqueTag, false)
@@ -503,7 +503,7 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (bo
 	// condition to ensure the request is update only...
 	cond := expression.AttributeExists(expression.Name(pk))
 	// ...and the version matches, if applicable
-	if *entity.DataType != historyTypeID {
+	if *entity.DataType != HistoryTypeID {
 		cond = expression.And(cond, expression.Name("Version").Equal(expression.Value(oldVersion)))
 	}
 
@@ -539,7 +539,7 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (bo
 
 	// Soft-delete a sync item with a client tag, use a transaction to delete its
 	// tag item too.
-	if entity.Deleted != nil && entity.ClientDefinedUniqueTag != nil && *entity.Deleted && *entity.DataType != historyTypeID {
+	if entity.Deleted != nil && entity.ClientDefinedUniqueTag != nil && *entity.Deleted && *entity.DataType != HistoryTypeID {
 		pk := PrimaryKey{
 			ClientID: entity.ClientID, ID: clientTagItemPrefix + *entity.ClientDefinedUniqueTag}
 		tagItemKey, err := dynamodbattribute.MarshalMap(pk)
@@ -794,14 +794,14 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 
 	// The client tag hash must be used as the primary key
 	// for the history type.
-	if dataType == historyTypeID {
+	if dataType == HistoryTypeID {
 		id = *entity.ClientTagHash
 	}
 
 	now := time.Now()
 
 	var expirationTime *int64
-	if dataType == historyTypeID || dataType == historyDeleteDirectiveTypeID {
+	if dataType == HistoryTypeID || dataType == HistoryDeleteDirectiveTypeID {
 		expirationTime = aws.Int64(now.Unix() + HistoryExpirationIntervalSecs)
 	}
 

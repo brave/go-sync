@@ -3,7 +3,7 @@ module github.com/brave/go-sync
 go 1.22
 
 require (
-	github.com/aws/aws-sdk-go v1.51.30
+	github.com/aws/aws-sdk-go v1.52.5
 	github.com/brave-intl/bat-go/libs v0.0.0-20231020145457-cc9860c87bae
 	github.com/getsentry/sentry-go v0.27.0
 	github.com/go-chi/chi/v5 v5.0.12
@@ -12,7 +12,7 @@ require (
 	github.com/rs/zerolog v1.32.0
 	github.com/satori/go.uuid v1.2.0
 	github.com/stretchr/testify v1.9.0
-	google.golang.org/protobuf v1.33.0
+	google.golang.org/protobuf v1.34.1
 )
 
 require (
