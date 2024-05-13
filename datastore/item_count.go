@@ -49,56 +49,58 @@ func (counts *ClientItemCounts) SumHistoryCounts() int {
 
 func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(counts *ClientItemCounts) error {
 	now := time.Now().Unix()
-	if counts.ItemCount > 0 && counts.LastPeriodChangeTime == 0 {
-		// If last period change tiem is 0, assume that the old count
-		// exists in ItemCount, which may include history items that have expired
-		// Query the DB to get updated counts
-		pkCond := expression.Key(clientIDDataTypeMtimeIdxPk).Equal(expression.Value(counts.ClientID))
-		filterCond := expression.And(
-			expression.Name(dataTypeAttrName).In(expression.Value(HistoryTypeID), expression.Value(HistoryDeleteDirectiveTypeID)),
-			expression.Name(deletedAttrName).Equal(expression.Value(false)),
-		)
-		expr, err := expression.NewBuilder().WithKeyCondition(pkCond).WithFilter(filterCond).Build()
-		if err != nil {
-			return fmt.Errorf("error building history item count query: %w", err)
+	if counts.LastPeriodChangeTime == 0 {
+		if counts.ItemCount > 0 {
+			// If last period change tiem is 0, assume that the old count
+			// exists in ItemCount, which may include history items that have expired
+			// Query the DB to get updated counts
+			pkCond := expression.Key(clientIDDataTypeMtimeIdxPk).Equal(expression.Value(counts.ClientID))
+			filterCond := expression.And(
+				expression.Name(dataTypeAttrName).In(expression.Value(HistoryTypeID), expression.Value(HistoryDeleteDirectiveTypeID)),
+				expression.Name(deletedAttrName).Equal(expression.Value(false)),
+			)
+			expr, err := expression.NewBuilder().WithKeyCondition(pkCond).WithFilter(filterCond).Build()
+			if err != nil {
+				return fmt.Errorf("error building history item count query: %w", err)
+			}
+			selectCount := dynamodb.SelectCount
+			historyCountInput := &dynamodb.QueryInput{
+				ExpressionAttributeNames:  expr.Names(),
+				ExpressionAttributeValues: expr.Values(),
+				KeyConditionExpression:    expr.KeyCondition(),
+				FilterExpression:          expr.Filter(),
+				TableName:                 aws.String(Table),
+				Select:                    &selectCount,
+			}
+			out, err := dynamo.Query(historyCountInput)
+			if err != nil {
+				return fmt.Errorf("error querying history item count: %w", err)
+			}
+			counts.HistoryItemCountPeriod4 = int(*out.Count)
+			filterCond = expression.And(
+				expression.AttributeExists(expression.Name(dataTypeAttrName)),
+				expression.Name(dataTypeAttrName).NotEqual(expression.Value(HistoryTypeID)),
+				expression.Name(dataTypeAttrName).NotEqual(expression.Value(HistoryDeleteDirectiveTypeID)),
+				expression.Name(deletedAttrName).Equal(expression.Value(false)),
+			)
+			expr, err = expression.NewBuilder().WithKeyCondition(pkCond).WithFilter(filterCond).Build()
+			if err != nil {
+				return fmt.Errorf("error building normal item count query: %w", err)
+			}
+			normalCountInput := &dynamodb.QueryInput{
+				ExpressionAttributeNames:  expr.Names(),
+				ExpressionAttributeValues: expr.Values(),
+				KeyConditionExpression:    expr.KeyCondition(),
+				FilterExpression:          expr.Filter(),
+				TableName:                 aws.String(Table),
+				Select:                    &selectCount,
+			}
+			out, err = dynamo.Query(normalCountInput)
+			if err != nil {
+				return fmt.Errorf("error querying history item count: %w", err)
+			}
+			counts.ItemCount = int(*out.Count)
 		}
-		selectCount := dynamodb.SelectCount
-		historyCountInput := &dynamodb.QueryInput{
-			ExpressionAttributeNames:  expr.Names(),
-			ExpressionAttributeValues: expr.Values(),
-			KeyConditionExpression:    expr.KeyCondition(),
-			FilterExpression:          expr.Filter(),
-			TableName:                 aws.String(Table),
-			Select:                    &selectCount,
-		}
-		out, err := dynamo.Query(historyCountInput)
-		if err != nil {
-			return fmt.Errorf("error querying history item count: %w", err)
-		}
-		counts.HistoryItemCountPeriod4 = int(*out.Count)
-		filterCond = expression.And(
-			expression.AttributeExists(expression.Name(dataTypeAttrName)),
-			expression.Name(dataTypeAttrName).NotEqual(expression.Value(HistoryTypeID)),
-			expression.Name(dataTypeAttrName).NotEqual(expression.Value(HistoryDeleteDirectiveTypeID)),
-			expression.Name(deletedAttrName).Equal(expression.Value(false)),
-		)
-		expr, err = expression.NewBuilder().WithKeyCondition(pkCond).WithFilter(filterCond).Build()
-		if err != nil {
-			return fmt.Errorf("error building normal item count query: %w", err)
-		}
-		normalCountInput := &dynamodb.QueryInput{
-			ExpressionAttributeNames:  expr.Names(),
-			ExpressionAttributeValues: expr.Values(),
-			KeyConditionExpression:    expr.KeyCondition(),
-			FilterExpression:          expr.Filter(),
-			TableName:                 aws.String(Table),
-			Select:                    &selectCount,
-		}
-		out, err = dynamo.Query(normalCountInput)
-		if err != nil {
-			return fmt.Errorf("error querying history item count: %w", err)
-		}
-		counts.ItemCount = int(*out.Count)
 		counts.LastPeriodChangeTime = now
 	} else {
 		timeSinceLastChange := now - counts.LastPeriodChangeTime
