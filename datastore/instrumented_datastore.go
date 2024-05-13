@@ -66,7 +66,7 @@ func (_d DatastoreWithPrometheus) DisableSyncChain(clientID string) (err error) 
 }
 
 // GetClientItemCount implements Datastore
-func (_d DatastoreWithPrometheus) GetClientItemCount(clientID string) (i1 int, err error) {
+func (_d DatastoreWithPrometheus) GetClientItemCount(clientID string) (counts *ClientItemCounts, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -164,7 +164,7 @@ func (_d DatastoreWithPrometheus) IsSyncChainDisabled(clientID string) (b1 bool,
 }
 
 // UpdateClientItemCount implements Datastore
-func (_d DatastoreWithPrometheus) UpdateClientItemCount(clientID string, count int) (err error) {
+func (_d DatastoreWithPrometheus) UpdateClientItemCount(counts *ClientItemCounts, newNormalItemCount int, newHistoryItemCount int) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -174,7 +174,7 @@ func (_d DatastoreWithPrometheus) UpdateClientItemCount(clientID string, count i
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpdateClientItemCount", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.UpdateClientItemCount(clientID, count)
+	return _d.base.UpdateClientItemCount(counts, newNormalItemCount, newHistoryItemCount)
 }
 
 // UpdateSyncEntity implements Datastore
