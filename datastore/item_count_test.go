@@ -3,6 +3,7 @@ package datastore_test
 import (
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
@@ -33,47 +34,54 @@ func (suite *ItemCountTestSuite) TearDownTest() {
 
 func (suite *ItemCountTestSuite) TestGetClientItemCount() {
 	// Insert two items for test.
-	items := []datastore.ClientItemCount{
+	items := []datastore.ClientItemCounts{
 		{ClientID: "client1", ID: "client1", ItemCount: 5},
 		{ClientID: "client2", ID: "client2", ItemCount: 10},
 	}
+	now := time.Now().Unix()
 	for _, item := range items {
+		existing := datastore.ClientItemCounts{ClientID: item.ClientID, ID: item.ID, LastPeriodChangeTime: now}
 		suite.Require().NoError(
-			suite.dynamo.UpdateClientItemCount(item.ClientID, item.ItemCount))
+			suite.dynamo.UpdateClientItemCount(&existing, item.ItemCount, 0))
 	}
 
 	for _, item := range items {
 		count, err := suite.dynamo.GetClientItemCount(item.ClientID)
 		suite.Require().NoError(err, "GetClientItemCount should succeed")
-		suite.Assert().Equal(count, item.ItemCount, "ItemCount should match")
+		suite.Assert().Equal(count.ItemCount, item.ItemCount, "ItemCount should match")
 	}
 
 	// Non-exist client item count should succeed with count = 0.
 	count, err := suite.dynamo.GetClientItemCount("client3")
 	suite.Require().NoError(err, "Get non-exist ClientItemCount should succeed")
-	suite.Assert().Equal(count, 0)
+	suite.Assert().Equal(count.ItemCount, 0)
 }
 
 func (suite *ItemCountTestSuite) TestUpdateClientItemCount() {
-	items := []datastore.ClientItemCount{
+	items := []datastore.ClientItemCounts{
 		{ClientID: "client1", ID: "client1", ItemCount: 1},
 		{ClientID: "client1", ID: "client1", ItemCount: 5},
 		{ClientID: "client2", ID: "client2", ItemCount: 10},
 	}
-	expectedItems := []datastore.ClientItemCount{
+	expectedItems := []datastore.ClientItemCounts{
 		{ClientID: "client1", ID: "client1", ItemCount: 6},
 		{ClientID: "client2", ID: "client2", ItemCount: 10},
 	}
 
 	for _, item := range items {
+		count, err := suite.dynamo.GetClientItemCount(item.ClientID)
+		suite.Require().NoError(err)
 		suite.Require().NoError(
-			suite.dynamo.UpdateClientItemCount(item.ClientID, item.ItemCount))
+			suite.dynamo.UpdateClientItemCount(count, item.ItemCount, 0))
 	}
 
 	clientCountItems, err := datastoretest.ScanClientItemCounts(suite.dynamo)
 	suite.Require().NoError(err, "ScanClientItemCounts should succeed")
 	sort.Sort(datastore.ClientItemCountByClientID(clientCountItems))
 	sort.Sort(datastore.ClientItemCountByClientID(expectedItems))
+	for i := range clientCountItems {
+		clientCountItems[i].LastPeriodChangeTime = 0
+	}
 	suite.Assert().Equal(expectedItems, clientCountItems)
 }
 

@@ -125,7 +125,7 @@ func ScanTagItems(dynamo *datastore.Dynamo) ([]datastore.ServerClientUniqueTagIt
 
 // ScanClientItemCounts scans the dynamoDB table and returns all client item
 // counts.
-func ScanClientItemCounts(dynamo *datastore.Dynamo) ([]datastore.ClientItemCount, error) {
+func ScanClientItemCounts(dynamo *datastore.Dynamo) ([]datastore.ClientItemCounts, error) {
 	filter := expression.AttributeExists(expression.Name("ItemCount"))
 	expr, err := expression.NewBuilder().WithFilter(filter).Build()
 	if err != nil {
@@ -142,7 +142,7 @@ func ScanClientItemCounts(dynamo *datastore.Dynamo) ([]datastore.ClientItemCount
 	if err != nil {
 		return nil, fmt.Errorf("error doing scan for item counts: %w", err)
 	}
-	clientItemCounts := []datastore.ClientItemCount{}
+	clientItemCounts := []datastore.ClientItemCounts{}
 	err = dynamodbattribute.UnmarshalListOfMaps(out.Items, &clientItemCounts)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshalling item counts: %w", err)
