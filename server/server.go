@@ -148,7 +148,9 @@ func StartServer() {
 		// pprof attaches routes to default serve mux
 		// host:6061/debug/pprof/
 		go func() {
-			log.Error().Err(http.ListenAndServe(":6061", http.DefaultServeMux))
+			if err := http.ListenAndServe(":6061", http.DefaultServeMux); err != nil {
+				log.Err(err).Msg("pprof service returned error")
+			}
 		}()
 	}
 	
