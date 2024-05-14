@@ -14,7 +14,8 @@ const (
 	dataTypeAttrName string = "DataType"
 	deletedAttrName  string = "Deleted"
 	// Each period is roughly 3.5 days
-	periodDurationSecs int64 = HistoryExpirationIntervalSecs / 4
+	periodDurationSecs  int64 = HistoryExpirationIntervalSecs / 4
+	CurrentCountVersion int   = 2
 )
 
 // ClientItemCounts is used to marshal and unmarshal ClientItemCounts items in
@@ -28,6 +29,7 @@ type ClientItemCounts struct {
 	HistoryItemCountPeriod3 int
 	HistoryItemCountPeriod4 int
 	LastPeriodChangeTime    int64
+	Version                 int
 }
 
 // ClientItemCountByClientID  implements sort.Interface for []ClientItemCount
@@ -49,7 +51,7 @@ func (counts *ClientItemCounts) SumHistoryCounts() int {
 
 func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(counts *ClientItemCounts) error {
 	now := time.Now().Unix()
-	if counts.LastPeriodChangeTime == 0 {
+	if counts.Version < CurrentCountVersion {
 		if counts.ItemCount > 0 {
 			// If last period change tiem is 0, assume that the old count
 			// exists in ItemCount, which may include history items that have expired
@@ -76,6 +78,9 @@ func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(counts *ClientItemCou
 			if err != nil {
 				return fmt.Errorf("error querying history item count: %w", err)
 			}
+			counts.HistoryItemCountPeriod1 = 0
+			counts.HistoryItemCountPeriod2 = 0
+			counts.HistoryItemCountPeriod3 = 0
 			counts.HistoryItemCountPeriod4 = int(*out.Count)
 			filterCond = expression.And(
 				expression.AttributeExists(expression.Name(dataTypeAttrName)),
@@ -102,6 +107,7 @@ func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(counts *ClientItemCou
 			counts.ItemCount = int(*out.Count)
 		}
 		counts.LastPeriodChangeTime = now
+		counts.Version = CurrentCountVersion
 	} else {
 		timeSinceLastChange := now - counts.LastPeriodChangeTime
 		if timeSinceLastChange >= periodDurationSecs {
