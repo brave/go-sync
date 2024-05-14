@@ -26,6 +26,8 @@ const (
 	nigoriTypeID        int32  = 47745
 	deviceInfoTypeID    int    = 154522
 	maxActiveDevices    int    = 50
+	historyCountTypeStr string = "history"
+	normalCountTypeStr  string = "normal"
 )
 
 // handleGetUpdatesRequest handles GetUpdatesMessage and fills
@@ -192,6 +194,30 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 	return &errCode, nil
 }
 
+func getItemCounts(cache *cache.Cache, db datastore.Datastore, clientID string) (*datastore.ClientItemCounts, int, int, error) {
+	itemCounts, err := db.GetClientItemCount(clientID)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	newNormalCount, newHistoryCount, err := getInterimItemCounts(cache, clientID, false)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	return itemCounts, newNormalCount, newHistoryCount, nil
+}
+
+func getInterimItemCounts(cache *cache.Cache, clientID string, clear bool) (int, int, error) {
+	newNormalCount, err := cache.GetInterimCount(context.Background(), clientID, normalCountTypeStr, clear)
+	if err != nil {
+		return 0, 0, err
+	}
+	newHistoryCount, err := cache.GetInterimCount(context.Background(), clientID, historyCountTypeStr, clear)
+	if err != nil {
+		return 0, 0, err
+	}
+	return newNormalCount, newHistoryCount, nil
+}
+
 // handleCommitRequest handles the commit message and fills the commit response.
 // For each commit entry:
 //   - new sync entity is created and inserted into the database if version is 0.
@@ -206,9 +232,7 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 		return &errCode, nil
 	}
 
-	itemCounts, err := db.GetClientItemCount(clientID)
-	newNormalCount := 0
-	newHistoryCount := 0
+	itemCounts, newNormalCount, newHistoryCount, err := getItemCounts(cache, db, clientID)
 	if err != nil {
 		log.Error().Err(err).Msg("Get client's item count failed")
 		errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
@@ -301,9 +325,9 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 				}
 
 				if isHistoryRelatedItem {
-					newHistoryCount++
+					newHistoryCount, err = cache.IncrementInterimCount(context.Background(), clientID, historyCountTypeStr, false)
 				} else {
-					newNormalCount++
+					newNormalCount, err = cache.IncrementInterimCount(context.Background(), clientID, normalCountTypeStr, false)
 				}
 			}
 		} else { // Update
@@ -322,11 +346,16 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 			}
 			if deleted {
 				if isHistoryRelatedItem {
-					newHistoryCount--
+					newHistoryCount, err = cache.IncrementInterimCount(context.Background(), clientID, historyCountTypeStr, true)
 				} else {
-					newNormalCount--
+					newNormalCount, err = cache.IncrementInterimCount(context.Background(), clientID, normalCountTypeStr, true)
 				}
 			}
+		}
+		if err != nil {
+			log.Error().Err(err).Msg("Interim count update failed")
+			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
+			return &errCode, fmt.Errorf("Interim count update failed: %w", err)
 		}
 
 		typeMtimeMap[*entityToCommit.DataType] = *entityToCommit.Mtime
@@ -336,6 +365,13 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 		entryRsp.IdString = aws.String(entityToCommit.ID)
 		entryRsp.Version = entityToCommit.Version
 		entryRsp.Mtime = entityToCommit.Mtime
+	}
+
+	newNormalCount, newHistoryCount, err = getInterimItemCounts(cache, clientID, true)
+	if err != nil {
+		log.Error().Err(err).Msg("Get interim item counts failed")
+		errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
+		return &errCode, fmt.Errorf("error getting interim item count: %w", err)
 	}
 
 	// Save (clientID#dataType, mtime) into cache after writing into DB.

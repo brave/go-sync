@@ -67,7 +67,7 @@ func (_d RedisClientWithPrometheus) FlushAll(ctx context.Context) (err error) {
 }
 
 // Get implements RedisClient
-func (_d RedisClientWithPrometheus) Get(ctx context.Context, key string) (s1 string, err error) {
+func (_d RedisClientWithPrometheus) Get(ctx context.Context, key string, delete bool) (s1 string, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -77,7 +77,7 @@ func (_d RedisClientWithPrometheus) Get(ctx context.Context, key string) (s1 str
 
 		redisclientDurationSummaryVec.WithLabelValues(_d.instanceName, "Get", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.Get(ctx, key)
+	return _d.base.Get(ctx, key, delete)
 }
 
 // Set implements RedisClient
@@ -92,4 +92,18 @@ func (_d RedisClientWithPrometheus) Set(ctx context.Context, key string, val str
 		redisclientDurationSummaryVec.WithLabelValues(_d.instanceName, "Set", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.Set(ctx, key, val, ttl)
+}
+
+// Incr implements RedisClient
+func (_d RedisClientWithPrometheus) Incr(ctx context.Context, key string, subtract bool) (val int, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		redisclientDurationSummaryVec.WithLabelValues(_d.instanceName, "Incr", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.Incr(ctx, key, subtract)
 }

@@ -14,7 +14,8 @@ import (
 // cluster.
 type RedisClient interface {
 	Set(ctx context.Context, key string, val string, ttl time.Duration) error
-	Get(ctx context.Context, key string) (string, error)
+	Incr(ctx context.Context, key string, subtract bool) (int, error)
+	Get(ctx context.Context, key string, delete bool) (string, error)
 	Del(ctx context.Context, keys ...string) error
 	FlushAll(ctx context.Context) error
 }
@@ -30,7 +31,8 @@ type redisClusterClient struct {
 // NewRedisClient create a client for standalone redis or redis cluster.
 func NewRedisClient() RedisClient {
 	addrs := strings.Split(os.Getenv("REDIS_URL"), ",")
-	cluster := os.Getenv("ENV") != "local"
+	env := os.Getenv("ENV")
+	cluster := env != "local" && env != ""
 	poolSize, err := strconv.Atoi(os.Getenv("REDIS_POOL_SIZE"))
 	if err != nil {
 		poolSize = 100
@@ -65,8 +67,25 @@ func (r *redisSimpleClient) Set(ctx context.Context, key string, val string, ttl
 	return r.client.Set(ctx, key, val, ttl).Err()
 }
 
-func (r *redisSimpleClient) Get(ctx context.Context, key string) (string, error) {
-	val, err := r.client.Get(ctx, key).Result()
+func (r *redisSimpleClient) Incr(ctx context.Context, key string, subtract bool) (int, error) {
+	var res *redis.IntCmd
+	if subtract {
+		res = r.client.Decr(ctx, key)
+	} else {
+		res = r.client.Incr(ctx, key)
+	}
+	val, err := res.Result()
+	return int(val), err
+}
+
+func (r *redisSimpleClient) Get(ctx context.Context, key string, delete bool) (string, error) {
+	var res *redis.StringCmd
+	if delete {
+		res = r.client.GetDel(ctx, key)
+	} else {
+		res = r.client.Get(ctx, key)
+	}
+	val, err := res.Result()
 	if err == redis.Nil {
 		return "", nil
 	}
@@ -85,8 +104,25 @@ func (r *redisClusterClient) Set(ctx context.Context, key string, val string, tt
 	return r.client.Set(ctx, key, val, ttl).Err()
 }
 
-func (r *redisClusterClient) Get(ctx context.Context, key string) (string, error) {
-	val, err := r.client.Get(ctx, key).Result()
+func (r *redisClusterClient) Incr(ctx context.Context, key string, subtract bool) (int, error) {
+	var res *redis.IntCmd
+	if subtract {
+		res = r.client.Decr(ctx, key)
+	} else {
+		res = r.client.Incr(ctx, key)
+	}
+	val, err := res.Result()
+	return int(val), err
+}
+
+func (r *redisClusterClient) Get(ctx context.Context, key string, delete bool) (string, error) {
+	var res *redis.StringCmd
+	if delete {
+		res = r.client.GetDel(ctx, key)
+	} else {
+		res = r.client.Get(ctx, key)
+	}
+	val, err := res.Result()
 	if err == redis.Nil {
 		return "", nil
 	}

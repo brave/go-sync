@@ -63,7 +63,7 @@ services:
     networks:
       - sync
   redis:
-    image: public.ecr.aws/ubuntu/redis:latest
+    image: public.ecr.aws/docker/library/redis:6.2
     ports:
       - "6379:6379"
     environment:
