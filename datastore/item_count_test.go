@@ -3,7 +3,6 @@ package datastore_test
 import (
 	"sort"
 	"testing"
-	"time"
 
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
@@ -38,9 +37,8 @@ func (suite *ItemCountTestSuite) TestGetClientItemCount() {
 		{ClientID: "client1", ID: "client1", ItemCount: 5},
 		{ClientID: "client2", ID: "client2", ItemCount: 10},
 	}
-	now := time.Now().Unix()
 	for _, item := range items {
-		existing := datastore.ClientItemCounts{ClientID: item.ClientID, ID: item.ID, LastPeriodChangeTime: now}
+		existing := datastore.ClientItemCounts{ClientID: item.ClientID, ID: item.ID, Version: datastore.CurrentCountVersion}
 		suite.Require().NoError(
 			suite.dynamo.UpdateClientItemCount(&existing, item.ItemCount, 0))
 	}
@@ -80,6 +78,7 @@ func (suite *ItemCountTestSuite) TestUpdateClientItemCount() {
 	sort.Sort(datastore.ClientItemCountByClientID(clientCountItems))
 	sort.Sort(datastore.ClientItemCountByClientID(expectedItems))
 	for i := range clientCountItems {
+		clientCountItems[i].Version = 0
 		clientCountItems[i].LastPeriodChangeTime = 0
 	}
 	suite.Assert().Equal(expectedItems, clientCountItems)

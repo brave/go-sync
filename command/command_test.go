@@ -109,8 +109,8 @@ func getCommitEntity(id string, version int64, deleted bool, specifics *sync_pb.
 
 func getClientCommand() *sync_pb.ClientCommand {
 	return &sync_pb.ClientCommand{
-		SetSyncPollInterval:        aws.Int32(command.SetSyncPollInterval),
-		MaxCommitBatchSize:         aws.Int32(command.MaxCommitBatchSize),
+		SetSyncPollInterval: aws.Int32(command.SetSyncPollInterval),
+		MaxCommitBatchSize:  aws.Int32(command.MaxCommitBatchSize),
 	}
 }
 
@@ -582,7 +582,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_ReplaceParentIDTo
 }
 
 func assertTypeMtimeCacheValue(suite *CommandTestSuite, key string, mtime int64, errMsg string) {
-	val, err := suite.cache.Get(context.Background(), key)
+	val, err := suite.cache.Get(context.Background(), key, false)
 	suite.Require().NoError(err, "cache.Get should succeed")
 	suite.Assert().Equal(val, strconv.FormatInt(mtime, 10), errMsg)
 }
@@ -595,7 +595,7 @@ func insertSyncEntitiesWithoutUpdateCache(
 		_, err = suite.dynamo.InsertSyncEntity(dbEntry)
 		suite.Require().NoError(err, "Insert sync entity should succeed")
 		val, err := suite.cache.Get(context.Background(),
-			clientID+"#"+strconv.Itoa(*dbEntry.DataType))
+			clientID+"#"+strconv.Itoa(*dbEntry.DataType), false)
 		suite.Require().NoError(err, "Get from cache should succeed")
 		suite.Require().NotEqual(val, strconv.FormatInt(*dbEntry.Mtime, 10),
 			"Cache should not be updated")
