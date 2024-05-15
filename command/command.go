@@ -242,15 +242,14 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 	currentHistoryItemCount := itemCounts.SumHistoryCounts()
 
 	boostedQuotaAddition := 0
-	// if currentHistoryItemCount > maxClientHistoryObjectQuota {
-	// Sync chains with history entities stored before the history count fix
-	// may have history counts greater than the new history item quota.
-	// "Boost" the quota with the difference between the history quota and count,
-	// so users can start syncing other entities immediately, instead of waiting for the
-	// history TTL to get rid of the excess items.
-	// TODO(djandries): re-enable quota boost when i/o calms down
-	// boostedQuotaAddition = currentHistoryItemCount - maxClientHistoryObjectQuota
-	// }
+	if currentHistoryItemCount > maxClientHistoryObjectQuota {
+		// Sync chains with history entities stored before the history count fix
+		// may have history counts greater than the new history item quota.
+		// "Boost" the quota with the difference between the history quota and count,
+		// so users can start syncing other entities immediately, instead of waiting for the
+		// history TTL to get rid of the excess items.
+		boostedQuotaAddition = min(maxClientObjectQuota-maxClientHistoryObjectQuota, currentHistoryItemCount-maxClientHistoryObjectQuota)
+	}
 
 	commitRsp.Entryresponse = make([]*sync_pb.CommitResponse_EntryResponse, len(commitMsg.Entries))
 
