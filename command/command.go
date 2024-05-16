@@ -15,8 +15,8 @@ import (
 var (
 	// Could be modified in tests.
 	maxGUBatchSize              = 500
-	maxClientObjectQuota        = 20000
-	maxClientHistoryObjectQuota = 5000
+	maxClientObjectQuota        = 30000
+	maxClientHistoryObjectQuota = 15000
 )
 
 const (
