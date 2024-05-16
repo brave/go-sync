@@ -8,6 +8,7 @@ import (
 	_ "net/http/pprof" // pprof magic
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -94,16 +95,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		}
 	}
 	r.Get("/health-check", healthCheckHandler)
-
-	// Add profiling flag to enable profiling routes.
-	if os.Getenv("PPROF_ENABLED") != "" {
-		// pprof attaches routes to default serve mux
-		// host:6061/debug/pprof/
-		go func() {
-			log.Error().Err(http.ListenAndServe(":6061", http.DefaultServeMux))
-		}()
-	}
-
 	return ctx, r
 }
 
@@ -152,6 +143,17 @@ func StartServer() {
 		time.Sleep(60 * time.Second)
 		srv.Shutdown(serverCtx)
 	}()
+
+	// Add profiling flag to enable profiling routes.
+	if on, _ := strconv.ParseBool(os.Getenv("PPROF_ENABLED")); on {
+		// pprof attaches routes to default serve mux
+		// host:6061/debug/pprof/
+		go func() {
+			if err := http.ListenAndServe(":6061", http.DefaultServeMux); err != nil {
+				log.Err(err).Msg("pprof service returned error")
+			}
+		}()
+	}
 
 	err := srv.ListenAndServe()
 	if err == http.ErrServerClosed {
