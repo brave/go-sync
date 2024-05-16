@@ -144,7 +144,7 @@ func StartServer() {
 	}()
 
 	// Add profiling flag to enable profiling routes.
-	if os.Getenv("PPROF_ENABLED") != "" {
+	if on, _ := strconv.ParseBool(os.Getenv("PPROF_ENABLED")); on {
 		// pprof attaches routes to default serve mux
 		// host:6061/debug/pprof/
 		go func() {
