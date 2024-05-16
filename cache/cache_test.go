@@ -19,7 +19,7 @@ func (suite *CacheTestSuite) SetupSuite() {
 
 func (suite *CacheTestSuite) TestSetTypeMtime() {
 	suite.cache.SetTypeMtime(context.Background(), "id", 123, 12345678)
-	val, err := suite.cache.Get(context.Background(), "id#123")
+	val, err := suite.cache.Get(context.Background(), "id#123", false)
 	suite.Require().NoError(err)
 	suite.Require().Equal(val, "12345678")
 }
