@@ -8,6 +8,7 @@ import (
 	_ "net/http/pprof" // pprof magic
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -153,7 +154,7 @@ func StartServer() {
 			}
 		}()
 	}
-	
+
 	err := srv.ListenAndServe()
 	if err == http.ErrServerClosed {
 		log.Info().Msg("HTTP server closed")
