@@ -7,7 +7,7 @@ require (
 	github.com/brave-intl/bat-go/libs v0.0.0-20231020145457-cc9860c87bae
 	github.com/getsentry/sentry-go v0.28.1
 	github.com/go-chi/chi/v5 v5.0.12
-	github.com/prometheus/client_golang v1.19.0
+	github.com/prometheus/client_golang v1.19.1
 	github.com/redis/go-redis/v9 v9.5.1
 	github.com/rs/zerolog v1.32.0
 	github.com/satori/go.uuid v1.2.0
