@@ -16,6 +16,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 FROM alpine:3.20 as artifact
 RUN apk add --update ca-certificates # Certificates for SSL
 COPY --from=builder /src/main main
+COPY ./migrations/ ./migrations
 
 EXPOSE 8295
 

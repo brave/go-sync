@@ -19,6 +19,11 @@ var (
 	maxClientHistoryObjectQuota = 30000
 )
 
+var allowedSQLDataTypes = map[int]struct{}{
+	// Sessions
+	50119: {},
+}
+
 const (
 	storeBirthday       string = "1"
 	maxCommitBatchSize  int32  = 90
@@ -33,7 +38,7 @@ const (
 // handleGetUpdatesRequest handles GetUpdatesMessage and fills
 // GetUpdatesResponse. Target sync entities in the database will be updated or
 // deleted based on the client's requests.
-func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessage, guRsp *sync_pb.GetUpdatesResponse, db datastore.Datastore, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
+func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessage, guRsp *sync_pb.GetUpdatesResponse, db datastore.DynamoDatastore, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
 	errCode := sync_pb.SyncEnums_SUCCESS // default value, might be changed later
 	isNewClient := guMsg.GetUpdatesOrigin != nil && *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_NEW_CLIENT
 	isPoll := guMsg.GetUpdatesOrigin != nil && *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_PERIODIC
@@ -194,35 +199,11 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 	return &errCode, nil
 }
 
-func getItemCounts(cache *cache.Cache, db datastore.Datastore, clientID string) (*datastore.ClientItemCounts, int, int, error) {
-	itemCounts, err := db.GetClientItemCount(clientID)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	newNormalCount, newHistoryCount, err := getInterimItemCounts(cache, clientID, false)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	return itemCounts, newNormalCount, newHistoryCount, nil
-}
-
-func getInterimItemCounts(cache *cache.Cache, clientID string, clear bool) (int, int, error) {
-	newNormalCount, err := cache.GetInterimCount(context.Background(), clientID, normalCountTypeStr, clear)
-	if err != nil {
-		return 0, 0, err
-	}
-	newHistoryCount, err := cache.GetInterimCount(context.Background(), clientID, historyCountTypeStr, clear)
-	if err != nil {
-		return 0, 0, err
-	}
-	return newNormalCount, newHistoryCount, nil
-}
-
 // handleCommitRequest handles the commit message and fills the commit response.
 // For each commit entry:
 //   - new sync entity is created and inserted into the database if version is 0.
 //   - existed sync entity will be updated if version is greater than 0.
-func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.CommitResponse, db datastore.Datastore, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
+func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.CommitResponse, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDB, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
 	if commitMsg == nil {
 		return nil, fmt.Errorf("nil commitMsg is received")
 	}
@@ -232,23 +213,22 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 		return &errCode, nil
 	}
 
-	itemCounts, newNormalCount, newHistoryCount, err := getItemCounts(cache, db, clientID)
+	trx, err := sqlDB.Beginx()
+	if err != nil {
+		return nil, fmt.Errorf("error starting transaction: %w", err)
+	}
+	defer trx.Rollback()
+
+	chainID, err := sqlDB.GetAndLockChainID(trx, &clientID)
+	if err != nil {
+		return nil, err
+	}
+
+	itemCounts, err := getItemCounts(cache, dynamoDB, clientID)
 	if err != nil {
 		log.Error().Err(err).Msg("Get client's item count failed")
 		errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
 		return &errCode, fmt.Errorf("error getting client's item count: %w", err)
-	}
-	currentNormalItemCount := itemCounts.ItemCount
-	currentHistoryItemCount := itemCounts.SumHistoryCounts()
-
-	boostedQuotaAddition := 0
-	if currentHistoryItemCount > maxClientHistoryObjectQuota {
-		// Sync chains with history entities stored before the history count fix
-		// may have history counts greater than the new history item quota.
-		// "Boost" the quota with the difference between the history quota and count,
-		// so users can start syncing other entities immediately, instead of waiting for the
-		// history TTL to get rid of the excess items.
-		boostedQuotaAddition = min(maxClientObjectQuota-maxClientHistoryObjectQuota, currentHistoryItemCount-maxClientHistoryObjectQuota)
 	}
 
 	commitRsp.Entryresponse = make([]*sync_pb.CommitResponse_EntryResponse, len(commitMsg.Entries))
@@ -261,7 +241,7 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 		entryRsp := &sync_pb.CommitResponse_EntryResponse{}
 		commitRsp.Entryresponse[i] = entryRsp
 
-		entityToCommit, err := datastore.CreateDBSyncEntity(v, commitMsg.CacheGuid, clientID)
+		entityToCommit, err := datastore.CreateDBSyncEntity(v, commitMsg.CacheGuid, clientID, chainID)
 		if err != nil { // Can't unmarshal & marshal the message from PB into DB format
 			rspType := sync_pb.CommitResponse_INVALID_MESSAGE
 			entryRsp.ResponseType = &rspType
@@ -280,10 +260,16 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 		oldVersion := *entityToCommit.Version
 		isUpdateOp := oldVersion != 0
 		isHistoryRelatedItem := *entityToCommit.DataType == datastore.HistoryTypeID || *entityToCommit.DataType == datastore.HistoryDeleteDirectiveTypeID
+		_, isStoredInSQL := allowedSQLDataTypes[*entityToCommit.DataType]
 		*entityToCommit.Version = *entityToCommit.Mtime
+
 		if *entityToCommit.DataType == datastore.HistoryTypeID {
 			// Check if item exists using client_unique_tag
-			isUpdateOp, err = db.HasItem(clientID, *entityToCommit.ClientDefinedUniqueTag)
+			if isStoredInSQL {
+				isUpdateOp, err = sqlDB.HasItem(trx, *chainID, []byte(*entityToCommit.ClientDefinedUniqueTag))
+			} else {
+				isUpdateOp, err = dynamoDB.HasItem(clientID, *entityToCommit.ClientDefinedUniqueTag)
+			}
 			if err != nil {
 				log.Error().Err(err).Msg("Insert history sync entity failed")
 				rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
@@ -294,18 +280,24 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 		}
 
 		if !isUpdateOp { // Create
-			if currentNormalItemCount+currentHistoryItemCount+newNormalCount+newHistoryCount >= maxClientObjectQuota+boostedQuotaAddition {
+			totalItemCount := itemCounts.sumCounts(false)
+			if totalItemCount >= maxClientObjectQuota {
 				rspType := sync_pb.CommitResponse_OVER_QUOTA
 				entryRsp.ResponseType = &rspType
-				entryRsp.ErrorMessage = aws.String(fmt.Sprintf("There are already %v non-deleted objects in store", currentNormalItemCount+currentHistoryItemCount))
+				entryRsp.ErrorMessage = aws.String(fmt.Sprintf("There are already %v non-deleted objects in store", totalItemCount))
 				continue
 			}
 
-			if !isHistoryRelatedItem || currentHistoryItemCount+newHistoryCount < maxClientHistoryObjectQuota {
+			if !isHistoryRelatedItem || itemCounts.sumCounts(true) < maxClientHistoryObjectQuota {
 				// Insert all non-history items. For history items, ignore any items above history quoto
 				// and lie to the client about the objects being synced instead of returning OVER_QUOTA
 				// so the client can continue to sync other entities.
-				conflict, err := db.InsertSyncEntity(entityToCommit)
+				var conflict bool
+				if isStoredInSQL {
+					conflict, err = sqlDB.InsertSyncEntity(trx, entityToCommit)
+				} else {
+					conflict, err = dynamoDB.InsertSyncEntity(entityToCommit)
+				}
 				if err != nil {
 					log.Error().Err(err).Msg("Insert sync entity failed")
 					rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
@@ -323,14 +315,15 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 					idMap[*entityToCommit.OriginatorClientItemID] = entityToCommit.ID
 				}
 
-				if isHistoryRelatedItem {
-					newHistoryCount, err = cache.IncrementInterimCount(context.Background(), clientID, historyCountTypeStr, false)
-				} else {
-					newNormalCount, err = cache.IncrementInterimCount(context.Background(), clientID, normalCountTypeStr, false)
-				}
+				err = itemCounts.recordChange(*entityToCommit.DataType, false)
 			}
 		} else { // Update
-			conflict, deleted, err := db.UpdateSyncEntity(entityToCommit, oldVersion)
+			var conflict, deleted bool
+			if isStoredInSQL {
+				conflict, deleted, err = sqlDB.UpdateSyncEntity(trx, entityToCommit, oldVersion)
+			} else {
+				conflict, deleted, err = dynamoDB.UpdateSyncEntity(entityToCommit, oldVersion)
+			}
 			if err != nil {
 				log.Error().Err(err).Msg("Update sync entity failed")
 				rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
@@ -344,11 +337,7 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 				continue
 			}
 			if deleted {
-				if isHistoryRelatedItem {
-					newHistoryCount, err = cache.IncrementInterimCount(context.Background(), clientID, historyCountTypeStr, true)
-				} else {
-					newNormalCount, err = cache.IncrementInterimCount(context.Background(), clientID, normalCountTypeStr, true)
-				}
+				err = itemCounts.recordChange(*entityToCommit.DataType, true)
 			}
 		}
 		if err != nil {
@@ -366,7 +355,7 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 		entryRsp.Mtime = entityToCommit.Mtime
 	}
 
-	newNormalCount, newHistoryCount, err = getInterimItemCounts(cache, clientID, true)
+	err = itemCounts.save()
 	if err != nil {
 		log.Error().Err(err).Msg("Get interim item counts failed")
 		errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
@@ -378,24 +367,14 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 		cache.SetTypeMtime(context.Background(), clientID, dataType, mtime)
 	}
 
-	err = db.UpdateClientItemCount(itemCounts, newNormalCount, newHistoryCount)
-	if err != nil {
-		// We only impose a soft quota limit on the item count for each client, so
-		// we only log the error without further actions here. The reason of this
-		// is we do not want to pay the cost to ensure strong consistency on this
-		// value and we do not want to give up previous DB operations if we cannot
-		// update the count this time. In addition, we do not retry this operation
-		// either because it is acceptable to miss one time of this update and
-		// chances of failing to update the item count multiple times in a row for
-		// a single client is quite low.
-		log.Error().Err(err).Msg("Update client item count failed")
-	}
+	trx.Commit()
+
 	return &errCode, nil
 }
 
 // handleClearServerDataRequest handles clearing user data from the datastore and cache
 // and fills the response
-func handleClearServerDataRequest(cache *cache.Cache, db datastore.Datastore, _ *sync_pb.ClearServerDataMessage, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
+func handleClearServerDataRequest(cache *cache.Cache, db datastore.DynamoDatastore, _ *sync_pb.ClearServerDataMessage, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
 	errCode := sync_pb.SyncEnums_SUCCESS
 	var err error
 
@@ -433,7 +412,7 @@ func handleClearServerDataRequest(cache *cache.Cache, db datastore.Datastore, _ 
 
 // HandleClientToServerMessage handles the protobuf ClientToServerMessage and
 // fills the protobuf ClientToServerResponse.
-func HandleClientToServerMessage(cache *cache.Cache, pb *sync_pb.ClientToServerMessage, pbRsp *sync_pb.ClientToServerResponse, db datastore.Datastore, clientID string) error {
+func HandleClientToServerMessage(cache *cache.Cache, pb *sync_pb.ClientToServerMessage, pbRsp *sync_pb.ClientToServerResponse, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDB, clientID string) error {
 	// Create ClientToServerResponse and fill general fields for both GU and
 	// Commit.
 	pbRsp.StoreBirthday = aws.String(storeBirthday)
@@ -447,7 +426,7 @@ func HandleClientToServerMessage(cache *cache.Cache, pb *sync_pb.ClientToServerM
 	} else if *pb.MessageContents == sync_pb.ClientToServerMessage_GET_UPDATES {
 		guRsp := &sync_pb.GetUpdatesResponse{}
 		pbRsp.GetUpdates = guRsp
-		pbRsp.ErrorCode, err = handleGetUpdatesRequest(cache, pb.GetUpdates, guRsp, db, clientID)
+		pbRsp.ErrorCode, err = handleGetUpdatesRequest(cache, pb.GetUpdates, guRsp, dynamoDB, clientID)
 		if err != nil {
 			if pbRsp.ErrorCode != nil {
 				pbRsp.ErrorMessage = aws.String(err.Error())
@@ -461,7 +440,7 @@ func HandleClientToServerMessage(cache *cache.Cache, pb *sync_pb.ClientToServerM
 	} else if *pb.MessageContents == sync_pb.ClientToServerMessage_COMMIT {
 		commitRsp := &sync_pb.CommitResponse{}
 		pbRsp.Commit = commitRsp
-		pbRsp.ErrorCode, err = handleCommitRequest(cache, pb.Commit, commitRsp, db, clientID)
+		pbRsp.ErrorCode, err = handleCommitRequest(cache, pb.Commit, commitRsp, dynamoDB, sqlDB, clientID)
 		if err != nil {
 			if pbRsp.ErrorCode != nil {
 				pbRsp.ErrorMessage = aws.String(err.Error())
@@ -475,7 +454,7 @@ func HandleClientToServerMessage(cache *cache.Cache, pb *sync_pb.ClientToServerM
 	} else if *pb.MessageContents == sync_pb.ClientToServerMessage_CLEAR_SERVER_DATA {
 		csdRsp := &sync_pb.ClearServerDataResponse{}
 		pbRsp.ClearServerData = csdRsp
-		pbRsp.ErrorCode, err = handleClearServerDataRequest(cache, db, pb.ClearServerData, clientID)
+		pbRsp.ErrorCode, err = handleClearServerDataRequest(cache, dynamoDB, pb.ClearServerData, clientID)
 		if err != nil {
 			if pbRsp.ErrorCode != nil {
 				pbRsp.ErrorMessage = aws.String(err.Error())

@@ -33,12 +33,12 @@ func (suite *ItemCountTestSuite) TearDownTest() {
 
 func (suite *ItemCountTestSuite) TestGetClientItemCount() {
 	// Insert two items for test.
-	items := []datastore.ClientItemCounts{
+	items := []datastore.DynamoItemCounts{
 		{ClientID: "client1", ID: "client1", ItemCount: 5},
 		{ClientID: "client2", ID: "client2", ItemCount: 10},
 	}
 	for _, item := range items {
-		existing := datastore.ClientItemCounts{ClientID: item.ClientID, ID: item.ID, Version: datastore.CurrentCountVersion}
+		existing := datastore.DynamoItemCounts{ClientID: item.ClientID, ID: item.ID, Version: datastore.CurrentCountVersion}
 		suite.Require().NoError(
 			suite.dynamo.UpdateClientItemCount(&existing, item.ItemCount, 0))
 	}
@@ -56,12 +56,12 @@ func (suite *ItemCountTestSuite) TestGetClientItemCount() {
 }
 
 func (suite *ItemCountTestSuite) TestUpdateClientItemCount() {
-	items := []datastore.ClientItemCounts{
+	items := []datastore.DynamoItemCounts{
 		{ClientID: "client1", ID: "client1", ItemCount: 1},
 		{ClientID: "client1", ID: "client1", ItemCount: 5},
 		{ClientID: "client2", ID: "client2", ItemCount: 10},
 	}
-	expectedItems := []datastore.ClientItemCounts{
+	expectedItems := []datastore.DynamoItemCounts{
 		{ClientID: "client1", ID: "client1", ItemCount: 6},
 		{ClientID: "client2", ID: "client2", ItemCount: 10},
 	}

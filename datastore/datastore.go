@@ -1,7 +1,7 @@
 package datastore
 
-// Datastore abstracts over the underlying datastore.
-type Datastore interface {
+// DynamoDatastore abstracts over the underlying datastore.
+type DynamoDatastore interface {
 	// Insert a new sync entity.
 	InsertSyncEntity(entity *SyncEntity) (bool, error)
 	// Insert a series of sync entities in a write transaction.
@@ -16,9 +16,9 @@ type Datastore interface {
 	// Check if a server-defined unique tag is in the datastore.
 	HasServerDefinedUniqueTag(clientID string, tag string) (bool, error)
 	// Get the count of sync items for a client.
-	GetClientItemCount(clientID string) (*ClientItemCounts, error)
+	GetClientItemCount(clientID string) (*DynamoItemCounts, error)
 	// Update the count of sync items for a client.
-	UpdateClientItemCount(counts *ClientItemCounts, newNormalItemCount int, newHistoryItemCount int) error
+	UpdateClientItemCount(counts *DynamoItemCounts, newNormalItemCount int, newHistoryItemCount int) error
 	// ClearServerData deletes all items for a given clientID
 	ClearServerData(clientID string) ([]SyncEntity, error)
 	// DisableSyncChain marks a chain as disabled so no further updates or commits can happen

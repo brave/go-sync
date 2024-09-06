@@ -18,9 +18,9 @@ const (
 	CurrentCountVersion int   = 2
 )
 
-// ClientItemCounts is used to marshal and unmarshal ClientItemCounts items in
+// DynamoItemCounts is used to marshal and unmarshal DynamoItemCounts items in
 // dynamoDB.
-type ClientItemCounts struct {
+type DynamoItemCounts struct {
 	ClientID                string
 	ID                      string
 	ItemCount               int
@@ -34,7 +34,7 @@ type ClientItemCounts struct {
 
 // ClientItemCountByClientID  implements sort.Interface for []ClientItemCount
 // based on ClientID.
-type ClientItemCountByClientID []ClientItemCounts
+type ClientItemCountByClientID []DynamoItemCounts
 
 func (a ClientItemCountByClientID) Len() int      { return len(a) }
 func (a ClientItemCountByClientID) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
@@ -42,14 +42,14 @@ func (a ClientItemCountByClientID) Less(i, j int) bool {
 	return a[i].ClientID < a[j].ClientID
 }
 
-func (counts *ClientItemCounts) SumHistoryCounts() int {
+func (counts *DynamoItemCounts) SumHistoryCounts() int {
 	return counts.HistoryItemCountPeriod1 +
 		counts.HistoryItemCountPeriod2 +
 		counts.HistoryItemCountPeriod3 +
 		counts.HistoryItemCountPeriod4
 }
 
-func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(counts *ClientItemCounts) error {
+func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(counts *DynamoItemCounts) error {
 	now := time.Now().Unix()
 	if counts.Version < CurrentCountVersion {
 		if counts.ItemCount > 0 {
@@ -128,7 +128,7 @@ func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(counts *ClientItemCou
 
 // GetClientItemCount returns the count of non-deleted sync items stored for
 // a given client.
-func (dynamo *Dynamo) GetClientItemCount(clientID string) (*ClientItemCounts, error) {
+func (dynamo *Dynamo) GetClientItemCount(clientID string) (*DynamoItemCounts, error) {
 	primaryKey := PrimaryKey{ClientID: clientID, ID: clientID}
 	key, err := dynamodbattribute.MarshalMap(primaryKey)
 	if err != nil {
@@ -145,7 +145,7 @@ func (dynamo *Dynamo) GetClientItemCount(clientID string) (*ClientItemCounts, er
 		return nil, fmt.Errorf("error getting an item-count item: %w", err)
 	}
 
-	clientItemCounts := &ClientItemCounts{}
+	clientItemCounts := &DynamoItemCounts{}
 	err = dynamodbattribute.UnmarshalMap(out.Item, clientItemCounts)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshalling item-count item: %w", err)
@@ -165,7 +165,7 @@ func (dynamo *Dynamo) GetClientItemCount(clientID string) (*ClientItemCounts, er
 
 // UpdateClientItemCount updates the count of non-deleted sync items for a
 // given client stored in the dynamoDB.
-func (dynamo *Dynamo) UpdateClientItemCount(counts *ClientItemCounts, newNormalItemCount int, newHistoryItemCount int) error {
+func (dynamo *Dynamo) UpdateClientItemCount(counts *DynamoItemCounts, newNormalItemCount int, newHistoryItemCount int) error {
 	counts.HistoryItemCountPeriod4 += newHistoryItemCount
 	counts.ItemCount += newNormalItemCount
 

@@ -28,6 +28,7 @@ services:
       - AWS_REGION=us-west-2
       - AWS_ENDPOINT=http://dynamo-local:8000
       - REDIS_URL=redis:6379
+      - SQL_DATABASE_URL=postgres://sync:password@postgres/postgres?sslmode=disable
   web:
     build:
       context: .
@@ -54,6 +55,7 @@ services:
       - AWS_ENDPOINT=http://dynamo-local:8000
       - TABLE_NAME=client-entity-dev
       - REDIS_URL=redis:6379
+      - SQL_DATABASE_URL=postgres://sync:password@postgres/postgres?sslmode=disable
   dynamo-local:
     build:
       context: .
@@ -68,5 +70,14 @@ services:
       - "6379:6379"
     environment:
       - ALLOW_EMPTY_PASSWORD=yes
+    networks:
+      - sync
+  postgres:
+    image: public.ecr.aws/docker/library/postgres:16
+    ports:
+      - "5434:5432"
+    environment:
+      - POSTGRES_USER=sync
+      - POSTGRES_PASSWORD=password
     networks:
       - sync

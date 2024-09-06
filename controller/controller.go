@@ -24,16 +24,16 @@ const (
 )
 
 // SyncRouter add routers for command and auth endpoint requests.
-func SyncRouter(cache *cache.Cache, datastore datastore.Datastore) chi.Router {
+func SyncRouter(cache *cache.Cache, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDB) chi.Router {
 	r := chi.NewRouter()
 	r.Use(syncMiddleware.Auth)
 	r.Use(syncMiddleware.DisabledChain)
-	r.Method("POST", "/command/", middleware.InstrumentHandler("Command", Command(cache, datastore)))
+	r.Method("POST", "/command/", middleware.InstrumentHandler("Command", Command(cache, dynamoDB, sqlDB)))
 	return r
 }
 
 // Command handles GetUpdates and Commit requests from sync clients.
-func Command(cache *cache.Cache, db datastore.Datastore) http.HandlerFunc {
+func Command(cache *cache.Cache, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDB) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		clientID, ok := ctx.Value(syncContext.ContextKeyClientID).(string)
@@ -72,7 +72,7 @@ func Command(cache *cache.Cache, db datastore.Datastore) http.HandlerFunc {
 		}
 
 		pbRsp := &sync_pb.ClientToServerResponse{}
-		err = command.HandleClientToServerMessage(cache, pb, pbRsp, db, clientID)
+		err = command.HandleClientToServerMessage(cache, pb, pbRsp, dynamoDB, sqlDB, clientID)
 		if err != nil {
 			log.Error().Err(err).Msg("Handle command message failed")
 			http.Error(w, err.Error(), http.StatusInternalServerError)

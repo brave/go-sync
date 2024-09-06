@@ -37,12 +37,12 @@ func createServerDefinedUniqueEntity(name string, serverDefinedTag string, clien
 		Version: &version, ParentIdString: &parentID,
 		IdString: &idString, Specifics: specifics}
 
-	return datastore.CreateDBSyncEntity(pbEntity, nil, clientID)
+	return datastore.CreateDBSyncEntity(pbEntity, nil, clientID, nil)
 }
 
 // InsertServerDefinedUniqueEntities inserts the server defined unique tag
 // entities if it is not in the DB yet for a specific client.
-func InsertServerDefinedUniqueEntities(db datastore.Datastore, clientID string) error {
+func InsertServerDefinedUniqueEntities(db datastore.DynamoDatastore, clientID string) error {
 	var entities []*datastore.SyncEntity
 	// Check if they're existed already for this client.
 	// If yes, just return directly.

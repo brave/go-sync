@@ -16,7 +16,7 @@ import (
 // DatastoreWithPrometheus implements Datastore interface with all methods wrapped
 // with Prometheus metrics
 type DatastoreWithPrometheus struct {
-	base         Datastore
+	base         DynamoDatastore
 	instanceName string
 }
 
@@ -30,7 +30,7 @@ var datastoreDurationSummaryVec = promauto.NewSummaryVec(
 	[]string{"instance_name", "method", "result"})
 
 // NewDatastoreWithPrometheus returns an instance of the Datastore decorated with prometheus summary metric
-func NewDatastoreWithPrometheus(base Datastore, instanceName string) DatastoreWithPrometheus {
+func NewDatastoreWithPrometheus(base DynamoDatastore, instanceName string) DatastoreWithPrometheus {
 	return DatastoreWithPrometheus{
 		base:         base,
 		instanceName: instanceName,
@@ -66,7 +66,7 @@ func (_d DatastoreWithPrometheus) DisableSyncChain(clientID string) (err error) 
 }
 
 // GetClientItemCount implements Datastore
-func (_d DatastoreWithPrometheus) GetClientItemCount(clientID string) (counts *ClientItemCounts, err error) {
+func (_d DatastoreWithPrometheus) GetClientItemCount(clientID string) (counts *DynamoItemCounts, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -164,7 +164,7 @@ func (_d DatastoreWithPrometheus) IsSyncChainDisabled(clientID string) (b1 bool,
 }
 
 // UpdateClientItemCount implements Datastore
-func (_d DatastoreWithPrometheus) UpdateClientItemCount(counts *ClientItemCounts, newNormalItemCount int, newHistoryItemCount int) (err error) {
+func (_d DatastoreWithPrometheus) UpdateClientItemCount(counts *DynamoItemCounts, newNormalItemCount int, newHistoryItemCount int) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

@@ -63,22 +63,28 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(batware.BearerToken)
 	r.Use(middleware.CommonResponseHeaders)
 
-	db, err := datastore.NewDynamo()
+	dynamoDB, err := datastore.NewDynamo()
 	if err != nil {
 		sentry.CaptureException(err)
-		log.Panic().Err(err).Msg("Must be able to init datastore to start")
+		log.Panic().Err(err).Msg("Must be able to init Dynamo datastore to start")
+	}
+
+	sqlDB, err := datastore.NewSQLDB()
+	if err != nil {
+		sentry.CaptureException(err)
+		log.Panic().Err(err).Msg("Must be able to init SQL datastore to start")
 	}
 
 	redis := cache.NewRedisClient()
 	cache := cache.NewCache(cache.NewRedisClientWithPrometheus(redis, "redis"))
 
 	// Provide datastore & cache via context
-	ctx = context.WithValue(ctx, syncContext.ContextKeyDatastore, db)
+	ctx = context.WithValue(ctx, syncContext.ContextKeyDatastore, dynamoDB)
 	ctx = context.WithValue(ctx, syncContext.ContextKeyCache, &cache)
 
 	r.Mount("/v2", controller.SyncRouter(
 		cache,
-		datastore.NewDatastoreWithPrometheus(db, "dynamo")))
+		datastore.NewDatastoreWithPrometheus(dynamoDB, "dynamo"), *sqlDB))
 	r.Get("/metrics", batware.Metrics())
 
 	log.Info().
