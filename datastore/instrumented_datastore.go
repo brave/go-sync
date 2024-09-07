@@ -80,7 +80,7 @@ func (_d DatastoreWithPrometheus) GetClientItemCount(clientID string) (counts *D
 }
 
 // GetUpdatesForType implements Datastore
-func (_d DatastoreWithPrometheus) GetUpdatesForType(dataType int, clientToken int64, fetchFolders bool, clientID string, maxSize int64) (b1 bool, sa1 []SyncEntity, err error) {
+func (_d DatastoreWithPrometheus) GetUpdatesForType(dataType int, clientToken int64, fetchFolders bool, clientID string, maxSize int) (b1 bool, sa1 []SyncEntity, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

@@ -26,16 +26,17 @@ const (
 type SyncEntity struct {
 	ClientID string
 	// ChainID is a synthetic key that is connected to the client id in the SQL db.
-	ChainID                *int64 `dynamodbav:"-" db:"chain_id"`
-	ID                     string
+	ChainID                *int64  `dynamodbav:"-" db:"chain_id"`
+	ID                     string  `db:"-"`
 	IDBytes                []byte  `dynamodbav:"-" db:"id"`
+	IDIsUUID               bool    `dynamodbav:"-" db:"id_is_uuid"`
 	ParentID               *string `dynamodbav:",omitempty" db:"parent_id"`
 	Version                *int64
 	Mtime                  *int64
 	Ctime                  *int64
 	Name                   *string `dynamodbav:",omitempty"`
 	NonUniqueName          *string `dynamodbav:",omitempty" db:"non_unique_name"`
-	ServerDefinedUniqueTag *string `dynamodbav:",omitempty" db:"server_defined_unique_tags"`
+	ServerDefinedUniqueTag *string `dynamodbav:",omitempty" db:"server_defined_unique_tag"`
 	Deleted                *bool
 	OriginatorCacheGUID    *string `dynamodbav:",omitempty" db:"originator_cache_guid"`
 	OriginatorClientItemID *string `dynamodbav:",omitempty" db:"originator_client_item_id"`
@@ -43,7 +44,7 @@ type SyncEntity struct {
 	DataType               *int `db:"data_type"`
 	Folder                 *bool
 	ClientDefinedUniqueTag *string `dynamodbav:",omitempty" db:"client_defined_unique_tag"`
-	UniquePosition         []byte  `dynamodbav:",omitempty" db:"server_defined_unique_tag"`
+	UniquePosition         []byte  `dynamodbav:",omitempty" db:"unique_position"`
 	DataTypeMtime          *string
 	ExpirationTime         *int64
 	OldVersion             *int64 `dynamodbav:"-" db:"old_version"`
@@ -148,11 +149,13 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 	}
 
 	var idBytes []byte
+	var idIsUUID bool
 	idUUID, err := uuid.FromString(id)
 	if err != nil {
 		idBytes = []byte(id)
 	} else {
 		idBytes = idUUID.Bytes()
+		idIsUUID = true
 	}
 
 	return &SyncEntity{
@@ -160,6 +163,7 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 		ChainID:                chainID,
 		ID:                     id,
 		IDBytes:                idBytes,
+		IDIsUUID:               idIsUUID,
 		ParentID:               entity.ParentIdString,
 		Version:                entity.Version,
 		Ctime:                  cTime,
@@ -182,8 +186,21 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 
 // CreatePBSyncEntity converts a DB sync item to a protobuf sync entity.
 func CreatePBSyncEntity(entity *SyncEntity) (*sync_pb.SyncEntity, error) {
+	id := entity.ID
+	if len(id) == 0 {
+		if entity.IDIsUUID {
+			idUUID, err := uuid.FromBytes(entity.IDBytes)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse uuid from bytes: %w", err)
+			}
+			id = idUUID.String()
+		} else {
+			id = string(entity.IDBytes)
+		}
+	}
+
 	pbEntity := &sync_pb.SyncEntity{
-		IdString:               &entity.ID,
+		IdString:               &id,
 		ParentIdString:         entity.ParentID,
 		Version:                entity.Version,
 		Mtime:                  entity.Mtime,

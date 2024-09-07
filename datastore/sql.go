@@ -16,6 +16,7 @@ const sqlURLEnvKey = "SQL_DATABASE_URL"
 // SQLDB is a Datastore wrapper around a SQL-based database.
 type SQLDB struct {
 	*sqlx.DB
+	insertQuery string
 }
 
 // NewSQLDB returns a SQLDB client to be used.
@@ -42,6 +43,6 @@ func NewSQLDB() (*SQLDB, error) {
 		return nil, fmt.Errorf("Failed to connect to SQL DB: %v", err)
 	}
 
-	wrappedDB := SQLDB{db}
+	wrappedDB := SQLDB{db, buildInsertQuery()}
 	return &wrappedDB, nil
 }

@@ -38,15 +38,20 @@ const (
 // handleGetUpdatesRequest handles GetUpdatesMessage and fills
 // GetUpdatesResponse. Target sync entities in the database will be updated or
 // deleted based on the client's requests.
-func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessage, guRsp *sync_pb.GetUpdatesResponse, db datastore.DynamoDatastore, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
+func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessage, guRsp *sync_pb.GetUpdatesResponse, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDB, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
 	errCode := sync_pb.SyncEnums_SUCCESS // default value, might be changed later
 	isNewClient := guMsg.GetUpdatesOrigin != nil && *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_NEW_CLIENT
 	isPoll := guMsg.GetUpdatesOrigin != nil && *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_PERIODIC
+
+	var hasChangesRemaining bool
+	var syncEntities []datastore.SyncEntity
+	var err error
+
 	if isNewClient {
 		// Reject the request if client has >= 50 devices in the chain.
 		activeDevices := 0
 		for {
-			hasChangesRemaining, syncEntities, err := db.GetUpdatesForType(deviceInfoTypeID, 0, false, clientID, int64(maxGUBatchSize))
+			hasChangesRemaining, syncEntities, err = dynamoDB.GetUpdatesForType(deviceInfoTypeID, 0, false, clientID, maxGUBatchSize)
 			if err != nil {
 				log.Error().Err(err).Msgf("db.GetUpdatesForType failed for type %v", deviceInfoTypeID)
 				errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
@@ -73,7 +78,7 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 		}
 
 		// Insert initial records if needed.
-		err := InsertServerDefinedUniqueEntities(db, clientID)
+		err := InsertServerDefinedUniqueEntities(dynamoDB, clientID)
 		if err != nil {
 			log.Error().Err(err).Msg("Create server defined unique entities failed")
 			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
@@ -94,6 +99,11 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 	}
 
 	maxSize := maxGUBatchSize
+
+	chainID, err := sqlDB.GetChainID(nil, clientID, false)
+	if err != nil {
+		return nil, err
+	}
 
 	// Process from_progress_marker
 	guRsp.NewProgressMarker = make([]*sync_pb.DataTypeProgressMarker, len(guMsg.FromProgressMarker))
@@ -139,8 +149,13 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 			continue
 		}
 
-		curMaxSize := int64(maxSize) - int64(len(guRsp.Entries))
-		hasChangesRemaining, entities, err := db.GetUpdatesForType(int(*fromProgressMarker.DataTypeId), token, fetchFolders, clientID, curMaxSize)
+		curMaxSize := maxSize - len(guRsp.Entries)
+		dataType := int(*fromProgressMarker.DataTypeId)
+		if _, isStoredInSQL := allowedSQLDataTypes[dataType]; isStoredInSQL {
+			hasChangesRemaining, syncEntities, err = sqlDB.GetUpdatesForType(dataType, token, fetchFolders, *chainID, curMaxSize)
+		} else {
+			hasChangesRemaining, syncEntities, err = dynamoDB.GetUpdatesForType(int(*fromProgressMarker.DataTypeId), token, fetchFolders, clientID, curMaxSize)
+		}
 		if err != nil {
 			log.Error().Err(err).Msgf("db.GetUpdatesForType failed for type %v", *fromProgressMarker.DataTypeId)
 			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
@@ -153,7 +168,7 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 		// which is essential for clients when initializing sync engine with nigori
 		// type. Return a transient error for clients to re-request in this case.
 		if isNewClient && *fromProgressMarker.DataTypeId == nigoriTypeID &&
-			token == 0 && len(entities) == 0 {
+			token == 0 && len(syncEntities) == 0 {
 			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
 			return &errCode, fmt.Errorf("nigori root folder entity is not ready yet")
 		}
@@ -164,8 +179,8 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 
 		// Fill the PB entry from above DB entries until maxSize is reached.
 		j := 0
-		for ; j < len(entities) && len(guRsp.Entries) < cap(guRsp.Entries); j++ {
-			entity, err := datastore.CreatePBSyncEntity(&entities[j])
+		for ; j < len(syncEntities) && len(guRsp.Entries) < cap(guRsp.Entries); j++ {
+			entity, err := datastore.CreatePBSyncEntity(&syncEntities[j])
 			if err != nil {
 				errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
 				return &errCode, fmt.Errorf("error creating protobuf sync entity from DB entity: %w", err)
@@ -175,7 +190,7 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 		// If entities are appended, use the lastest mtime as returned token.
 		if j != 0 {
 			guRsp.NewProgressMarker[i].Token = make([]byte, binary.MaxVarintLen64)
-			binary.PutVarint(guRsp.NewProgressMarker[i].Token, *entities[j-1].Mtime)
+			binary.PutVarint(guRsp.NewProgressMarker[i].Token, *syncEntities[j-1].Mtime)
 		}
 
 		// Save (clientID#dataType, mtime) into cache after querying from DB.
@@ -190,7 +205,7 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 			if j == 0 {
 				mtime = token
 			} else {
-				mtime = *entities[j-1].Mtime
+				mtime = *syncEntities[j-1].Mtime
 			}
 			cache.SetTypeMtime(context.Background(), clientID, int(*fromProgressMarker.DataTypeId), mtime)
 		}
@@ -219,7 +234,7 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 	}
 	defer trx.Rollback()
 
-	chainID, err := sqlDB.GetAndLockChainID(trx, &clientID)
+	chainID, err := sqlDB.GetChainID(trx, clientID, true)
 	if err != nil {
 		return nil, err
 	}
@@ -426,7 +441,7 @@ func HandleClientToServerMessage(cache *cache.Cache, pb *sync_pb.ClientToServerM
 	} else if *pb.MessageContents == sync_pb.ClientToServerMessage_GET_UPDATES {
 		guRsp := &sync_pb.GetUpdatesResponse{}
 		pbRsp.GetUpdates = guRsp
-		pbRsp.ErrorCode, err = handleGetUpdatesRequest(cache, pb.GetUpdates, guRsp, dynamoDB, clientID)
+		pbRsp.ErrorCode, err = handleGetUpdatesRequest(cache, pb.GetUpdates, guRsp, dynamoDB, sqlDB, clientID)
 		if err != nil {
 			if pbRsp.ErrorCode != nil {
 				pbRsp.ErrorMessage = aws.String(err.Error())
