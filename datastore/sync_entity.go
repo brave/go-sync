@@ -9,8 +9,8 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
-	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -26,10 +26,8 @@ const (
 type SyncEntity struct {
 	ClientID string
 	// ChainID is a synthetic key that is connected to the client id in the SQL db.
-	ChainID                *int64  `dynamodbav:"-" db:"chain_id"`
-	ID                     string  `db:"-"`
-	IDBytes                []byte  `dynamodbav:"-" db:"id"`
-	IDIsUUID               bool    `dynamodbav:"-" db:"id_is_uuid"`
+	ChainID                *int64 `dynamodbav:"-" db:"chain_id"`
+	ID                     string
 	ParentID               *string `dynamodbav:",omitempty" db:"parent_id"`
 	Version                *int64
 	Mtime                  *int64
@@ -71,7 +69,7 @@ func validatePBEntity(entity *sync_pb.SyncEntity) error {
 }
 
 // CreateDBSyncEntity converts a protobuf sync entity into a DB sync item.
-func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID string, chainID *int64) (*SyncEntity, error) {
+func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID string, chainID int64) (*SyncEntity, error) {
 	err := validatePBEntity(entity)
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid sync_pb.SyncEntity received")
@@ -105,16 +103,14 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 	var originatorCacheGUID, originatorClientItemID *string
 	if cacheGUID != nil {
 		if *entity.Version == 0 {
-			id = uuid.NewV4().String()
+			idUUID, err := uuid.NewV7()
+			if err != nil {
+				return nil, err
+			}
+			id = idUUID.String()
 		}
 		originatorCacheGUID = cacheGUID
 		originatorClientItemID = entity.IdString
-	}
-
-	// The client tag hash must be used as the primary key
-	// for the history type.
-	if dataType == HistoryTypeID {
-		id = *entity.ClientTagHash
 	}
 
 	now := time.Now()
@@ -148,22 +144,10 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 		}
 	}
 
-	var idBytes []byte
-	var idIsUUID bool
-	idUUID, err := uuid.FromString(id)
-	if err != nil {
-		idBytes = []byte(id)
-	} else {
-		idBytes = idUUID.Bytes()
-		idIsUUID = true
-	}
-
 	return &SyncEntity{
 		ClientID:               clientID,
-		ChainID:                chainID,
+		ChainID:                &chainID,
 		ID:                     id,
-		IDBytes:                idBytes,
-		IDIsUUID:               idIsUUID,
 		ParentID:               entity.ParentIdString,
 		Version:                entity.Version,
 		Ctime:                  cTime,
@@ -186,21 +170,15 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 
 // CreatePBSyncEntity converts a DB sync item to a protobuf sync entity.
 func CreatePBSyncEntity(entity *SyncEntity) (*sync_pb.SyncEntity, error) {
-	id := entity.ID
-	if len(id) == 0 {
-		if entity.IDIsUUID {
-			idUUID, err := uuid.FromBytes(entity.IDBytes)
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse uuid from bytes: %w", err)
-			}
-			id = idUUID.String()
-		} else {
-			id = string(entity.IDBytes)
-		}
+	id := &entity.ID
+	// The client tag hash must be used as the primary key
+	// for the history type.
+	if *entity.DataType == HistoryTypeID {
+		id = entity.ClientDefinedUniqueTag
 	}
 
 	pbEntity := &sync_pb.SyncEntity{
-		IdString:               &id,
+		IdString:               id,
 		ParentIdString:         entity.ParentID,
 		Version:                entity.Version,
 		Mtime:                  entity.Mtime,

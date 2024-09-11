@@ -1,24 +1,23 @@
 CREATE TABLE chains (
 	id BIGSERIAL PRIMARY KEY,
 	client_id BYTEA NOT NULL,
+	last_usage_time TIMESTAMP NOT NULL,
 	UNIQUE (client_id)
 );
 
 CREATE TABLE dynamo_migration_statuses (
 	chain_id BIGINT REFERENCES chains(id),
 	data_type INTEGER,
-	-- null earliest_mtime value indicates that all entities have been migrated
-	earliest_mtime BIGINT,
+	earliest_mtime BIGINT NOT NULL,
 	PRIMARY KEY (chain_id, data_type)
 );
 
 CREATE TABLE entities (
-	id BYTEA STORAGE PLAIN,
+	id UUID,
 	chain_id BIGINT NOT NULL REFERENCES chains(id),
 	data_type INTEGER NOT NULL,
 	ctime BIGINT NOT NULL,
 	mtime BIGINT NOT NULL,
-	id_is_uuid BOOLEAN NOT NULL,
 	specifics BYTEA STORAGE EXTERNAL NOT NULL,
 	deleted BOOL NOT NULL,
 	client_defined_unique_tag TEXT STORAGE PLAIN,

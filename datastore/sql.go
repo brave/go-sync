@@ -8,6 +8,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	_ "github.com/jackc/pgx/stdlib"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -17,10 +18,16 @@ const sqlURLEnvKey = "SQL_DATABASE_URL"
 type SQLDB struct {
 	*sqlx.DB
 	insertQuery string
+	Variations  *SQLVariations
 }
 
 // NewSQLDB returns a SQLDB client to be used.
 func NewSQLDB() (*SQLDB, error) {
+	variations, err := LoadSQLVariations()
+	if err != nil {
+		return nil, err
+	}
+
 	sqlURL := os.Getenv(sqlURLEnvKey)
 	if len(sqlURL) == 0 {
 		return nil, fmt.Errorf("%s must be defined", sqlURLEnvKey)
@@ -38,11 +45,11 @@ func NewSQLDB() (*SQLDB, error) {
 		}
 	}
 
-	db, err := sqlx.Connect("postgres", sqlURL)
+	db, err := sqlx.Connect("pgx", sqlURL)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to connect to SQL DB: %v", err)
 	}
 
-	wrappedDB := SQLDB{db, buildInsertQuery()}
+	wrappedDB := SQLDB{db, buildInsertQuery(), variations}
 	return &wrappedDB, nil
 }

@@ -52,13 +52,6 @@ type DisabledMarkerItem struct {
 	Ctime    *int64
 }
 
-// DisabledMarkerItemQuery is used to query for disabled marker item in
-// DynamoDB
-type DisabledMarkerItemQuery struct {
-	ClientID string
-	ID       string
-}
-
 // ServerClientUniqueTagItem is used to marshal and unmarshal tag items in
 // dynamoDB.
 type ServerClientUniqueTagItem struct {
@@ -68,9 +61,8 @@ type ServerClientUniqueTagItem struct {
 	Ctime    *int64
 }
 
-// ServerClientUniqueTagItemQuery is used to query for unique tag items in
-// dynamoDB.
-type ServerClientUniqueTagItemQuery struct {
+// ItemQuery is used to query for items in dynamoDB.
+type ItemQuery struct {
 	ClientID string // Hash key
 	ID       string // Range key
 }
@@ -109,10 +101,10 @@ func NewServerClientUniqueTagItem(clientID string, tag string, isServer bool) *S
 
 // NewServerClientUniqueTagItemQuery creates a tag item query which is used to
 // determine whether a sync entity has a unique tag item or not
-func NewServerClientUniqueTagItemQuery(clientID string, tag string, isServer bool) *ServerClientUniqueTagItemQuery {
+func NewServerClientUniqueTagItemQuery(clientID string, tag string, isServer bool) *ItemQuery {
 	prefix := getTagPrefix(isServer)
 
-	return &ServerClientUniqueTagItemQuery{
+	return &ItemQuery{
 		ClientID: clientID,
 		ID:       prefix + tag,
 	}
@@ -185,8 +177,17 @@ func (dynamo *Dynamo) InsertSyncEntity(entity *SyncEntity) (bool, error) {
 		return false, nil
 	}
 
+	actualID := entity.ID
+	if *entity.DataType == HistoryTypeID {
+		entity.ID = *entity.ClientDefinedUniqueTag
+	}
+
 	// Normal sync item
 	av, err := dynamodbattribute.MarshalMap(*entity)
+	if *entity.DataType == HistoryTypeID {
+		entity.ID = actualID
+	}
+
 	if err != nil {
 		return false, fmt.Errorf("error marshalling sync item to insert sync entity: %w", err)
 	}
@@ -437,7 +438,7 @@ func (dynamo *Dynamo) ClearServerData(clientID string) ([]SyncEntity, error) {
 
 // IsSyncChainDisabled checks whether a given sync chain has been deleted
 func (dynamo *Dynamo) IsSyncChainDisabled(clientID string) (bool, error) {
-	key, err := dynamodbattribute.MarshalMap(DisabledMarkerItemQuery{
+	key, err := dynamodbattribute.MarshalMap(ItemQuery{
 		ClientID: clientID,
 		ID:       disabledChainID,
 	})
@@ -460,7 +461,11 @@ func (dynamo *Dynamo) IsSyncChainDisabled(clientID string) (bool, error) {
 
 // UpdateSyncEntity updates a sync item in dynamoDB.
 func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (bool, bool, error) {
-	primaryKey := PrimaryKey{ClientID: entity.ClientID, ID: entity.ID}
+	id := entity.ID
+	if *entity.DataType == HistoryTypeID {
+		id = *entity.ClientDefinedUniqueTag
+	}
+	primaryKey := PrimaryKey{ClientID: entity.ClientID, ID: id}
 	key, err := dynamodbattribute.MarshalMap(primaryKey)
 	if err != nil {
 		return false, false, fmt.Errorf("error marshalling key to update sync entity: %w", err)
@@ -598,13 +603,18 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (bo
 // To do this in dynamoDB, we use (ClientID, DataType#Mtime) as GSI to get a
 // list of (ClientID, ID) primary keys with the given condition, then read the
 // actual sync item using the list of primary keys.
-func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFolders bool, clientID string, maxSize int) (bool, []SyncEntity, error) {
+func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFolders bool, clientID string, maxSize int, maxMtime *int64) (bool, []SyncEntity, error) {
 	syncEntities := []SyncEntity{}
 
 	// Get (ClientID, ID) pairs which are updates after mtime for a data type,
 	// sorted by dataType#mTime. e.g. sorted by mtime since dataType is the same.
 	dataTypeMtimeLowerBound := strconv.Itoa(dataType) + "#" + strconv.FormatInt(clientToken+1, 10)
-	dataTypeMtimeUpperBound := strconv.Itoa(dataType+1) + "#0"
+	var dataTypeMtimeUpperBound string
+	if maxMtime != nil {
+		dataTypeMtimeUpperBound = strconv.Itoa(dataType) + "#" + strconv.FormatInt(*maxMtime-1, 10)
+	} else {
+		dataTypeMtimeUpperBound = strconv.Itoa(dataType+1) + "#0"
+	}
 	pkCond := expression.Key(clientIDDataTypeMtimeIdxPk).Equal(expression.Value(clientID))
 	skCond := expression.KeyBetween(
 		expression.Key(clientIDDataTypeMtimeIdxSk),
@@ -695,4 +705,36 @@ func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFo
 
 	sort.Sort(SyncEntityByMtime(filteredSyncEntities))
 	return hasChangesRemaining, filteredSyncEntities, nil
+}
+
+func (dynamo *Dynamo) DeleteEntity(entity *SyncEntity) (oldEntity *SyncEntity, err error) {
+	key, err := dynamodbattribute.MarshalMap(ItemQuery{
+		ClientID: entity.ClientID,
+		ID:       entity.ID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error marshalling key to get item for deletion: %w", err)
+	}
+
+	returnValues := dynamodb.ReturnValueAllOld
+	input := &dynamodb.DeleteItemInput{
+		TableName:    aws.String(Table),
+		Key:          key,
+		ReturnValues: &returnValues,
+	}
+
+	result, err := dynamo.DeleteItem(input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to delete item: %w", err)
+	}
+
+	if result.Attributes == nil {
+		return nil, nil
+	}
+
+	if err = dynamodbattribute.UnmarshalMap(result.Attributes, &oldEntity); err != nil {
+		return nil, fmt.Errorf("failed to get old entity after deleting: %w", err)
+	}
+
+	return oldEntity, nil
 }

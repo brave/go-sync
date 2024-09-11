@@ -8,7 +8,7 @@ import (
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 	"github.com/brave/go-sync/utils"
-	"github.com/satori/go.uuid"
+	"github.com/google/uuid"
 )
 
 const (
@@ -29,7 +29,11 @@ func createServerDefinedUniqueEntity(name string, serverDefinedTag string, clien
 	deleted := false
 	folder := true
 	version := int64(1)
-	idString := uuid.NewV4().String()
+	idUUID, err := uuid.NewV7()
+	if err != nil {
+		return nil, err
+	}
+	idString := idUUID.String()
 
 	pbEntity := &sync_pb.SyncEntity{
 		Ctime: &now, Mtime: &now, Deleted: &deleted, Folder: &folder,
@@ -37,7 +41,7 @@ func createServerDefinedUniqueEntity(name string, serverDefinedTag string, clien
 		Version: &version, ParentIdString: &parentID,
 		IdString: &idString, Specifics: specifics}
 
-	return datastore.CreateDBSyncEntity(pbEntity, nil, clientID, nil)
+	return datastore.CreateDBSyncEntity(pbEntity, nil, clientID, 0)
 }
 
 // InsertServerDefinedUniqueEntities inserts the server defined unique tag

@@ -5,32 +5,22 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 )
 
-const chainIDSelectQuery = "SELECT id FROM chains WHERE client_id = $1"
-
 var fieldsToInsert = []string{
-	"id", "chain_id", "data_type", "ctime", "mtime", "id_is_uuid", "specifics",
+	"id", "chain_id", "data_type", "ctime", "mtime", "specifics",
 	"deleted", "client_defined_unique_tag", "server_defined_unique_tag", "folder", "version",
 	"name", "originator_cache_guid", "originator_client_item_id", "parent_id", "non_unique_name",
 	"unique_position",
-}
-
-type ChainRow struct {
-	ID *int64
 }
 
 type MigrationStatus struct {
 	ChainID       int64 `db:"chain_id"`
 	DataType      int   `db:"data_type"`
 	EarliestMtime int64 `db:"earliest_mtime"`
-}
-
-type CommonSQLX interface {
-	Get(dest interface{}, query string, args ...interface{}) error
-	Exec(query string, args ...any) (sql.Result, error)
 }
 
 func buildInsertQuery() string {
@@ -50,10 +40,7 @@ func buildInsertQuery() string {
 		joinedSetValues + ` WHERE entities.deleted = true`
 }
 
-func (sqlDB *SQLDB) InsertSyncEntity(tx *sqlx.Tx, entity *SyncEntity) (bool, error) {
-	if entity.Deleted != nil && *entity.Deleted {
-		return true, nil
-	}
+func (sqlDB *SQLDB) InsertSyncEntity(tx *sqlx.Tx, entity *SyncEntity) (conflict bool, err error) {
 	res, err := tx.NamedExec(sqlDB.insertQuery, entity)
 	if err != nil {
 		return false, fmt.Errorf("failed to insert entity: %w", err)
@@ -67,25 +54,33 @@ func (sqlDB *SQLDB) InsertSyncEntity(tx *sqlx.Tx, entity *SyncEntity) (bool, err
 	return rowsAffected == 0, nil
 }
 
-func (sqlDB *SQLDB) HasItem(tx *sqlx.Tx, chainId int64, idBytes []byte) (bool, error) {
-	var exists bool
-	err := tx.QueryRowx("SELECT EXISTS(SELECT 1 FROM entities WHERE chain_id = $1 AND id = $2)", chainId, idBytes).Scan(&exists)
+func (sqlDB *SQLDB) HasItem(tx *sqlx.Tx, chainId int64, clientTag string) (exists bool, err error) {
+	err = tx.QueryRowx("SELECT EXISTS(SELECT 1 FROM entities WHERE chain_id = $1 AND client_defined_unique_tag = $2)", chainId, clientTag).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("failed to check existence of item: %w", err)
 	}
 	return exists, nil
 }
 
-func (sqlDB *SQLDB) UpdateDynamoMigrationStatuses(tx *sqlx.Tx, chainID int64, data_type_earliest_mtime_map map[int]int64) error {
-	var statuses []MigrationStatus
-	for dataType, earliestMtime := range data_type_earliest_mtime_map {
-		statuses = append(statuses, MigrationStatus{
-			ChainID:       chainID,
-			DataType:      dataType,
-			EarliestMtime: earliestMtime,
-		})
+func (sqlDB *SQLDB) GetDynamoMigrationStatus(chainID int64, dataType int) (*MigrationStatus, error) {
+	var status MigrationStatus
+	err := sqlDB.Get(&status, `
+		SELECT chain_id, data_type, earliest_mtime
+		FROM dynamo_migration_statuses
+		WHERE chain_id = $1 AND data_type = $2
+	`, chainID, dataType)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get dynamo migration status: %w", err)
 	}
 
+	return &status, nil
+}
+
+func (sqlDB *SQLDB) UpdateDynamoMigrationStatuses(tx *sqlx.Tx, statuses []MigrationStatus) error {
 	_, err := tx.NamedExec(`
 		INSERT INTO dynamo_migration_statuses (chain_id, data_type, earliest_mtime)
 		VALUES (:chain_id, :data_type, :earliest_mtime)
@@ -100,8 +95,14 @@ func (sqlDB *SQLDB) UpdateDynamoMigrationStatuses(tx *sqlx.Tx, chainID int64, da
 	return nil
 }
 
-func (sqlDB *SQLDB) UpdateSyncEntity(tx *sqlx.Tx, entity *SyncEntity, oldVersion int64) (bool, bool, error) {
-	whereClause := " WHERE id = :id AND chain_id = :chain_id AND deleted = false"
+func (sqlDB *SQLDB) UpdateSyncEntity(tx *sqlx.Tx, entity *SyncEntity, oldVersion int64) (conflict bool, err error) {
+	var idColumn string
+	if *entity.DataType == HistoryTypeID {
+		idColumn = "client_defined_unique_tag"
+	} else {
+		idColumn = "id"
+	}
+	whereClause := " WHERE " + idColumn + " = :id AND chain_id = :chain_id AND deleted = false"
 	if *entity.DataType != HistoryTypeID {
 		entity.OldVersion = &oldVersion
 		whereClause += " AND version = :old_version"
@@ -140,55 +141,50 @@ func (sqlDB *SQLDB) UpdateSyncEntity(tx *sqlx.Tx, entity *SyncEntity, oldVersion
 
 	result, err := tx.NamedExec(query, entity)
 	if err != nil {
-		return false, false, fmt.Errorf("error updating entity: %w", err)
+		return false, fmt.Errorf("error updating entity: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return false, false, fmt.Errorf("error getting rows affected after update: %w", err)
+		return false, fmt.Errorf("error getting rows affected after update: %w", err)
 	}
 
-	return rowsAffected == 0, entity.Deleted != nil && *entity.Deleted, nil
+	return rowsAffected == 0, nil
 }
 
-func (sqlDB *SQLDB) GetChainID(tx *sqlx.Tx, clientID string, acquireUpdateLock bool) (*int64, error) {
+func (sqlDB *SQLDB) GetAndLockChainID(tx *sqlx.Tx, clientID string) (chainID *int64, err error) {
 	// Get chain ID and lock for updates
 	clientIDBytes, err := hex.DecodeString(clientID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode clientID: %w", err)
 	}
-	row := ChainRow{}
 
-	var lockClause string
-	if acquireUpdateLock {
-		lockClause = " FOR UPDATE"
+	var id int64
+
+	err = tx.QueryRowx(`
+		INSERT INTO chains (client_id, last_usage_time) VALUES ($1, $2)
+		ON CONFLICT (client_id)
+		DO UPDATE SET last_usage_time = EXCLUDED.last_usage_time
+		RETURNING id
+	`, clientIDBytes, time.Now()).Scan(&id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upsert chain: %w", err)
 	}
 
-	var commonSQLX CommonSQLX
-	if tx != nil {
-		commonSQLX = tx
-	} else {
-		commonSQLX = sqlDB
+	// Once we have completely migrated over to SQL, we can change this to
+	// `FOR UPDATE`, and only lock upon commits. We need to lock for updates
+	// as we will be deleting older Dynamo items during update requests, and migrating
+	// them over to SQL. If another client in the chain updates during this process,
+	// the client may not receive some older items.
+	_, err = tx.Exec(`SELECT id FROM chains WHERE id = $1 FOR SHARE`, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire lock on chain: %w", err)
 	}
 
-	if err := commonSQLX.Get(&row, chainIDSelectQuery+lockClause, clientIDBytes); err != nil {
-		if err != sql.ErrNoRows {
-			return nil, fmt.Errorf("failed to get chain id: %w", err)
-		}
-		_, err := commonSQLX.Exec("INSERT INTO chains (client_id) VALUES ($1)", clientIDBytes)
-		if err != nil {
-			return nil, fmt.Errorf("failed to insert chain: %w", err)
-		}
-
-		if err = commonSQLX.Get(&row, chainIDSelectQuery+lockClause, clientIDBytes); err != nil {
-			return nil, fmt.Errorf("failed to get chain id: %w", err)
-		}
-	}
-
-	return row.ID, nil
+	return &id, nil
 }
 
-func (sqlDB *SQLDB) GetUpdatesForType(dataType int, clientToken int64, fetchFolders bool, chainID int64, maxSize int) (bool, []SyncEntity, error) {
+func (sqlDB *SQLDB) GetUpdatesForType(dataType int, clientToken int64, fetchFolders bool, chainID int64, maxSize int) (hasChangesRemaining bool, entities []SyncEntity, err error) {
 	var additionalCondition string
 	if !fetchFolders {
 		additionalCondition = "AND folder = false "
@@ -196,7 +192,6 @@ func (sqlDB *SQLDB) GetUpdatesForType(dataType int, clientToken int64, fetchFold
 	query := `SELECT * FROM entities
 		WHERE chain_id = $1 AND data_type = $2 AND mtime > $3 ` + additionalCondition + `ORDER BY mtime LIMIT $4`
 
-	entities := []SyncEntity{}
 	if err := sqlDB.Select(&entities, query, chainID, dataType, clientToken, maxSize); err != nil {
 		return false, nil, fmt.Errorf("failed to get entity updates: %w", err)
 	}

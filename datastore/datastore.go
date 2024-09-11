@@ -12,7 +12,7 @@ type DynamoDatastore interface {
 	// client token for a given client. Besides the array of sync entities, a
 	// boolean value indicating whether there are more updates to query in the
 	// next batch is returned.
-	GetUpdatesForType(dataType int, clientToken int64, fetchFolders bool, clientID string, maxSize int) (bool, []SyncEntity, error)
+	GetUpdatesForType(dataType int, clientToken int64, fetchFolders bool, clientID string, maxSize int, maxMtime *int64) (bool, []SyncEntity, error)
 	// Check if a server-defined unique tag is in the datastore.
 	HasServerDefinedUniqueTag(clientID string, tag string) (bool, error)
 	// Get the count of sync items for a client.
@@ -27,4 +27,6 @@ type DynamoDatastore interface {
 	IsSyncChainDisabled(clientID string) (bool, error)
 	// Checks if sync item exists for a client
 	HasItem(clientID string, ID string) (bool, error)
+	// Deletes an existing item
+	DeleteEntity(entity *SyncEntity) (*SyncEntity, error)
 }

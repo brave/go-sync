@@ -6,6 +6,7 @@ import (
 
 	"github.com/brave/go-sync/cache"
 	"github.com/brave/go-sync/datastore"
+	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
 )
 
@@ -13,6 +14,7 @@ type ItemCounts struct {
 	cache                *cache.Cache
 	dynamoDB             datastore.DynamoDatastore
 	dynamoItemCounts     *datastore.DynamoItemCounts
+	sqlItemCounts        *datastore.SQLItemCounts
 	clientID             string
 	cacheNewNormalCount  int
 	cacheNewHistoryCount int
@@ -20,16 +22,19 @@ type ItemCounts struct {
 	sqlTxNewHistoryCount int
 }
 
-func getItemCounts(cache *cache.Cache, dynamoDB datastore.DynamoDatastore, clientID string) (*ItemCounts, error) {
+func getItemCounts(cache *cache.Cache, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDB, tx *sqlx.Tx, clientID string, chainID int64) (*ItemCounts, error) {
 	dynamoItemCounts, err := dynamoDB.GetClientItemCount(clientID)
 	if err != nil {
 		return nil, err
 	}
 
+	sqlItemCounts, err := sqlDB.GetItemCounts(tx, chainID)
+
 	itemCounts := ItemCounts{
 		cache:                cache,
 		dynamoDB:             dynamoDB,
 		dynamoItemCounts:     dynamoItemCounts,
+		sqlItemCounts:        sqlItemCounts,
 		clientID:             clientID,
 		cacheNewNormalCount:  0,
 		cacheNewHistoryCount: 0,
@@ -58,8 +63,7 @@ func (itemCounts *ItemCounts) updateInterimItemCounts(clear bool) error {
 	return nil
 }
 
-func (itemCounts *ItemCounts) recordChange(dataType int, subtract bool) error {
-	_, isStoredInSQL := allowedSQLDataTypes[dataType]
+func (itemCounts *ItemCounts) recordChange(dataType int, subtract bool, isStoredInSQL bool) error {
 	isHistory := dataType == datastore.HistoryTypeID
 	if isStoredInSQL {
 		delta := 1
