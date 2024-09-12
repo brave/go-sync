@@ -24,7 +24,7 @@ const (
 )
 
 // SyncRouter add routers for command and auth endpoint requests.
-func SyncRouter(cache *cache.Cache, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDB) chi.Router {
+func SyncRouter(cache *cache.Cache, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDatastore) chi.Router {
 	r := chi.NewRouter()
 	r.Use(syncMiddleware.Auth)
 	r.Use(syncMiddleware.DisabledChain)
@@ -33,7 +33,7 @@ func SyncRouter(cache *cache.Cache, dynamoDB datastore.DynamoDatastore, sqlDB da
 }
 
 // Command handles GetUpdates and Commit requests from sync clients.
-func Command(cache *cache.Cache, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDB) http.HandlerFunc {
+func Command(cache *cache.Cache, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDatastore) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		clientID, ok := ctx.Value(syncContext.ContextKeyClientID).(string)

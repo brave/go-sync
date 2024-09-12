@@ -8,7 +8,8 @@ CREATE TABLE chains (
 CREATE TABLE dynamo_migration_statuses (
 	chain_id BIGINT REFERENCES chains(id),
 	data_type INTEGER,
-	earliest_mtime BIGINT NOT NULL,
+	-- null earliest_mtime indicates that all entities have been migrated
+	earliest_mtime BIGINT,
 	PRIMARY KEY (chain_id, data_type)
 );
 

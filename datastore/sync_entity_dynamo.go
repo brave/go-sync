@@ -603,13 +603,17 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (bo
 // To do this in dynamoDB, we use (ClientID, DataType#Mtime) as GSI to get a
 // list of (ClientID, ID) primary keys with the given condition, then read the
 // actual sync item using the list of primary keys.
-func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFolders bool, clientID string, maxSize int, maxMtime *int64) (bool, []SyncEntity, error) {
+func (dynamo *Dynamo) GetUpdatesForType(dataType int, minMtime *int64, maxMtime *int64, fetchFolders bool, clientID string, maxSize int, ascOrder bool) (bool, []SyncEntity, error) {
 	syncEntities := []SyncEntity{}
 
 	// Get (ClientID, ID) pairs which are updates after mtime for a data type,
 	// sorted by dataType#mTime. e.g. sorted by mtime since dataType is the same.
-	dataTypeMtimeLowerBound := strconv.Itoa(dataType) + "#" + strconv.FormatInt(clientToken+1, 10)
-	var dataTypeMtimeUpperBound string
+	var dataTypeMtimeUpperBound, dataTypeMtimeLowerBound string
+	if minMtime != nil {
+		dataTypeMtimeLowerBound = strconv.Itoa(dataType) + "#" + strconv.FormatInt(*minMtime+1, 10)
+	} else {
+		dataTypeMtimeLowerBound = strconv.Itoa(dataType) + "#0"
+	}
 	if maxMtime != nil {
 		dataTypeMtimeUpperBound = strconv.Itoa(dataType) + "#" + strconv.FormatInt(*maxMtime-1, 10)
 	} else {
@@ -642,6 +646,7 @@ func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFo
 		ProjectionExpression:      aws.String(projPk),
 		TableName:                 aws.String(Table),
 		Limit:                     aws.Int64(int64(maxSize)),
+		ScanIndexForward:          &ascOrder,
 	}
 
 	out, err := dynamo.Query(input)
@@ -703,7 +708,11 @@ func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFo
 		filteredSyncEntities = append(filteredSyncEntities, syncEntity)
 	}
 
-	sort.Sort(SyncEntityByMtime(filteredSyncEntities))
+	var sortInterface sort.Interface = SyncEntityByMtime(filteredSyncEntities)
+	if !ascOrder {
+		sortInterface = sort.Reverse(sortInterface)
+	}
+	sort.Sort(sortInterface)
 	return hasChangesRemaining, filteredSyncEntities, nil
 }
 
@@ -728,6 +737,21 @@ func (dynamo *Dynamo) DeleteEntity(entity *SyncEntity) (oldEntity *SyncEntity, e
 		return nil, fmt.Errorf("failed to delete item: %w", err)
 	}
 
+	if entity.ClientDefinedUniqueTag != nil && len(*entity.ClientDefinedUniqueTag) > 0 {
+		key, err = dynamodbattribute.MarshalMap(NewServerClientUniqueTagItemQuery(entity.ClientID, *entity.ClientDefinedUniqueTag, false))
+		if err != nil {
+			return nil, fmt.Errorf("error marshalling client tag key for deletion: %w", err)
+		}
+		input = &dynamodb.DeleteItemInput{
+			TableName: aws.String(Table),
+			Key:       key,
+		}
+		_, err := dynamo.DeleteItem(input)
+		if err != nil {
+			return nil, fmt.Errorf("failed to delete client tag: %w", err)
+		}
+	}
+
 	if result.Attributes == nil {
 		return nil, nil
 	}
@@ -737,4 +761,54 @@ func (dynamo *Dynamo) DeleteEntity(entity *SyncEntity) (oldEntity *SyncEntity, e
 	}
 
 	return oldEntity, nil
+}
+
+func (dynamo *Dynamo) DeleteEntities(entities []*SyncEntity) error {
+	var writeRequests []*dynamodb.WriteRequest
+
+	for _, entity := range entities {
+		key, err := dynamodbattribute.MarshalMap(ItemQuery{
+			ClientID: entity.ClientID,
+			ID:       entity.ID,
+		})
+		if err != nil {
+			return fmt.Errorf("error marshalling key for deletion: %w", err)
+		}
+		writeRequests = append(writeRequests, &dynamodb.WriteRequest{
+			DeleteRequest: &dynamodb.DeleteRequest{
+				Key: key,
+			},
+		})
+		if entity.ClientDefinedUniqueTag != nil && len(*entity.ClientDefinedUniqueTag) > 0 {
+			key, err := dynamodbattribute.MarshalMap(NewServerClientUniqueTagItemQuery(entity.ClientID, *entity.ClientDefinedUniqueTag, false))
+			if err != nil {
+				return fmt.Errorf("error marshalling client tag key for deletion: %w", err)
+			}
+			writeRequests = append(writeRequests, &dynamodb.WriteRequest{
+				DeleteRequest: &dynamodb.DeleteRequest{
+					Key: key,
+				},
+			})
+		}
+	}
+
+	const batchSize = 25
+	for i := 0; i < len(writeRequests); i += batchSize {
+		end := i + batchSize
+		if end > len(writeRequests) {
+			end = len(writeRequests)
+		}
+		input := &dynamodb.BatchWriteItemInput{
+			RequestItems: map[string][]*dynamodb.WriteRequest{
+				Table: writeRequests[i:end],
+			},
+		}
+
+		_, err := dynamo.BatchWriteItem(input)
+		if err != nil {
+			return fmt.Errorf("failed to delete entities: %w", err)
+		}
+	}
+
+	return nil
 }

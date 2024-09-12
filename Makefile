@@ -38,5 +38,6 @@ docker-test:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose -f docker-compose.yml run --rm dev make test
 
 instrumented:
-	gowrap gen -p github.com/brave/go-sync/datastore -i Datastore -t ./.prom-gowrap.tmpl -o ./datastore/instrumented_datastore.go
+	gowrap gen -p github.com/brave/go-sync/datastore -i DynamoDatastore -t ./.prom-gowrap.tmpl -o ./datastore/instrumented_dynamo_datastore.go
+	gowrap gen -p github.com/brave/go-sync/datastore -i SQLDatastore -t ./.prom-gowrap.tmpl -o ./datastore/instrumented_sql_datastore.go
 	gowrap gen -p github.com/brave/go-sync/cache -i RedisClient -t ./.prom-gowrap.tmpl -o ./cache/instrumented_redis.go

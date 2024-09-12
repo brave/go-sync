@@ -1,7 +1,6 @@
 package datastore
 
 import (
-	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -15,12 +14,6 @@ var fieldsToInsert = []string{
 	"deleted", "client_defined_unique_tag", "server_defined_unique_tag", "folder", "version",
 	"name", "originator_cache_guid", "originator_client_item_id", "parent_id", "non_unique_name",
 	"unique_position",
-}
-
-type MigrationStatus struct {
-	ChainID       int64 `db:"chain_id"`
-	DataType      int   `db:"data_type"`
-	EarliestMtime int64 `db:"earliest_mtime"`
 }
 
 func buildInsertQuery() string {
@@ -40,18 +33,18 @@ func buildInsertQuery() string {
 		joinedSetValues + ` WHERE entities.deleted = true`
 }
 
-func (sqlDB *SQLDB) InsertSyncEntity(tx *sqlx.Tx, entity *SyncEntity) (conflict bool, err error) {
-	res, err := tx.NamedExec(sqlDB.insertQuery, entity)
+func (sqlDB *SQLDB) InsertSyncEntities(tx *sqlx.Tx, entities []*SyncEntity) (conflict bool, err error) {
+	res, err := tx.NamedExec(sqlDB.insertQuery, entities)
 	if err != nil {
-		return false, fmt.Errorf("failed to insert entity: %w", err)
+		return false, fmt.Errorf("failed to insert entities: %w", err)
 	}
 	rowsAffected, err := res.RowsAffected()
 	if err != nil {
 		return false, fmt.Errorf("failed to get rows affected after insert: %w", err)
 	}
 
-	// if rows affected is 0, then there must be a conflict. return true to indicate this condition.
-	return rowsAffected == 0, nil
+	// if rows affected is not len(entities), then there must be a conflict. return true to indicate this condition.
+	return int(rowsAffected) == len(entities), nil
 }
 
 func (sqlDB *SQLDB) HasItem(tx *sqlx.Tx, chainId int64, clientTag string) (exists bool, err error) {
@@ -60,39 +53,6 @@ func (sqlDB *SQLDB) HasItem(tx *sqlx.Tx, chainId int64, clientTag string) (exist
 		return false, fmt.Errorf("failed to check existence of item: %w", err)
 	}
 	return exists, nil
-}
-
-func (sqlDB *SQLDB) GetDynamoMigrationStatus(chainID int64, dataType int) (*MigrationStatus, error) {
-	var status MigrationStatus
-	err := sqlDB.Get(&status, `
-		SELECT chain_id, data_type, earliest_mtime
-		FROM dynamo_migration_statuses
-		WHERE chain_id = $1 AND data_type = $2
-	`, chainID, dataType)
-
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get dynamo migration status: %w", err)
-	}
-
-	return &status, nil
-}
-
-func (sqlDB *SQLDB) UpdateDynamoMigrationStatuses(tx *sqlx.Tx, statuses []MigrationStatus) error {
-	_, err := tx.NamedExec(`
-		INSERT INTO dynamo_migration_statuses (chain_id, data_type, earliest_mtime)
-		VALUES (:chain_id, :data_type, :earliest_mtime)
-			ON CONFLICT DO UPDATE
-			SET earliest_mtime = $3
-			WHERE earliest_mtime IS NOT NULL AND earliest_mtime > :earliest_mtime
-	`, statuses)
-	if err != nil {
-		return fmt.Errorf("failed to update dynamo migration statuses: %w", err)
-	}
-
-	return nil
 }
 
 func (sqlDB *SQLDB) UpdateSyncEntity(tx *sqlx.Tx, entity *SyncEntity, oldVersion int64) (conflict bool, err error) {

@@ -33,7 +33,7 @@ const (
 // handleGetUpdatesRequest handles GetUpdatesMessage and fills
 // GetUpdatesResponse. Target sync entities in the database will be updated or
 // deleted based on the client's requests.
-func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessage, guRsp *sync_pb.GetUpdatesResponse, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDB, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
+func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessage, guRsp *sync_pb.GetUpdatesResponse, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDatastore, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
 	errCode := sync_pb.SyncEnums_SUCCESS // default value, might be changed later
 	isNewClient := guMsg.GetUpdatesOrigin != nil && *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_NEW_CLIENT
 	isPoll := guMsg.GetUpdatesOrigin != nil && *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_PERIODIC
@@ -49,7 +49,7 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 		activeDevices := 0
 		for {
 			// TODO(djandries): Call the dbHelpers variant instead
-			hasChangesRemaining, syncEntities, err := dynamoDB.GetUpdatesForType(deviceInfoTypeID, 0, false, clientID, maxGUBatchSize, nil)
+			hasChangesRemaining, syncEntities, err := dynamoDB.GetUpdatesForType(deviceInfoTypeID, nil, nil, false, clientID, maxGUBatchSize, true)
 			if err != nil {
 				log.Error().Err(err).Msgf("db.GetUpdatesForType failed for type %v", deviceInfoTypeID)
 				errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
@@ -101,9 +101,14 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 	// Process from_progress_marker
 	guRsp.NewProgressMarker = make([]*sync_pb.DataTypeProgressMarker, len(guMsg.FromProgressMarker))
 	guRsp.Entries = make([]*sync_pb.SyncEntity, 0, maxSize)
+
+	var dataTypes []int
+
 	for i, fromProgressMarker := range guMsg.FromProgressMarker {
 		guRsp.NewProgressMarker[i] = &sync_pb.DataTypeProgressMarker{}
 		guRsp.NewProgressMarker[i].DataTypeId = fromProgressMarker.DataTypeId
+
+		dataTypes = append(dataTypes, int(*fromProgressMarker.DataTypeId))
 
 		// Default token value is client's token, otherwise 0.
 		// This token will be updated when we return the updated entities.
@@ -199,8 +204,17 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 		}
 	}
 
+	migratedEntities, err := dbHelpers.maybeMigrateToSQL(dataTypes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to perform migration: %w")
+	}
+
 	if err = dbHelpers.Trx.Commit(); err != nil {
 		return nil, err
+	}
+
+	if err = dynamoDB.DeleteEntities(migratedEntities); err != nil {
+		log.Error().Err(err).Msgf("Failed to delete migrated items")
 	}
 
 	return &errCode, nil
@@ -210,7 +224,7 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 // For each commit entry:
 //   - new sync entity is created and inserted into the database if version is 0.
 //   - existed sync entity will be updated if version is greater than 0.
-func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.CommitResponse, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDB, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
+func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.CommitResponse, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDatastore, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
 	if commitMsg == nil {
 		return nil, fmt.Errorf("nil commitMsg is received")
 	}
@@ -390,7 +404,7 @@ func handleClearServerDataRequest(cache *cache.Cache, db datastore.DynamoDatasto
 
 // HandleClientToServerMessage handles the protobuf ClientToServerMessage and
 // fills the protobuf ClientToServerResponse.
-func HandleClientToServerMessage(cache *cache.Cache, pb *sync_pb.ClientToServerMessage, pbRsp *sync_pb.ClientToServerResponse, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDB, clientID string) error {
+func HandleClientToServerMessage(cache *cache.Cache, pb *sync_pb.ClientToServerMessage, pbRsp *sync_pb.ClientToServerResponse, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDatastore, clientID string) error {
 	// Create ClientToServerResponse and fill general fields for both GU and
 	// Commit.
 	pbRsp.StoreBirthday = aws.String(storeBirthday)

@@ -81,3 +81,7 @@ func (sqlVariations *SQLVariations) ShouldMigrateToSQL(dataType int, variationHa
 	rolloutPercent, exists := sqlVariations.sqlMigrateRollouts[dataType]
 	return exists && variationHashDecimal <= rolloutPercent
 }
+
+func (sqlDB *SQLDB) Variations() *SQLVariations {
+	return sqlDB.variations
+}

@@ -22,7 +22,7 @@ type ItemCounts struct {
 	sqlTxNewHistoryCount int
 }
 
-func getItemCounts(cache *cache.Cache, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDB, tx *sqlx.Tx, clientID string, chainID int64) (*ItemCounts, error) {
+func getItemCounts(cache *cache.Cache, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDatastore, tx *sqlx.Tx, clientID string, chainID int64) (*ItemCounts, error) {
 	dynamoItemCounts, err := dynamoDB.GetClientItemCount(clientID)
 	if err != nil {
 		return nil, err

@@ -84,7 +84,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	r.Mount("/v2", controller.SyncRouter(
 		cache,
-		datastore.NewDatastoreWithPrometheus(dynamoDB, "dynamo"), *sqlDB))
+		datastore.NewDynamoDatastoreWithPrometheus(dynamoDB, "dynamo"), datastore.NewSQLDatastoreWithPrometheus(sqlDB, "sql")))
 	r.Get("/metrics", batware.Metrics())
 
 	log.Info().
