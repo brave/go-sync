@@ -48,8 +48,7 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 		// Reject the request if client has >= 50 devices in the chain.
 		activeDevices := 0
 		for {
-			// TODO(djandries): Call the dbHelpers variant instead
-			hasChangesRemaining, syncEntities, err := dynamoDB.GetUpdatesForType(deviceInfoTypeID, nil, nil, false, clientID, maxGUBatchSize, true)
+			hasChangesRemaining, syncEntities, err := dbHelpers.getUpdatesFromDBs(deviceInfoTypeID, 0, false, maxGUBatchSize)
 			if err != nil {
 				log.Error().Err(err).Msgf("db.GetUpdatesForType failed for type %v", deviceInfoTypeID)
 				errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
@@ -76,7 +75,7 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 		}
 
 		// Insert initial records if needed.
-		err := InsertServerDefinedUniqueEntities(dynamoDB, clientID)
+		err := dbHelpers.InsertServerDefinedUniqueEntities()
 		if err != nil {
 			log.Error().Err(err).Msg("Create server defined unique entities failed")
 			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
@@ -206,15 +205,17 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 
 	migratedEntities, err := dbHelpers.maybeMigrateToSQL(dataTypes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to perform migration: %w")
+		return nil, fmt.Errorf("failed to perform migration: %w", err)
+	}
+
+	if len(migratedEntities) > 0 {
+		if err = dynamoDB.DeleteEntities(migratedEntities); err != nil {
+			log.Error().Err(err).Msgf("Failed to delete migrated items")
+		}
 	}
 
 	if err = dbHelpers.Trx.Commit(); err != nil {
 		return nil, err
-	}
-
-	if err = dynamoDB.DeleteEntities(migratedEntities); err != nil {
-		log.Error().Err(err).Msgf("Failed to delete migrated items")
 	}
 
 	return &errCode, nil
@@ -246,6 +247,8 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 	idMap := make(map[string]string)
 	// Map to save commit data type ID & mtime
 	typeMtimeMap := make(map[int]int64)
+
+	var migratedEntities []*datastore.SyncEntity
 	for i, v := range commitMsg.Entries {
 		entryRsp := &sync_pb.CommitResponse_EntryResponse{}
 		commitRsp.Entryresponse[i] = entryRsp
@@ -316,7 +319,7 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 				}
 			}
 		} else { // Update
-			conflict, err := dbHelpers.updateSyncEntity(entityToCommit, oldVersion)
+			conflict, migratedEntity, err := dbHelpers.updateSyncEntity(entityToCommit, oldVersion)
 			if err != nil {
 				log.Error().Err(err).Msg("Update sync entity failed")
 				rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
@@ -328,6 +331,9 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 				rspType := sync_pb.CommitResponse_CONFLICT
 				entryRsp.ResponseType = &rspType
 				continue
+			}
+			if migratedEntity != nil {
+				migratedEntities = append(migratedEntities, migratedEntity)
 			}
 		}
 		if err != nil {
@@ -355,6 +361,12 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 	// Save (clientID#dataType, mtime) into cache after writing into DB.
 	for dataType, mtime := range typeMtimeMap {
 		cache.SetTypeMtime(context.Background(), clientID, dataType, mtime)
+	}
+
+	if len(migratedEntities) > 0 {
+		if err = dynamoDB.DeleteEntities(migratedEntities); err != nil {
+			log.Error().Err(err).Msgf("Failed to delete migrated items")
+		}
 	}
 
 	if err = dbHelpers.Trx.Commit(); err != nil {

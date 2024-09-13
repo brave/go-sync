@@ -24,7 +24,7 @@ const (
 	bookmarkBarTag      string = "bookmark_bar"
 )
 
-func createServerDefinedUniqueEntity(name string, serverDefinedTag string, clientID string, parentID string, specifics *sync_pb.EntitySpecifics) (*datastore.SyncEntity, error) {
+func createServerDefinedUniqueEntity(name string, serverDefinedTag string, clientID string, chainID int64, parentID string, specifics *sync_pb.EntitySpecifics) (*datastore.SyncEntity, error) {
 	now := utils.UnixMilli(time.Now())
 	deleted := false
 	folder := true
@@ -41,30 +41,17 @@ func createServerDefinedUniqueEntity(name string, serverDefinedTag string, clien
 		Version: &version, ParentIdString: &parentID,
 		IdString: &idString, Specifics: specifics}
 
-	return datastore.CreateDBSyncEntity(pbEntity, nil, clientID, 0)
+	return datastore.CreateDBSyncEntity(pbEntity, nil, clientID, chainID)
 }
 
-// InsertServerDefinedUniqueEntities inserts the server defined unique tag
-// entities if it is not in the DB yet for a specific client.
-func InsertServerDefinedUniqueEntities(db datastore.DynamoDatastore, clientID string) error {
-	var entities []*datastore.SyncEntity
-	// Check if they're existed already for this client.
-	// If yes, just return directly.
-	ready, err := db.HasServerDefinedUniqueTag(clientID, nigoriTag)
-	if err != nil {
-		return fmt.Errorf("error checking if entity with a server tag existed: %w", err)
-	}
-	if ready {
-		return nil
-	}
-
+func CreateServerDefinedUniqueEntities(clientID string, chainID int64) (entities []*datastore.SyncEntity, err error) {
 	// Create nigori top-level folder
 	nigoriSpecific := &sync_pb.NigoriSpecifics{}
 	nigoriEntitySpecific := &sync_pb.EntitySpecifics_Nigori{Nigori: nigoriSpecific}
 	specifics := &sync_pb.EntitySpecifics{SpecificsVariant: nigoriEntitySpecific}
-	entity, err := createServerDefinedUniqueEntity(nigoriName, nigoriTag, clientID, "0", specifics)
+	entity, err := createServerDefinedUniqueEntity(nigoriName, nigoriTag, clientID, chainID, "0", specifics)
 	if err != nil {
-		return fmt.Errorf("error creating entity with a server tag: %w", err)
+		return nil, fmt.Errorf("error creating entity with a server tag: %w", err)
 	}
 	entities = append(entities, entity)
 
@@ -72,9 +59,9 @@ func InsertServerDefinedUniqueEntities(db datastore.DynamoDatastore, clientID st
 	bookmarkSpecific := &sync_pb.BookmarkSpecifics{}
 	bookmarkEntitySpecific := &sync_pb.EntitySpecifics_Bookmark{Bookmark: bookmarkSpecific}
 	specifics = &sync_pb.EntitySpecifics{SpecificsVariant: bookmarkEntitySpecific}
-	entity, err = createServerDefinedUniqueEntity(bookmarksName, bookmarksTag, clientID, "0", specifics)
+	entity, err = createServerDefinedUniqueEntity(bookmarksName, bookmarksTag, clientID, chainID, "0", specifics)
 	if err != nil {
-		return fmt.Errorf("error creating entity with a server tag: %w", err)
+		return nil, fmt.Errorf("error creating entity with a server tag: %w", err)
 	}
 	entities = append(entities, entity)
 
@@ -86,17 +73,11 @@ func InsertServerDefinedUniqueEntities(db datastore.DynamoDatastore, clientID st
 		bookmarkBarName:     bookmarkBarTag}
 	for name, tag := range bookmarkSecondLevelFolders {
 		entity, err := createServerDefinedUniqueEntity(
-			name, tag, clientID, bookmarkRootID, specifics)
+			name, tag, clientID, chainID, bookmarkRootID, specifics)
 		if err != nil {
-			return fmt.Errorf("error creating entity with a server tag: %w", err)
+			return nil, fmt.Errorf("error creating entity with a server tag: %w", err)
 		}
 		entities = append(entities, entity)
 	}
-
-	// Start a transaction to insert all server defined unique entities
-	err = db.InsertSyncEntitiesWithServerTags(entities)
-	if err != nil {
-		return fmt.Errorf("error inserting entities with server tags: %w", err)
-	}
-	return nil
+	return entities, nil
 }

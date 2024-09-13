@@ -144,7 +144,7 @@ func (sqlDB *SQLDB) GetAndLockChainID(tx *sqlx.Tx, clientID string) (chainID *in
 	return &id, nil
 }
 
-func (sqlDB *SQLDB) GetUpdatesForType(dataType int, clientToken int64, fetchFolders bool, chainID int64, maxSize int) (hasChangesRemaining bool, entities []SyncEntity, err error) {
+func (sqlDB *SQLDB) GetUpdatesForType(tx *sqlx.Tx, dataType int, clientToken int64, fetchFolders bool, chainID int64, maxSize int) (hasChangesRemaining bool, entities []SyncEntity, err error) {
 	var additionalCondition string
 	if !fetchFolders {
 		additionalCondition = "AND folder = false "
@@ -152,7 +152,7 @@ func (sqlDB *SQLDB) GetUpdatesForType(dataType int, clientToken int64, fetchFold
 	query := `SELECT * FROM entities
 		WHERE chain_id = $1 AND data_type = $2 AND mtime > $3 ` + additionalCondition + `ORDER BY mtime LIMIT $4`
 
-	if err := sqlDB.Select(&entities, query, chainID, dataType, clientToken, maxSize); err != nil {
+	if err := tx.Select(&entities, query, chainID, dataType, clientToken, maxSize); err != nil {
 		return false, nil, fmt.Errorf("failed to get entity updates: %w", err)
 	}
 	return len(entities) == maxSize, entities, nil

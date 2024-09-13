@@ -65,20 +65,6 @@ func (_d DynamoDatastoreWithPrometheus) DeleteEntities(entities []*SyncEntity) (
 	return _d.base.DeleteEntities(entities)
 }
 
-// DeleteEntity implements DynamoDatastore
-func (_d DynamoDatastoreWithPrometheus) DeleteEntity(entity *SyncEntity) (sp1 *SyncEntity, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		dynamodatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DeleteEntity", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.DeleteEntity(entity)
-}
-
 // DisableSyncChain implements DynamoDatastore
 func (_d DynamoDatastoreWithPrometheus) DisableSyncChain(clientID string) (err error) {
 	_since := time.Now()
@@ -105,6 +91,20 @@ func (_d DynamoDatastoreWithPrometheus) GetClientItemCount(clientID string) (dp1
 		dynamodatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetClientItemCount", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetClientItemCount(clientID)
+}
+
+// GetEntity implements DynamoDatastore
+func (_d DynamoDatastoreWithPrometheus) GetEntity(query ItemQuery) (sp1 *SyncEntity, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		dynamodatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetEntity", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetEntity(query)
 }
 
 // GetUpdatesForType implements DynamoDatastore
@@ -206,7 +206,7 @@ func (_d DynamoDatastoreWithPrometheus) UpdateClientItemCount(counts *DynamoItem
 }
 
 // UpdateSyncEntity implements DynamoDatastore
-func (_d DynamoDatastoreWithPrometheus) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (conflict bool, delete bool, err error) {
+func (_d DynamoDatastoreWithPrometheus) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (conflict bool, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

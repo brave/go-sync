@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 type MigrationStatus struct {
@@ -19,8 +20,8 @@ func (sqlDB *SQLDB) GetDynamoMigrationStatuses(tx *sqlx.Tx, chainID int64, dataT
 	err = tx.Select(&statuses, `
 		SELECT chain_id, data_type, earliest_mtime
 		FROM dynamo_migration_statuses
-		WHERE chain_id = $1 AND data_type IN $2
-	`, chainID, dataTypes)
+		WHERE chain_id = $1 AND data_type = ANY($2)
+	`, chainID, pq.Array(dataTypes))
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get dynamo migration status: %w", err)
@@ -37,9 +38,9 @@ func (sqlDB *SQLDB) UpdateDynamoMigrationStatuses(tx *sqlx.Tx, statuses []*Migra
 	_, err := tx.NamedExec(`
 		INSERT INTO dynamo_migration_statuses (chain_id, data_type, earliest_mtime)
 		VALUES (:chain_id, :data_type, :earliest_mtime)
-			ON CONFLICT DO UPDATE
+			ON CONFLICT (chain_id, data_type) DO UPDATE
 			SET earliest_mtime = $3
-			WHERE earliest_mtime IS NOT NULL AND earliest_mtime > :earliest_mtime
+			WHERE dynamo_migration_statuses.earliest_mtime IS NOT NULL AND (dynamo_migration_statuses.earliest_mtime > EXCLUDED.earliest_mtime OR EXCLUDED.earliest_mtime IS NULL)
 	`, statuses)
 	if err != nil {
 		return fmt.Errorf("failed to update dynamo migration statuses: %w", err)

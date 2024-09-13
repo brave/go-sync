@@ -95,7 +95,7 @@ func (_d SQLDatastoreWithPrometheus) GetItemCounts(tx *sqlx.Tx, chainID int64) (
 }
 
 // GetUpdatesForType implements SQLDatastore
-func (_d SQLDatastoreWithPrometheus) GetUpdatesForType(dataType int, clientToken int64, fetchFolders bool, chainID int64, maxSize int) (b1 bool, sa1 []SyncEntity, err error) {
+func (_d SQLDatastoreWithPrometheus) GetUpdatesForType(tx *sqlx.Tx, dataType int, clientToken int64, fetchFolders bool, chainID int64, maxSize int) (b1 bool, sa1 []SyncEntity, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -105,7 +105,7 @@ func (_d SQLDatastoreWithPrometheus) GetUpdatesForType(dataType int, clientToken
 
 		sqldatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetUpdatesForType", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetUpdatesForType(dataType, clientToken, fetchFolders, chainID, maxSize)
+	return _d.base.GetUpdatesForType(tx, dataType, clientToken, fetchFolders, chainID, maxSize)
 }
 
 // HasItem implements SQLDatastore

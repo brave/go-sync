@@ -91,7 +91,7 @@ func (h *DBHelpers) getUpdatesFromDBs(dataType int, token int64, fetchFolders bo
 		}
 
 		if curMaxSize > 0 {
-			sqlHasChangesRemaining, sqlSyncEntities, err := h.sqlDB.GetUpdatesForType(dataType, token, fetchFolders, h.ChainID, curMaxSize)
+			sqlHasChangesRemaining, sqlSyncEntities, err := h.sqlDB.GetUpdatesForType(h.Trx, dataType, token, fetchFolders, h.ChainID, curMaxSize)
 			if err != nil {
 				return false, nil, err
 			}
@@ -121,47 +121,60 @@ func (h *DBHelpers) insertSyncEntity(entity *datastore.SyncEntity) (conflict boo
 	return conflict, nil
 }
 
-func (h *DBHelpers) updateSyncEntity(entity *datastore.SyncEntity, oldVersion int64) (conflict bool, err error) {
+func getMigratedEntityID(entity *datastore.SyncEntity) (string, error) {
+	id := entity.ID
+	if *entity.DataType == datastore.HistoryTypeID {
+		newID, err := uuid.NewV7()
+		if err != nil {
+			return "", err
+		}
+		id = newID.String()
+	}
+	return id, nil
+}
+
+func (h *DBHelpers) updateSyncEntity(entity *datastore.SyncEntity, oldVersion int64) (conflict bool, migratedEntity *datastore.SyncEntity, err error) {
 	if h.sqlDB.Variations().ShouldSaveToSQL(*entity.DataType, h.variationHashDecimal) {
 		conflict, err := h.sqlDB.UpdateSyncEntity(h.Trx, entity, oldVersion)
 		if err != nil {
-			return false, err
+			return false, nil, err
 		}
 		if conflict {
-			oldEntity, err := h.dynamoDB.DeleteEntity(entity)
+			oldEntity, err := h.dynamoDB.GetEntity(datastore.ItemQuery{
+				ID:       entity.ID,
+				ClientID: entity.ClientID,
+			})
 			if err != nil {
-				return false, err
+				return false, nil, err
 			}
 			if oldEntity == nil {
-				return true, nil
+				return true, nil, nil
 			}
 			if oldEntity.Deleted == nil || !*oldEntity.Deleted {
 				if err = h.ItemCounts.recordChange(*entity.DataType, true, false); err != nil {
-					return false, err
+					return false, nil, err
 				}
 			}
-			if *entity.DataType == datastore.HistoryTypeID {
-				newID, err := uuid.NewV7()
-				if err != nil {
-					return false, err
-				}
-				entity.ID = newID.String()
+			migratedEntityId, err := getMigratedEntityID(entity)
+			if err != nil {
+				return false, nil, err
 			}
+			entity.ID = migratedEntityId
 			conflict, err = h.sqlDB.InsertSyncEntities(h.Trx, []*datastore.SyncEntity{entity})
 			if err != nil {
-				return false, err
+				return false, nil, err
 			}
 			if !conflict && (entity.Deleted == nil || !*entity.Deleted) {
 				if err = h.ItemCounts.recordChange(*entity.DataType, false, true); err != nil {
-					return false, err
+					return false, nil, err
 				}
 			}
-			return conflict, err
+			return conflict, oldEntity, err
 		}
-		return conflict, err
+		return conflict, nil, err
 	}
-	conflict, _, err = h.dynamoDB.UpdateSyncEntity(entity, oldVersion)
-	return conflict, err
+	conflict, err = h.dynamoDB.UpdateSyncEntity(entity, oldVersion)
+	return conflict, nil, err
 }
 
 func (h *DBHelpers) maybeMigrateToSQL(dataTypes []int) (migratedEntities []*datastore.SyncEntity, err error) {
@@ -175,6 +188,10 @@ func (h *DBHelpers) maybeMigrateToSQL(dataTypes []int) (migratedEntities []*data
 		}
 		applicableDataTypes = append(applicableDataTypes, dataType)
 	}
+	if len(applicableDataTypes) == 0 {
+		return nil, nil
+	}
+
 	migrationStatuses, err := h.sqlDB.GetDynamoMigrationStatuses(h.Trx, h.ChainID, applicableDataTypes)
 	if err != nil {
 		return nil, err
@@ -183,7 +200,7 @@ func (h *DBHelpers) maybeMigrateToSQL(dataTypes []int) (migratedEntities []*data
 	currLimit := h.sqlDB.MigrateChunkSize()
 	var updatedMigrationStatuses []*datastore.MigrationStatus
 
-	for _, dataType := range dataTypes {
+	for _, dataType := range applicableDataTypes {
 		if currLimit <= 0 {
 			break
 		}
@@ -195,6 +212,12 @@ func (h *DBHelpers) maybeMigrateToSQL(dataTypes []int) (migratedEntities []*data
 		var earliestMtime *int64
 		if migrationStatus != nil {
 			earliestMtime = migrationStatus.EarliestMtime
+		} else {
+			migrationStatus = &datastore.MigrationStatus{
+				ChainID:       h.ChainID,
+				DataType:      dataType,
+				EarliestMtime: nil,
+			}
 		}
 
 		hasChangesRemaining, syncEntities, err := h.dynamoDB.GetUpdatesForType(dataType, nil, earliestMtime, true, h.clientID, currLimit, false)
@@ -204,27 +227,87 @@ func (h *DBHelpers) maybeMigrateToSQL(dataTypes []int) (migratedEntities []*data
 
 		currLimit -= len(syncEntities)
 
-		lastItem := &syncEntities[len(syncEntities)-1]
-
 		if !hasChangesRemaining {
 			migrationStatus.EarliestMtime = nil
-		} else if lastItem.Mtime != nil {
-			migrationStatus.EarliestMtime = lastItem.Mtime
+		} else if len(syncEntities) > 0 {
+			if lastItem := &syncEntities[len(syncEntities)-1]; lastItem.Mtime != nil {
+				migrationStatus.EarliestMtime = lastItem.Mtime
+			}
 		}
 		updatedMigrationStatuses = append(updatedMigrationStatuses, migrationStatus)
 
 		var syncEntitiesPtr []*datastore.SyncEntity
 		for _, syncEntity := range syncEntities {
-			syncEntitiesPtr = append(syncEntitiesPtr, &syncEntity)
+			syncEntity.ChainID = &h.ChainID
+			newEntity := &syncEntity
+			migratedEntityID, err := getMigratedEntityID(&syncEntity)
+			if err != nil {
+				return nil, err
+			}
+			if migratedEntityID != syncEntity.ID {
+				entityClone := syncEntity
+				entityClone.ID = migratedEntityID
+				newEntity = &entityClone
+			}
+			syncEntitiesPtr = append(syncEntitiesPtr, newEntity)
 			migratedEntities = append(migratedEntities, &syncEntity)
 		}
 
-		if _, err = h.sqlDB.InsertSyncEntities(h.Trx, syncEntitiesPtr); err != nil {
+		if len(syncEntitiesPtr) > 0 {
+			if _, err = h.sqlDB.InsertSyncEntities(h.Trx, syncEntitiesPtr); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if len(updatedMigrationStatuses) > 0 {
+		if err = h.sqlDB.UpdateDynamoMigrationStatuses(h.Trx, updatedMigrationStatuses); err != nil {
 			return nil, err
 		}
 	}
-	if err = h.sqlDB.UpdateDynamoMigrationStatuses(h.Trx, updatedMigrationStatuses); err != nil {
-		return nil, err
-	}
 	return migratedEntities, nil
+}
+
+// InsertServerDefinedUniqueEntities inserts the server defined unique tag
+// entities if it is not in the DB yet for a specific client.
+func (h *DBHelpers) InsertServerDefinedUniqueEntities() error {
+	// Check if they're existed already for this client.
+	// If yes, just return directly.
+	ready, err := h.dynamoDB.HasServerDefinedUniqueTag(h.clientID, nigoriTag)
+	if err != nil {
+		return fmt.Errorf("error checking if entity with a server tag existed: %w", err)
+	}
+	if ready {
+		return nil
+	}
+
+	entities, err := CreateServerDefinedUniqueEntities(h.clientID, h.ChainID)
+	if err != nil {
+		return err
+	}
+
+	var dynamoEntities []*datastore.SyncEntity
+	var sqlEntities []*datastore.SyncEntity
+	for _, entity := range entities {
+		if h.sqlDB.Variations().ShouldSaveToSQL(*entity.DataType, h.variationHashDecimal) {
+			sqlEntities = append(sqlEntities, entity)
+		} else {
+			dynamoEntities = append(dynamoEntities, entity)
+		}
+	}
+
+	if len(dynamoEntities) > 0 {
+		err = h.dynamoDB.InsertSyncEntitiesWithServerTags(dynamoEntities)
+		if err != nil {
+			return fmt.Errorf("error inserting entities with server tags to DynamoDB: %w", err)
+		}
+	}
+
+	if len(sqlEntities) > 0 {
+		_, err = h.sqlDB.InsertSyncEntities(h.Trx, sqlEntities)
+		if err != nil {
+			return fmt.Errorf("error inserting entities with server tags to SQL: %w", err)
+		}
+	}
+
+	return nil
 }

@@ -28,7 +28,7 @@ type SQLVariations struct {
 
 func parseRollouts(envKey string) (map[int]float32, error) {
 	rollouts := make(map[int]float32)
-	envVal := os.Getenv(sqlSaveRolloutsEnvKey)
+	envVal := os.Getenv(envKey)
 
 	if len(envVal) > 0 {
 		pairs := strings.Split(envVal, ",")
@@ -46,7 +46,7 @@ func parseRollouts(envKey string) (map[int]float32, error) {
 
 			value, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 32)
 			if err != nil {
-				return nil, fmt.Errorf("Invalid float in %s: %s", sqlSaveRolloutsEnvKey, parts[1])
+				return nil, fmt.Errorf("Invalid float in %s: %s", envKey, parts[1])
 			}
 
 			rollouts[key] = float32(value)

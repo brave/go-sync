@@ -9,7 +9,7 @@ type DynamoDatastore interface {
 	// Insert a series of sync entities in a write transaction.
 	InsertSyncEntitiesWithServerTags(entities []*SyncEntity) error
 	// Update an existing sync entity.
-	UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (conflict bool, delete bool, err error)
+	UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (conflict bool, err error)
 	// Get updates for a specific type which are modified after the time of
 	// client token for a given client. Besides the array of sync entities, a
 	// boolean value indicating whether there are more updates to query in the
@@ -27,11 +27,11 @@ type DynamoDatastore interface {
 	DisableSyncChain(clientID string) error
 	// IsSyncChainDisabled checks whether a given sync chain is deleted
 	IsSyncChainDisabled(clientID string) (bool, error)
-	// Checks if sync item exists for a client
+	// HasItem checks if sync item exists for a client
 	HasItem(clientID string, ID string) (bool, error)
-	// Deletes an existing item
-	DeleteEntity(entity *SyncEntity) (*SyncEntity, error)
-	// Deletes multiple existing items
+	// GetEntity gets an existing entity
+	GetEntity(query ItemQuery) (*SyncEntity, error)
+	// DeleteEntities deletes multiple existing items
 	DeleteEntities(entities []*SyncEntity) error
 }
 
@@ -46,7 +46,7 @@ type SQLDatastore interface {
 	// GetAndLockChainID retrieves and locks a chain ID for a given client ID
 	GetAndLockChainID(tx *sqlx.Tx, clientID string) (*int64, error)
 	// GetUpdatesForType retrieves updates for a specific data type
-	GetUpdatesForType(dataType int, clientToken int64, fetchFolders bool, chainID int64, maxSize int) (bool, []SyncEntity, error)
+	GetUpdatesForType(tx *sqlx.Tx, dataType int, clientToken int64, fetchFolders bool, chainID int64, maxSize int) (bool, []SyncEntity, error)
 	// GetDynamoMigrationStatuses retrieves migration statuses for specified data types
 	GetDynamoMigrationStatuses(tx *sqlx.Tx, chainID int64, dataTypes []int) (map[int]*MigrationStatus, error)
 	// UpdateDynamoMigrationStatuses updates migration statuses in the database
