@@ -12,7 +12,7 @@ import (
 
 type DBHelpers struct {
 	dynamoDB             datastore.DynamoDatastore
-	sqlDB                datastore.SQLDatastore
+	SqlDB                datastore.SQLDatastore
 	Trx                  *sqlx.Tx
 	clientID             string
 	ChainID              int64
@@ -44,7 +44,7 @@ func NewDBHelpers(dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDatasto
 
 	return &DBHelpers{
 		dynamoDB:             dynamoDB,
-		sqlDB:                sqlDB,
+		SqlDB:                sqlDB,
 		Trx:                  trx,
 		clientID:             clientID,
 		ChainID:              *chainID,
@@ -55,8 +55,8 @@ func NewDBHelpers(dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDatasto
 
 func (h *DBHelpers) hasItemInEitherDB(entity *datastore.SyncEntity) (exists bool, err error) {
 	// Check if item exists using client_unique_tag
-	if h.sqlDB.Variations().ShouldSaveToSQL(*entity.DataType, h.variationHashDecimal) {
-		exists, err := h.sqlDB.HasItem(h.Trx, h.ChainID, *entity.ClientDefinedUniqueTag)
+	if h.SqlDB.Variations().ShouldSaveToSQL(*entity.DataType, h.variationHashDecimal) {
+		exists, err := h.SqlDB.HasItem(h.Trx, h.ChainID, *entity.ClientDefinedUniqueTag)
 		if err != nil {
 			return false, err
 		}
@@ -72,8 +72,8 @@ func (h *DBHelpers) getUpdatesFromDBs(dataType int, token int64, fetchFolders bo
 	if curMaxSize == 0 {
 		return false, nil, nil
 	}
-	if h.sqlDB.Variations().ShouldSaveToSQL(dataType, h.variationHashDecimal) {
-		dynamoMigrationStatuses, err := h.sqlDB.GetDynamoMigrationStatuses(h.Trx, h.ChainID, []int{dataType})
+	if h.SqlDB.Variations().ShouldSaveToSQL(dataType, h.variationHashDecimal) {
+		dynamoMigrationStatuses, err := h.SqlDB.GetDynamoMigrationStatuses(h.Trx, h.ChainID, []int{dataType})
 		if err != nil {
 			return false, nil, err
 		}
@@ -91,7 +91,7 @@ func (h *DBHelpers) getUpdatesFromDBs(dataType int, token int64, fetchFolders bo
 		}
 
 		if curMaxSize > 0 {
-			sqlHasChangesRemaining, sqlSyncEntities, err := h.sqlDB.GetUpdatesForType(h.Trx, dataType, token, fetchFolders, h.ChainID, curMaxSize)
+			sqlHasChangesRemaining, sqlSyncEntities, err := h.SqlDB.GetUpdatesForType(h.Trx, dataType, token, fetchFolders, h.ChainID, curMaxSize)
 			if err != nil {
 				return false, nil, err
 			}
@@ -107,9 +107,9 @@ func (h *DBHelpers) getUpdatesFromDBs(dataType int, token int64, fetchFolders bo
 }
 
 func (h *DBHelpers) insertSyncEntity(entity *datastore.SyncEntity) (conflict bool, err error) {
-	savedInSQL := h.sqlDB.Variations().ShouldSaveToSQL(*entity.DataType, h.variationHashDecimal)
+	savedInSQL := h.SqlDB.Variations().ShouldSaveToSQL(*entity.DataType, h.variationHashDecimal)
 	if savedInSQL {
-		conflict, err = h.sqlDB.InsertSyncEntities(h.Trx, []*datastore.SyncEntity{entity})
+		conflict, err = h.SqlDB.InsertSyncEntities(h.Trx, []*datastore.SyncEntity{entity})
 	} else {
 		conflict, err = h.dynamoDB.InsertSyncEntity(entity)
 	}
@@ -134,8 +134,8 @@ func getMigratedEntityID(entity *datastore.SyncEntity) (string, error) {
 }
 
 func (h *DBHelpers) updateSyncEntity(entity *datastore.SyncEntity, oldVersion int64) (conflict bool, migratedEntity *datastore.SyncEntity, err error) {
-	if h.sqlDB.Variations().ShouldSaveToSQL(*entity.DataType, h.variationHashDecimal) {
-		conflict, err := h.sqlDB.UpdateSyncEntity(h.Trx, entity, oldVersion)
+	if h.SqlDB.Variations().ShouldSaveToSQL(*entity.DataType, h.variationHashDecimal) {
+		conflict, err := h.SqlDB.UpdateSyncEntity(h.Trx, entity, oldVersion)
 		if err != nil {
 			return false, nil, err
 		}
@@ -160,7 +160,7 @@ func (h *DBHelpers) updateSyncEntity(entity *datastore.SyncEntity, oldVersion in
 				return false, nil, err
 			}
 			entity.ID = migratedEntityId
-			conflict, err = h.sqlDB.InsertSyncEntities(h.Trx, []*datastore.SyncEntity{entity})
+			conflict, err = h.SqlDB.InsertSyncEntities(h.Trx, []*datastore.SyncEntity{entity})
 			if err != nil {
 				return false, nil, err
 			}
@@ -178,12 +178,12 @@ func (h *DBHelpers) updateSyncEntity(entity *datastore.SyncEntity, oldVersion in
 }
 
 func (h *DBHelpers) maybeMigrateToSQL(dataTypes []int) (migratedEntities []*datastore.SyncEntity, err error) {
-	if rand.Float32() > h.sqlDB.MigrateIntervalPercent() {
+	if rand.Float32() > h.SqlDB.MigrateIntervalPercent() {
 		return nil, nil
 	}
 	var applicableDataTypes []int
 	for _, dataType := range dataTypes {
-		if !h.sqlDB.Variations().ShouldMigrateToSQL(dataType, h.variationHashDecimal) {
+		if !h.SqlDB.Variations().ShouldMigrateToSQL(dataType, h.variationHashDecimal) {
 			continue
 		}
 		applicableDataTypes = append(applicableDataTypes, dataType)
@@ -192,12 +192,12 @@ func (h *DBHelpers) maybeMigrateToSQL(dataTypes []int) (migratedEntities []*data
 		return nil, nil
 	}
 
-	migrationStatuses, err := h.sqlDB.GetDynamoMigrationStatuses(h.Trx, h.ChainID, applicableDataTypes)
+	migrationStatuses, err := h.SqlDB.GetDynamoMigrationStatuses(h.Trx, h.ChainID, applicableDataTypes)
 	if err != nil {
 		return nil, err
 	}
 
-	currLimit := h.sqlDB.MigrateChunkSize()
+	currLimit := h.SqlDB.MigrateChunkSize()
 	var updatedMigrationStatuses []*datastore.MigrationStatus
 
 	for _, dataType := range applicableDataTypes {
@@ -254,13 +254,13 @@ func (h *DBHelpers) maybeMigrateToSQL(dataTypes []int) (migratedEntities []*data
 		}
 
 		if len(syncEntitiesPtr) > 0 {
-			if _, err = h.sqlDB.InsertSyncEntities(h.Trx, syncEntitiesPtr); err != nil {
+			if _, err = h.SqlDB.InsertSyncEntities(h.Trx, syncEntitiesPtr); err != nil {
 				return nil, err
 			}
 		}
 	}
 	if len(updatedMigrationStatuses) > 0 {
-		if err = h.sqlDB.UpdateDynamoMigrationStatuses(h.Trx, updatedMigrationStatuses); err != nil {
+		if err = h.SqlDB.UpdateDynamoMigrationStatuses(h.Trx, updatedMigrationStatuses); err != nil {
 			return nil, err
 		}
 	}
@@ -288,7 +288,7 @@ func (h *DBHelpers) InsertServerDefinedUniqueEntities() error {
 	var dynamoEntities []*datastore.SyncEntity
 	var sqlEntities []*datastore.SyncEntity
 	for _, entity := range entities {
-		if h.sqlDB.Variations().ShouldSaveToSQL(*entity.DataType, h.variationHashDecimal) {
+		if h.SqlDB.Variations().ShouldSaveToSQL(*entity.DataType, h.variationHashDecimal) {
 			sqlEntities = append(sqlEntities, entity)
 		} else {
 			dynamoEntities = append(dynamoEntities, entity)
@@ -303,7 +303,7 @@ func (h *DBHelpers) InsertServerDefinedUniqueEntities() error {
 	}
 
 	if len(sqlEntities) > 0 {
-		_, err = h.sqlDB.InsertSyncEntities(h.Trx, sqlEntities)
+		_, err = h.SqlDB.InsertSyncEntities(h.Trx, sqlEntities)
 		if err != nil {
 			return fmt.Errorf("error inserting entities with server tags to SQL: %w", err)
 		}

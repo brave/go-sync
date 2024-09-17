@@ -56,13 +56,13 @@ func (sqlDB *SQLDB) HasItem(tx *sqlx.Tx, chainId int64, clientTag string) (exist
 }
 
 func (sqlDB *SQLDB) UpdateSyncEntity(tx *sqlx.Tx, entity *SyncEntity, oldVersion int64) (conflict bool, err error) {
-	var idColumn string
+	var idCondition string
 	if *entity.DataType == HistoryTypeID {
-		idColumn = "client_defined_unique_tag"
+		idCondition = "client_defined_unique_tag = :client_defined_unique_tag"
 	} else {
-		idColumn = "id"
+		idCondition = "id = :id"
 	}
-	whereClause := " WHERE " + idColumn + " = :id AND chain_id = :chain_id AND deleted = false"
+	whereClause := " WHERE " + idCondition + " AND chain_id = :chain_id AND deleted = false"
 	if *entity.DataType != HistoryTypeID {
 		entity.OldVersion = &oldVersion
 		whereClause += " AND version = :old_version"
@@ -156,4 +156,12 @@ func (sqlDB *SQLDB) GetUpdatesForType(tx *sqlx.Tx, dataType int, clientToken int
 		return false, nil, fmt.Errorf("failed to get entity updates: %w", err)
 	}
 	return len(entities) == maxSize, entities, nil
+}
+
+func (sqlDB *SQLDB) DeleteChain(tx *sqlx.Tx, chainID int64) error {
+	_, err := tx.Exec(`DELETE FROM chains WHERE id = $1`, chainID)
+	if err != nil {
+		return fmt.Errorf("failed to delete chain with cascade: %w", err)
+	}
+	return nil
 }

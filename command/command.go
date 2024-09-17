@@ -378,18 +378,24 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 
 // handleClearServerDataRequest handles clearing user data from the datastore and cache
 // and fills the response
-func handleClearServerDataRequest(cache *cache.Cache, db datastore.DynamoDatastore, _ *sync_pb.ClearServerDataMessage, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
+func handleClearServerDataRequest(cache *cache.Cache, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDatastore, _ *sync_pb.ClearServerDataMessage, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
 	errCode := sync_pb.SyncEnums_SUCCESS
 	var err error
 
-	err = db.DisableSyncChain(clientID)
+	dbHelpers, err := NewDBHelpers(dynamoDB, sqlDB, clientID, nil, false)
+	if err != nil {
+		return nil, err
+	}
+	defer dbHelpers.Trx.Rollback()
+
+	err = dynamoDB.DisableSyncChain(clientID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to disable sync chain")
 		errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
 		return &errCode, err
 	}
 
-	syncEntities, err := db.ClearServerData(clientID)
+	syncEntities, err := dynamoDB.ClearServerData(clientID)
 	if err != nil {
 		errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
 		return &errCode, err
@@ -409,6 +415,16 @@ func handleClearServerDataRequest(cache *cache.Cache, db datastore.DynamoDatasto
 			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
 			return &errCode, err
 		}
+	}
+
+	if err = dbHelpers.SqlDB.DeleteChain(dbHelpers.Trx, dbHelpers.ChainID); err != nil {
+		log.Error().Err(err).Msg("Failed to disable sync chain")
+		errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
+		return &errCode, err
+	}
+
+	if err = dbHelpers.Trx.Commit(); err != nil {
+		return nil, err
 	}
 
 	return &errCode, nil
@@ -458,7 +474,7 @@ func HandleClientToServerMessage(cache *cache.Cache, pb *sync_pb.ClientToServerM
 	} else if *pb.MessageContents == sync_pb.ClientToServerMessage_CLEAR_SERVER_DATA {
 		csdRsp := &sync_pb.ClearServerDataResponse{}
 		pbRsp.ClearServerData = csdRsp
-		pbRsp.ErrorCode, err = handleClearServerDataRequest(cache, dynamoDB, pb.ClearServerData, clientID)
+		pbRsp.ErrorCode, err = handleClearServerDataRequest(cache, dynamoDB, sqlDB, pb.ClearServerData, clientID)
 		if err != nil {
 			if pbRsp.ErrorCode != nil {
 				pbRsp.ErrorMessage = aws.String(err.Error())

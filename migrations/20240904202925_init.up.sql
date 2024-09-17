@@ -6,7 +6,7 @@ CREATE TABLE chains (
 );
 
 CREATE TABLE dynamo_migration_statuses (
-	chain_id BIGINT REFERENCES chains(id),
+	chain_id BIGINT REFERENCES chains(id) ON DELETE CASCADE,
 	data_type INTEGER,
 	-- null earliest_mtime indicates that all entities have been migrated
 	earliest_mtime BIGINT,
@@ -15,7 +15,7 @@ CREATE TABLE dynamo_migration_statuses (
 
 CREATE TABLE entities (
 	id UUID,
-	chain_id BIGINT NOT NULL REFERENCES chains(id),
+	chain_id BIGINT NOT NULL REFERENCES chains(id) ON DELETE CASCADE,
 	data_type INTEGER NOT NULL,
 	ctime BIGINT NOT NULL,
 	mtime BIGINT NOT NULL,
@@ -34,7 +34,4 @@ CREATE TABLE entities (
 	PRIMARY KEY (id, chain_id),
 	UNIQUE (chain_id, client_defined_unique_tag)
 );
-CREATE INDEX entities_chain_id_idx ON entities (chain_id);
-CREATE INDEX entities_data_type_mtime_idx ON entities (data_type, mtime);
--- or maybe make a partial index for history entities and mtime, while keeping the chainid datattype and mtime index
--- CREATE INDEX entities_chain_id_data_type_mtime_idx ON entities (chain_id, data_type, mtime);
+CREATE INDEX entities_chain_id_data_type_mtime_idx ON entities (chain_id, data_type, mtime);

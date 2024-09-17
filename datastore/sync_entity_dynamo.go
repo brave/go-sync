@@ -381,7 +381,7 @@ func (dynamo *Dynamo) ClearServerData(clientID string) ([]SyncEntity, error) {
 			}
 
 			// Fail delete if race condition detected (modified time has changed).
-			if item.Version != nil {
+			if item.Version != nil && item.Mtime != nil {
 				cond := expression.Name("Mtime").Equal(expression.Value(*item.Mtime))
 				expr, err := expression.NewBuilder().WithCondition(cond).Build()
 				if err != nil {

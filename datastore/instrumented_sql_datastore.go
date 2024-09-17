@@ -52,6 +52,20 @@ func (_d SQLDatastoreWithPrometheus) Beginx() (tp1 *sqlx.Tx, err error) {
 	return _d.base.Beginx()
 }
 
+// DeleteChain implements SQLDatastore
+func (_d SQLDatastoreWithPrometheus) DeleteChain(tx *sqlx.Tx, chainID int64) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		sqldatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DeleteChain", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.DeleteChain(tx, chainID)
+}
+
 // GetAndLockChainID implements SQLDatastore
 func (_d SQLDatastoreWithPrometheus) GetAndLockChainID(tx *sqlx.Tx, clientID string) (ip1 *int64, err error) {
 	_since := time.Now()

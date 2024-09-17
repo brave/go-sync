@@ -61,4 +61,6 @@ type SQLDatastore interface {
 	MigrateIntervalPercent() float32
 	// MigrateChunkSize returns the max entity count for each migration chunk
 	MigrateChunkSize() int
+	// DeleteChain removes a chain and its associated data from the database
+	DeleteChain(tx *sqlx.Tx, chainID int64) error
 }
