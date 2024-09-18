@@ -47,8 +47,8 @@ func (sqlDB *SQLDB) InsertSyncEntities(tx *sqlx.Tx, entities []*SyncEntity) (con
 	return int(rowsAffected) == len(entities), nil
 }
 
-func (sqlDB *SQLDB) HasItem(tx *sqlx.Tx, chainId int64, clientTag string) (exists bool, err error) {
-	err = tx.QueryRowx("SELECT EXISTS(SELECT 1 FROM entities WHERE chain_id = $1 AND client_defined_unique_tag = $2)", chainId, clientTag).Scan(&exists)
+func (sqlDB *SQLDB) HasItem(tx *sqlx.Tx, chainID int64, clientTag string) (exists bool, err error) {
+	err = tx.QueryRowx("SELECT EXISTS(SELECT 1 FROM entities WHERE chain_id = $1 AND client_defined_unique_tag = $2)", chainID, clientTag).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("failed to check existence of item: %w", err)
 	}

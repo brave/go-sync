@@ -29,6 +29,9 @@ func getItemCounts(cache *cache.Cache, dynamoDB datastore.DynamoDatastore, sqlDB
 	}
 
 	sqlItemCounts, err := sqlDB.GetItemCounts(tx, chainID)
+	if err != nil {
+		return nil, err
+	}
 
 	itemCounts := ItemCounts{
 		cache:                cache,

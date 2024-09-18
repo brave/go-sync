@@ -8,9 +8,10 @@ import (
 	"strconv"
 
 	"github.com/golang-migrate/migrate/v4"
+	// import postgres package for migrations
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+	// import pgx so it can be used with sqlx
 	_ "github.com/jackc/pgx/stdlib"
 	"github.com/jmoiron/sqlx"
 )

@@ -26,9 +26,8 @@ func DeleteTable(dynamo *datastore.Dynamo) error {
 				return nil
 			}
 			return err
-		} else {
-			return fmt.Errorf("error deleting table: %w", err)
 		}
+		return fmt.Errorf("error deleting table: %w", err)
 	}
 
 	return dynamo.WaitUntilTableNotExists(

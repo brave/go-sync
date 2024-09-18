@@ -543,7 +543,7 @@ func (suite *SyncEntityTestSuite) TestGetUpdatesForType() {
 	suite.Require().NoError(err, "InsertSyncEntity should succeed")
 
 	// Get all updates for type 123 and client1 using token = 0.
-	var token int64 = 0
+	var token int64
 	hasChangesRemaining, syncItems, err := suite.dynamo.GetUpdatesForType(123, &token, nil, true, "client1", 100, true)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	suite.Assert().Equal(syncItems, []datastore.SyncEntity{entity1, entity2})

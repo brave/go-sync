@@ -422,7 +422,7 @@ func handleClearServerDataRequest(cache *cache.Cache, dynamoDB datastore.DynamoD
 		}
 	}
 
-	if err = dbHelpers.SqlDB.DeleteChain(dbHelpers.Trx, dbHelpers.ChainID); err != nil {
+	if err = dbHelpers.SQLDB.DeleteChain(dbHelpers.Trx, dbHelpers.ChainID); err != nil {
 		log.Error().Err(err).Msg("Failed to disable sync chain")
 		errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
 		return &errCode, err

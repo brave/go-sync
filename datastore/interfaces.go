@@ -40,7 +40,7 @@ type SQLDatastore interface {
 	// InsertSyncEntities inserts multiple sync entities into the database
 	InsertSyncEntities(tx *sqlx.Tx, entities []*SyncEntity) (bool, error)
 	// HasItem checks if an item exists in the database
-	HasItem(tx *sqlx.Tx, chainId int64, clientTag string) (bool, error)
+	HasItem(tx *sqlx.Tx, chainID int64, clientTag string) (bool, error)
 	// UpdateSyncEntity updates a sync entity in the database
 	UpdateSyncEntity(tx *sqlx.Tx, entity *SyncEntity, oldVersion int64) (bool, error)
 	// GetAndLockChainID retrieves and locks a chain ID for a given client ID

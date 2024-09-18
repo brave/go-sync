@@ -84,7 +84,7 @@ func (sqlVariations *SQLVariations) ShouldMigrateToSQL(dataType int, variationHa
 	return exists && variationHashDecimal <= rolloutPercent
 }
 
-func (v *SQLVariations) GetStateDigest() string {
+func (sqlVariations *SQLVariations) GetStateDigest() string {
 	return sqlSaveRolloutsEnvKey + ":" + os.Getenv(sqlSaveRolloutsEnvKey) + ";" +
 		sqlMigrateRolloutsEnvKey + ":" + os.Getenv(sqlMigrateRolloutsEnvKey)
 }
