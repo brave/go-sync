@@ -24,6 +24,7 @@ func VariationHashDecimal(input string) float32 {
 type SQLVariations struct {
 	sqlSaveRollouts    map[int]float32
 	sqlMigrateRollouts map[int]float32
+	Ready              bool
 }
 
 func parseRollouts(envKey string) (map[int]float32, error) {
@@ -67,8 +68,9 @@ func LoadSQLVariations() (*SQLVariations, error) {
 	}
 
 	return &SQLVariations{
-		sqlSaveRollouts,
-		sqlMigrateRollouts,
+		sqlSaveRollouts:    sqlSaveRollouts,
+		sqlMigrateRollouts: sqlMigrateRollouts,
+		Ready:              false,
 	}, nil
 }
 
@@ -80,6 +82,11 @@ func (sqlVariations *SQLVariations) ShouldSaveToSQL(dataType int, variationHashD
 func (sqlVariations *SQLVariations) ShouldMigrateToSQL(dataType int, variationHashDecimal float32) bool {
 	rolloutPercent, exists := sqlVariations.sqlMigrateRollouts[dataType]
 	return exists && variationHashDecimal <= rolloutPercent
+}
+
+func (v *SQLVariations) GetStateDigest() string {
+	return sqlSaveRolloutsEnvKey + ":" + os.Getenv(sqlSaveRolloutsEnvKey) + ";" +
+		sqlMigrateRolloutsEnvKey + ":" + os.Getenv(sqlMigrateRolloutsEnvKey)
 }
 
 func (sqlDB *SQLDB) Variations() *SQLVariations {

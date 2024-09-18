@@ -78,6 +78,8 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	redis := cache.NewRedisClient()
 	cache := cache.NewCache(cache.NewRedisClientWithPrometheus(redis, "redis"))
 
+	go maybeWaitOnRolloutConfigChange(sqlDB.Variations(), cache)
+
 	// Provide datastore & cache via context
 	ctx = context.WithValue(ctx, syncContext.ContextKeyDatastore, dynamoDB)
 	ctx = context.WithValue(ctx, syncContext.ContextKeyCache, &cache)

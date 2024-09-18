@@ -178,6 +178,9 @@ func (h *DBHelpers) updateSyncEntity(entity *datastore.SyncEntity, oldVersion in
 }
 
 func (h *DBHelpers) maybeMigrateToSQL(dataTypes []int) (migratedEntities []*datastore.SyncEntity, err error) {
+	if !h.SqlDB.Variations().Ready {
+		return nil, nil
+	}
 	if rand.Float32() > h.SqlDB.MigrateIntervalPercent() {
 		return nil, nil
 	}
@@ -269,7 +272,10 @@ func (h *DBHelpers) maybeMigrateToSQL(dataTypes []int) (migratedEntities []*data
 
 // InsertServerDefinedUniqueEntities inserts the server defined unique tag
 // entities if it is not in the DB yet for a specific client.
-func (h *DBHelpers) InsertServerDefinedUniqueEntities() error {
+func (h *DBHelpers) insertServerDefinedUniqueEntities() error {
+	if !h.SqlDB.Variations().Ready {
+		return fmt.Errorf("SQL rollout not ready")
+	}
 	// Check if they're existed already for this client.
 	// If yes, just return directly.
 	ready, err := h.dynamoDB.HasServerDefinedUniqueTag(h.clientID, nigoriTag)

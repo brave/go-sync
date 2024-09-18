@@ -75,7 +75,7 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 		}
 
 		// Insert initial records if needed.
-		err := dbHelpers.InsertServerDefinedUniqueEntities()
+		err := dbHelpers.insertServerDefinedUniqueEntities()
 		if err != nil {
 			log.Error().Err(err).Msg("Create server defined unique entities failed")
 			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
@@ -233,6 +233,11 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 	errCode := sync_pb.SyncEnums_SUCCESS // default value, might be changed later
 	if commitMsg.Entries == nil {        // nothing to process
 		return &errCode, nil
+	}
+
+	if !sqlDB.Variations().Ready {
+		errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
+		return &errCode, fmt.Errorf("SQL rollout not ready")
 	}
 
 	dbHelpers, err := NewDBHelpers(dynamoDB, sqlDB, clientID, cache, true)

@@ -107,3 +107,17 @@ func (_d RedisClientWithPrometheus) Set(ctx context.Context, key string, val str
 	}()
 	return _d.base.Set(ctx, key, val, ttl)
 }
+
+// SubscribeAndWait implements RedisClient
+func (_d RedisClientWithPrometheus) SubscribeAndWait(ctx context.Context, channel string) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		redisclientDurationSummaryVec.WithLabelValues(_d.instanceName, "SubscribeAndWait", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.SubscribeAndWait(ctx, channel)
+}
