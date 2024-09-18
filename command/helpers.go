@@ -139,6 +139,8 @@ func (h *DBHelpers) updateSyncEntity(entity *datastore.SyncEntity, oldVersion in
 		if err != nil {
 			return false, nil, err
 		}
+		// Conflict might mean that the entity does not exist in SQL but exists in Dynamo.
+		// Check for a Dynamo entity and migrate it accordingly.
 		if conflict {
 			oldEntity, err := h.dynamoDB.GetEntity(datastore.ItemQuery{
 				ID:       entity.ID,
@@ -148,9 +150,13 @@ func (h *DBHelpers) updateSyncEntity(entity *datastore.SyncEntity, oldVersion in
 				return false, nil, err
 			}
 			if oldEntity == nil {
+				// The conflict is unrelated to a pending Dynamo to SQL migration.
+				// Return conflict error to client.
 				return true, nil, nil
 			}
 			if oldEntity.Deleted == nil || !*oldEntity.Deleted {
+				// If the stored entity was not already deleted, decrement the
+				// Dynamo item count since we'll be migrating the entity to SQL.
 				if err = h.ItemCounts.recordChange(*entity.DataType, true, false); err != nil {
 					return false, nil, err
 				}
@@ -165,6 +171,8 @@ func (h *DBHelpers) updateSyncEntity(entity *datastore.SyncEntity, oldVersion in
 				return false, nil, err
 			}
 			if !conflict && (entity.Deleted == nil || !*entity.Deleted) {
+				// If the new entity is not considered deleted, increment the
+				// SQL interim count.
 				if err = h.ItemCounts.recordChange(*entity.DataType, false, true); err != nil {
 					return false, nil, err
 				}
@@ -174,6 +182,11 @@ func (h *DBHelpers) updateSyncEntity(entity *datastore.SyncEntity, oldVersion in
 		return conflict, nil, err
 	}
 	conflict, err = h.dynamoDB.UpdateSyncEntity(entity, oldVersion)
+	if !conflict && entity.Deleted != nil && *entity.Deleted {
+		if err = h.ItemCounts.recordChange(*entity.DataType, true, false); err != nil {
+			return false, nil, err
+		}
+	}
 	return conflict, nil, err
 }
 
@@ -272,7 +285,7 @@ func (h *DBHelpers) maybeMigrateToSQL(dataTypes []int) (migratedEntities []*data
 
 // InsertServerDefinedUniqueEntities inserts the server defined unique tag
 // entities if it is not in the DB yet for a specific client.
-func (h *DBHelpers) insertServerDefinedUniqueEntities() error {
+func (h *DBHelpers) InsertServerDefinedUniqueEntities() error {
 	if !h.SqlDB.Variations().Ready {
 		return fmt.Errorf("SQL rollout not ready")
 	}

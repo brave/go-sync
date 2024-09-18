@@ -23,14 +23,14 @@ func (m *MockDatastore) InsertSyncEntitiesWithServerTags(entities []*datastore.S
 }
 
 // UpdateSyncEntity mocks calls to UpdateSyncEntity
-func (m *MockDatastore) UpdateSyncEntity(entity *datastore.SyncEntity, oldVersion int64) (conflict bool, delete bool, err error) {
+func (m *MockDatastore) UpdateSyncEntity(entity *datastore.SyncEntity, oldVersion int64) (conflict bool, err error) {
 	args := m.Called(entity, oldVersion)
-	return args.Bool(0), args.Bool(1), args.Error(2)
+	return args.Bool(0), args.Error(1)
 }
 
 // GetUpdatesForType mocks calls to GetUpdatesForType
-func (m *MockDatastore) GetUpdatesForType(dataType int, clientToken int64, fetchFolders bool, clientID string, maxSize int64) (bool, []datastore.SyncEntity, error) {
-	args := m.Called(dataType, clientToken, fetchFolders, clientID, maxSize)
+func (m *MockDatastore) GetUpdatesForType(dataType int, minMtime *int64, maxMtime *int64, fetchFolders bool, clientID string, maxSize int, ascOrder bool) (bool, []datastore.SyncEntity, error) {
+	args := m.Called(dataType, minMtime, maxMtime, fetchFolders, clientID, maxSize, ascOrder)
 	return args.Bool(0), args.Get(1).([]datastore.SyncEntity), args.Error(2)
 }
 
@@ -73,4 +73,19 @@ func (m *MockDatastore) DisableSyncChain(clientID string) error {
 func (m *MockDatastore) IsSyncChainDisabled(clientID string) (bool, error) {
 	args := m.Called(clientID)
 	return args.Bool(0), args.Error(1)
+}
+
+// DeleteEntities mocks the deletion of sync entities
+func (m *MockDatastore) DeleteEntities(entities []*datastore.SyncEntity) error {
+	args := m.Called(entities)
+	return args.Error(0)
+}
+
+// GetEntity mocks the retrieval of a sync entity
+func (m *MockDatastore) GetEntity(query datastore.ItemQuery) (*datastore.SyncEntity, error) {
+	args := m.Called(query)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*datastore.SyncEntity), args.Error(1)
 }

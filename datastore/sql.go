@@ -1,6 +1,7 @@
 package datastore
 
 import (
+	"embed"
 	"errors"
 	"fmt"
 	"os"
@@ -9,16 +10,25 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	_ "github.com/jackc/pgx/stdlib"
 	"github.com/jmoiron/sqlx"
 )
 
-const sqlURLEnvKey = "SQL_DATABASE_URL"
-const sqlMigrateUpdateIntervalEnvKey = "SQL_MIGRATE_UPDATE_INTERVAL"
-const sqlMigrateChunkSizeEnvKey = "SQL_MIGRATE_CHUNK_SIZE"
+const (
+	sqlURLEnvKey     = "SQL_DATABASE_URL"
+	sqlTestURLEnvKey = "SQL_TEST_DATABASE_URL"
+	// Default value is defined here, since the .env file will not be loaded
+	// because tests are run in the subdirectories where the tests live
+	defaultSQLTestURL              = "postgres://sync:password@localhost:5434/testing?sslmode=disable"
+	sqlMigrateUpdateIntervalEnvKey = "SQL_MIGRATE_UPDATE_INTERVAL"
+	sqlMigrateChunkSizeEnvKey      = "SQL_MIGRATE_CHUNK_SIZE"
+	defaultMigrateUpdateInterval   = 4
+	defaultMigrateChunkSize        = 100
+)
 
-const defaultMigrateUpdateInterval = 4
-const defaultMigrateChunkSize = 100
+//go:embed migrations/*
+var migrationFiles embed.FS
 
 // SQLDB is a Datastore wrapper around a SQL-based database.
 type SQLDB struct {
@@ -30,32 +40,52 @@ type SQLDB struct {
 }
 
 // NewSQLDB returns a SQLDB client to be used.
-func NewSQLDB() (*SQLDB, error) {
+func NewSQLDB(isTesting bool) (*SQLDB, error) {
 	variations, err := LoadSQLVariations()
 	if err != nil {
 		return nil, err
 	}
 
-	sqlURL := os.Getenv(sqlURLEnvKey)
-	if len(sqlURL) == 0 {
-		return nil, fmt.Errorf("%s must be defined", sqlURLEnvKey)
+	var envKey string
+	if isTesting {
+		envKey = sqlTestURLEnvKey
+	} else {
+		envKey = sqlURLEnvKey
 	}
-	migration, err := migrate.New(
-		"file://./migrations",
+
+	sqlURL := os.Getenv(envKey)
+	if sqlURL == "" {
+		if isTesting {
+			sqlURL = defaultSQLTestURL
+		} else {
+			return nil, fmt.Errorf("%s must be defined", envKey)
+		}
+	}
+	iofsDriver, err := iofs.New(migrationFiles, "migrations")
+	if err != nil {
+		return nil, fmt.Errorf("failed to load iofs driver for migrations: %w", err)
+	}
+	migration, err := migrate.NewWithSourceInstance(
+		"iofs",
+		iofsDriver,
 		sqlURL,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to init migrations: %v", err)
+		return nil, fmt.Errorf("Failed to init migrations: %w", err)
 	}
 	if err = migration.Up(); err != nil {
 		if !errors.Is(err, migrate.ErrNoChange) {
-			return nil, fmt.Errorf("Failed to run migrations: %v", err)
+			return nil, fmt.Errorf("Failed to run migrations: %w", err)
 		}
 	}
 
 	db, err := sqlx.Connect("pgx", sqlURL)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to connect to SQL DB: %v", err)
+		return nil, fmt.Errorf("Failed to connect to SQL DB: %w", err)
+	}
+
+	if isTesting {
+		variations.Ready = true
 	}
 
 	migrateInterval, _ := strconv.Atoi(os.Getenv(sqlMigrateUpdateIntervalEnvKey))

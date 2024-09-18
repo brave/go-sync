@@ -75,7 +75,7 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 		}
 
 		// Insert initial records if needed.
-		err := dbHelpers.insertServerDefinedUniqueEntities()
+		err := dbHelpers.InsertServerDefinedUniqueEntities()
 		if err != nil {
 			log.Error().Err(err).Msg("Create server defined unique entities failed")
 			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR

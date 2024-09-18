@@ -116,7 +116,7 @@ func (sqlDB *SQLDB) GetAndLockChainID(tx *sqlx.Tx, clientID string) (chainID *in
 	// Get chain ID and lock for updates
 	clientIDBytes, err := hex.DecodeString(clientID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode clientID: %w", err)
+		clientIDBytes = []byte(clientID)
 	}
 
 	var id int64

@@ -17,13 +17,13 @@ type ItemCountTestSuite struct {
 func (suite *ItemCountTestSuite) SetupSuite() {
 	datastore.Table = "client-entity-test-datastore"
 	var err error
-	suite.dynamo, err = datastore.NewDynamo()
+	suite.dynamo, err = datastore.NewDynamo(true)
 	suite.Require().NoError(err, "Failed to get dynamoDB session")
 }
 
 func (suite *ItemCountTestSuite) SetupTest() {
 	suite.Require().NoError(
-		datastoretest.ResetTable(suite.dynamo), "Failed to reset table")
+		datastoretest.ResetDynamoTable(suite.dynamo), "Failed to reset table")
 }
 
 func (suite *ItemCountTestSuite) TearDownTest() {

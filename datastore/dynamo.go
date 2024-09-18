@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
@@ -25,7 +26,9 @@ const (
 
 var (
 	// Table is the name of the table in dynamoDB, could be modified in tests.
-	Table = os.Getenv("TABLE_NAME")
+	Table               = os.Getenv("TABLE_NAME")
+	defaultTestEndpoint = "http://localhost:8000"
+	defaultTestRegion   = "us-west-2"
 )
 
 // PrimaryKey struct is used to represent the primary key of our table.
@@ -40,7 +43,7 @@ type Dynamo struct {
 }
 
 // NewDynamo returns a dynamoDB client to be used.
-func NewDynamo() (*Dynamo, error) {
+func NewDynamo(isTesting bool) (*Dynamo, error) {
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
@@ -49,7 +52,19 @@ func NewDynamo() (*Dynamo, error) {
 		},
 	}
 
-	awsConfig := aws.NewConfig().WithRegion(os.Getenv("AWS_REGION")).WithEndpoint(os.Getenv("AWS_ENDPOINT")).WithHTTPClient(httpClient)
+	endpoint := os.Getenv("AWS_ENDPOINT")
+	region := os.Getenv("AWS_REGION")
+	if endpoint == "" && region == "" && isTesting {
+		endpoint = defaultTestEndpoint
+		region = defaultTestRegion
+	}
+
+	awsConfig := aws.NewConfig().WithRegion(region).WithEndpoint(endpoint).WithHTTPClient(httpClient)
+
+	if isTesting {
+		awsConfig = awsConfig.WithCredentials(credentials.NewStaticCredentials("GOSYNC", "GOSYNC", "GOSYNC"))
+	}
+
 	sess, err := session.NewSession(awsConfig)
 
 	if err != nil {

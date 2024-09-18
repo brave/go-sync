@@ -25,6 +25,7 @@ func DeleteTable(dynamo *datastore.Dynamo) error {
 			if aerr.Code() == dynamodb.ErrCodeResourceNotFoundException {
 				return nil
 			}
+			return err
 		} else {
 			return fmt.Errorf("error deleting table: %w", err)
 		}
@@ -59,8 +60,8 @@ func CreateTable(dynamo *datastore.Dynamo) error {
 		&dynamodb.DescribeTableInput{TableName: aws.String(datastore.Table)})
 }
 
-// ResetTable deletes and creates datastore.Table in dynamoDB.
-func ResetTable(dynamo *datastore.Dynamo) error {
+// ResetDynamoTable deletes and creates datastore.Table in dynamoDB.
+func ResetDynamoTable(dynamo *datastore.Dynamo) error {
 	if err := DeleteTable(dynamo); err != nil {
 		return fmt.Errorf("error deleting table to reset table: %w", err)
 	}

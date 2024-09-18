@@ -44,7 +44,7 @@ func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	return logging.SetupLogger(ctx)
 }
 
-func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux) {
+func setupRouter(ctx context.Context, logger *zerolog.Logger, isTesting bool) (context.Context, *chi.Mux) {
 	r := chi.NewRouter()
 
 	r.Use(chiware.RequestID)
@@ -63,13 +63,13 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(batware.BearerToken)
 	r.Use(middleware.CommonResponseHeaders)
 
-	dynamoDB, err := datastore.NewDynamo()
+	dynamoDB, err := datastore.NewDynamo(isTesting)
 	if err != nil {
 		sentry.CaptureException(err)
 		log.Panic().Err(err).Msg("Must be able to init Dynamo datastore to start")
 	}
 
-	sqlDB, err := datastore.NewSQLDB()
+	sqlDB, err := datastore.NewSQLDB(isTesting)
 	if err != nil {
 		sentry.CaptureException(err)
 		log.Panic().Err(err).Msg("Must be able to init SQL datastore to start")
@@ -131,7 +131,7 @@ func StartServer() {
 	subLog := logger.Info().Str("prefix", "main")
 	subLog.Msg("Starting server")
 
-	serverCtx, r := setupRouter(serverCtx, logger)
+	serverCtx, r := setupRouter(serverCtx, logger, false)
 
 	port := ":8295"
 	srv := http.Server{
