@@ -134,8 +134,10 @@ func getMigratedEntityID(entity *datastore.SyncEntity) (string, error) {
 }
 
 func (h *DBHelpers) updateSyncEntity(entity *datastore.SyncEntity, oldVersion int64) (conflict bool, migratedEntity *datastore.SyncEntity, err error) {
-	if h.SQLDB.Variations().ShouldSaveToSQL(*entity.DataType, h.variationHashDecimal) {
-		conflict, err := h.SQLDB.UpdateSyncEntity(h.Trx, entity, oldVersion)
+	var deleted bool
+	shouldSaveInSQL := h.SQLDB.Variations().ShouldSaveToSQL(*entity.DataType, h.variationHashDecimal)
+	if shouldSaveInSQL {
+		conflict, deleted, err = h.SQLDB.UpdateSyncEntity(h.Trx, entity, oldVersion)
 		if err != nil {
 			return false, nil, err
 		}
@@ -179,11 +181,14 @@ func (h *DBHelpers) updateSyncEntity(entity *datastore.SyncEntity, oldVersion in
 			}
 			return conflict, oldEntity, err
 		}
-		return conflict, nil, err
+	} else {
+		conflict, deleted, err = h.dynamoDB.UpdateSyncEntity(entity, oldVersion)
+		if err != nil {
+			return false, nil, err
+		}
 	}
-	conflict, err = h.dynamoDB.UpdateSyncEntity(entity, oldVersion)
-	if !conflict && entity.Deleted != nil && *entity.Deleted {
-		if err = h.ItemCounts.recordChange(*entity.DataType, true, false); err != nil {
+	if !conflict && deleted {
+		if err = h.ItemCounts.recordChange(*entity.DataType, true, shouldSaveInSQL); err != nil {
 			return false, nil, err
 		}
 	}

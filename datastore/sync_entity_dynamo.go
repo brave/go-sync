@@ -460,7 +460,7 @@ func (dynamo *Dynamo) IsSyncChainDisabled(clientID string) (bool, error) {
 }
 
 // UpdateSyncEntity updates a sync item in dynamoDB.
-func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (bool, error) {
+func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (conflict bool, deleted bool, err error) {
 	id := entity.ID
 	if *entity.DataType == HistoryTypeID {
 		id = *entity.ClientDefinedUniqueTag
@@ -468,7 +468,7 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (bo
 	primaryKey := PrimaryKey{ClientID: entity.ClientID, ID: id}
 	key, err := dynamodbattribute.MarshalMap(primaryKey)
 	if err != nil {
-		return false, fmt.Errorf("error marshalling key to update sync entity: %w", err)
+		return false, false, fmt.Errorf("error marshalling key to update sync entity: %w", err)
 	}
 
 	// condition to ensure the request is update only...
@@ -505,7 +505,7 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (bo
 
 	expr, err := expression.NewBuilder().WithCondition(cond).WithUpdate(update).Build()
 	if err != nil {
-		return false, fmt.Errorf("error building expression to update sync entity: %w", err)
+		return false, false, fmt.Errorf("error building expression to update sync entity: %w", err)
 	}
 
 	// Soft-delete a sync item with a client tag, use a transaction to delete its
@@ -515,7 +515,7 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (bo
 			ClientID: entity.ClientID, ID: clientTagItemPrefix + *entity.ClientDefinedUniqueTag}
 		tagItemKey, err := dynamodbattribute.MarshalMap(pk)
 		if err != nil {
-			return false, fmt.Errorf("error marshalling key to update sync entity: %w", err)
+			return false, false, fmt.Errorf("error marshalling key to update sync entity: %w", err)
 		}
 
 		items := []*dynamodb.TransactWriteItem{}
@@ -546,16 +546,16 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (bo
 			if canceledException, ok := err.(*dynamodb.TransactionCanceledException); ok {
 				for _, reason := range canceledException.CancellationReasons {
 					if reason.Code != nil && *reason.Code == conditionalCheckFailed {
-						return true, nil
+						return true, false, nil
 					}
 				}
 			}
 
-			return false, fmt.Errorf("error deleting sync item and tag item in a transaction: %w", err)
+			return false, false, fmt.Errorf("error deleting sync item and tag item in a transaction: %w", err)
 		}
 
 		// Successfully soft-delete the sync item and delete the tag item.
-		return false, nil
+		return false, true, nil
 	}
 
 	// Not deleting a sync item with a client tag, do a normal update on sync
@@ -575,19 +575,26 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (bo
 		if aerr, ok := err.(awserr.Error); ok {
 			// Return conflict if the write condition fails.
 			if aerr.Code() == dynamodb.ErrCodeConditionalCheckFailedException {
-				return true, nil
+				return true, false, nil
 			}
 		}
-		return false, fmt.Errorf("error calling UpdateItem to update sync entity: %w", err)
+		return false, false, fmt.Errorf("error calling UpdateItem to update sync entity: %w", err)
 	}
 
 	// Unmarshal out.Attributes
 	oldEntity := &SyncEntity{}
 	err = dynamodbattribute.UnmarshalMap(out.Attributes, oldEntity)
 	if err != nil {
-		return false, fmt.Errorf("error unmarshalling old sync entity: %w", err)
+		return false, false, fmt.Errorf("error unmarshalling old sync entity: %w", err)
 	}
-	return false, nil
+	if entity.Deleted == nil { // No updates on Deleted this time.
+		deleted = false
+	} else if oldEntity.Deleted == nil { // Consider it as Deleted = false.
+		deleted = *entity.Deleted
+	} else {
+		deleted = !*oldEntity.Deleted && *entity.Deleted
+	}
+	return false, deleted, nil
 }
 
 // GetUpdatesForType returns sync entities of a data type where it's mtime is

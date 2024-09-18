@@ -23,9 +23,9 @@ func (m *MockDatastore) InsertSyncEntitiesWithServerTags(entities []*datastore.S
 }
 
 // UpdateSyncEntity mocks calls to UpdateSyncEntity
-func (m *MockDatastore) UpdateSyncEntity(entity *datastore.SyncEntity, oldVersion int64) (conflict bool, err error) {
+func (m *MockDatastore) UpdateSyncEntity(entity *datastore.SyncEntity, oldVersion int64) (conflict bool, deleted bool, err error) {
 	args := m.Called(entity, oldVersion)
-	return args.Bool(0), args.Error(1)
+	return args.Bool(0), args.Bool(1), args.Error(2)
 }
 
 // GetUpdatesForType mocks calls to GetUpdatesForType

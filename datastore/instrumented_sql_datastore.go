@@ -109,7 +109,7 @@ func (_d SQLDatastoreWithPrometheus) GetItemCounts(tx *sqlx.Tx, chainID int64) (
 }
 
 // GetUpdatesForType implements SQLDatastore
-func (_d SQLDatastoreWithPrometheus) GetUpdatesForType(tx *sqlx.Tx, dataType int, clientToken int64, fetchFolders bool, chainID int64, maxSize int) (b1 bool, sa1 []SyncEntity, err error) {
+func (_d SQLDatastoreWithPrometheus) GetUpdatesForType(tx *sqlx.Tx, dataType int, clientToken int64, fetchFolders bool, chainID int64, maxSize int) (hasChangesRemaining bool, entities []SyncEntity, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -123,7 +123,7 @@ func (_d SQLDatastoreWithPrometheus) GetUpdatesForType(tx *sqlx.Tx, dataType int
 }
 
 // HasItem implements SQLDatastore
-func (_d SQLDatastoreWithPrometheus) HasItem(tx *sqlx.Tx, chainId int64, clientTag string) (b1 bool, err error) {
+func (_d SQLDatastoreWithPrometheus) HasItem(tx *sqlx.Tx, chainID int64, clientTag string) (b1 bool, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -133,7 +133,7 @@ func (_d SQLDatastoreWithPrometheus) HasItem(tx *sqlx.Tx, chainId int64, clientT
 
 		sqldatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "HasItem", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.HasItem(tx, chainId, clientTag)
+	return _d.base.HasItem(tx, chainID, clientTag)
 }
 
 // InsertSyncEntities implements SQLDatastore
@@ -185,7 +185,7 @@ func (_d SQLDatastoreWithPrometheus) UpdateDynamoMigrationStatuses(tx *sqlx.Tx, 
 }
 
 // UpdateSyncEntity implements SQLDatastore
-func (_d SQLDatastoreWithPrometheus) UpdateSyncEntity(tx *sqlx.Tx, entity *SyncEntity, oldVersion int64) (b1 bool, err error) {
+func (_d SQLDatastoreWithPrometheus) UpdateSyncEntity(tx *sqlx.Tx, entity *SyncEntity, oldVersion int64) (conflict bool, deleted bool, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

@@ -108,7 +108,7 @@ func (_d DynamoDatastoreWithPrometheus) GetEntity(query ItemQuery) (sp1 *SyncEnt
 }
 
 // GetUpdatesForType implements DynamoDatastore
-func (_d DynamoDatastoreWithPrometheus) GetUpdatesForType(dataType int, minMtime *int64, maxMtime *int64, fetchFolders bool, clientID string, maxSize int, ascOrder bool) (b1 bool, sa1 []SyncEntity, err error) {
+func (_d DynamoDatastoreWithPrometheus) GetUpdatesForType(dataType int, minMtime *int64, maxMtime *int64, fetchFolders bool, clientID string, maxSize int, ascOrder bool) (hasChangesRemaining bool, entities []SyncEntity, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -206,7 +206,7 @@ func (_d DynamoDatastoreWithPrometheus) UpdateClientItemCount(counts *DynamoItem
 }
 
 // UpdateSyncEntity implements DynamoDatastore
-func (_d DynamoDatastoreWithPrometheus) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (conflict bool, err error) {
+func (_d DynamoDatastoreWithPrometheus) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (conflict bool, deleted bool, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

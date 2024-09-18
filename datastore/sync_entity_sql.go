@@ -55,7 +55,7 @@ func (sqlDB *SQLDB) HasItem(tx *sqlx.Tx, chainID int64, clientTag string) (exist
 	return exists, nil
 }
 
-func (sqlDB *SQLDB) UpdateSyncEntity(tx *sqlx.Tx, entity *SyncEntity, oldVersion int64) (conflict bool, err error) {
+func (sqlDB *SQLDB) UpdateSyncEntity(tx *sqlx.Tx, entity *SyncEntity, oldVersion int64) (conflict bool, deleted bool, err error) {
 	var idCondition string
 	if *entity.DataType == HistoryTypeID {
 		idCondition = "client_defined_unique_tag = :client_defined_unique_tag"
@@ -101,15 +101,15 @@ func (sqlDB *SQLDB) UpdateSyncEntity(tx *sqlx.Tx, entity *SyncEntity, oldVersion
 
 	result, err := tx.NamedExec(query, entity)
 	if err != nil {
-		return false, fmt.Errorf("error updating entity: %w", err)
+		return false, false, fmt.Errorf("error updating entity: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return false, fmt.Errorf("error getting rows affected after update: %w", err)
+		return false, false, fmt.Errorf("error getting rows affected after update: %w", err)
 	}
 
-	return rowsAffected == 0, nil
+	return rowsAffected == 0, entity.Deleted != nil && *entity.Deleted, nil
 }
 
 func (sqlDB *SQLDB) GetAndLockChainID(tx *sqlx.Tx, clientID string) (chainID *int64, err error) {

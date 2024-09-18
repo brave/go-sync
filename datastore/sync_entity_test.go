@@ -339,9 +339,10 @@ func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_Basic() {
 	updateEntity1.Deleted = aws.Bool(true)
 	updateEntity1.DataTypeMtime = aws.String("123#23456789")
 	updateEntity1.Specifics = []byte{3, 4}
-	conflict, err := suite.dynamo.UpdateSyncEntity(&updateEntity1, *entity1.Version)
+	conflict, deleted, err := suite.dynamo.UpdateSyncEntity(&updateEntity1, *entity1.Version)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().False(conflict, "Successful update should not have conflict")
+	suite.Assert().True(deleted, "Successful update should result in delete")
 
 	// Update with optional fields.
 	updateEntity2 := updateEntity1
@@ -352,27 +353,31 @@ func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_Basic() {
 	updateEntity2.ParentID = aws.String("parentID")
 	updateEntity2.Name = aws.String("name")
 	updateEntity2.NonUniqueName = aws.String("non_unique_name")
-	conflict, err = suite.dynamo.UpdateSyncEntity(&updateEntity2, *entity2.Version)
+	conflict, deleted, err = suite.dynamo.UpdateSyncEntity(&updateEntity2, *entity2.Version)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().False(conflict, "Successful update should not have conflict")
+	suite.Assert().False(deleted, "Successful update should not result in delete")
 
 	// Update with nil Folder and Deleted
 	updateEntity3 := updateEntity1
 	updateEntity3.ID = "id3"
 	updateEntity3.Folder = nil
 	updateEntity3.Deleted = nil
-	conflict, err = suite.dynamo.UpdateSyncEntity(&updateEntity3, *entity3.Version)
+	conflict, deleted, err = suite.dynamo.UpdateSyncEntity(&updateEntity3, *entity3.Version)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().False(conflict, "Successful update should not have conflict")
+	suite.Assert().False(deleted, "Successful update should not result in delete")
 	// Reset these back to false because they will be the expected value in DB.
 	updateEntity3.Folder = aws.Bool(false)
 	updateEntity3.Deleted = aws.Bool(false)
 
 	// Update entity again with the wrong old version as (version mismatch)
 	// should return false.
-	conflict, err = suite.dynamo.UpdateSyncEntity(&updateEntity2, 12345678)
+	conflict, deleted, err = suite.dynamo.UpdateSyncEntity(&updateEntity2, 12345678)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().True(conflict, "Update with the same version should return conflict")
+	suite.Assert().False(deleted, "Successful update should not result in delete")
+	// suite.Assert().False(deleted, "Successful update should not result in delete")
 
 	// Check sync entities are updated correctly in DB.
 	syncItems, err = datastoretest.ScanSyncEntities(suite.dynamo)
@@ -403,24 +408,27 @@ func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_HistoryType() {
 	updateEntity1.Version = aws.Int64(2)
 	updateEntity1.Folder = aws.Bool(true)
 	updateEntity1.Mtime = aws.Int64(24242424)
-	conflict, err = suite.dynamo.UpdateSyncEntity(&updateEntity1, 1)
+	conflict, deleted, err := suite.dynamo.UpdateSyncEntity(&updateEntity1, 1)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().False(conflict, "Successful update should not have conflict")
+	suite.Assert().False(deleted, "Successful update should not result in delete")
 
 	// should still succeed with the same version number,
 	// since the version number should be ignored
 	updateEntity2 := updateEntity1
 	updateEntity2.Mtime = aws.Int64(42424242)
-	conflict, err = suite.dynamo.UpdateSyncEntity(&updateEntity2, 1)
+	conflict, deleted, err = suite.dynamo.UpdateSyncEntity(&updateEntity2, 1)
 	suite.Require().NoError(err, "UpdateSyncEntity should not return an error")
 	suite.Assert().False(conflict, "Successful update should not have conflict")
+	suite.Assert().False(deleted, "Successful update should not result in delete")
 
 	updateEntity3 := entity1
 	updateEntity3.Deleted = aws.Bool(true)
 
-	conflict, err = suite.dynamo.UpdateSyncEntity(&updateEntity3, 1)
+	conflict, deleted, err = suite.dynamo.UpdateSyncEntity(&updateEntity3, 1)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().False(conflict, "Successful update should not have conflict")
+	suite.Assert().True(deleted, "Successful update should result in delete")
 
 	syncItems, err := datastoretest.ScanSyncEntities(suite.dynamo)
 	suite.Require().NoError(err, "ScanSyncEntities should succeed")
@@ -459,21 +467,24 @@ func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_ReuseClientTag() {
 	updateEntity1.Folder = aws.Bool(true)
 	updateEntity1.DataTypeMtime = aws.String("123#23456789")
 	updateEntity1.Specifics = []byte{3, 4}
-	conflict, err = suite.dynamo.UpdateSyncEntity(&updateEntity1, *entity1.Version)
+	conflict, deleted, err := suite.dynamo.UpdateSyncEntity(&updateEntity1, *entity1.Version)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().False(conflict, "Successful update should not have conflict")
+	suite.Assert().False(deleted, "Successful update should not result in delete")
 
 	// Soft-delete the item with wrong version should get conflict.
 	updateEntity1.Deleted = aws.Bool(true)
-	conflict, err = suite.dynamo.UpdateSyncEntity(&updateEntity1, *entity1.Version)
+	conflict, deleted, err = suite.dynamo.UpdateSyncEntity(&updateEntity1, *entity1.Version)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().True(conflict, "Version mismatched update should have conflict")
+	suite.Assert().False(deleted, "Successful update should not result in delete")
 
 	// Soft-delete the item with matched version.
 	updateEntity1.Version = aws.Int64(34567890)
-	conflict, err = suite.dynamo.UpdateSyncEntity(&updateEntity1, 23456789)
+	conflict, deleted, err = suite.dynamo.UpdateSyncEntity(&updateEntity1, 23456789)
 	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
 	suite.Assert().False(conflict, "Successful update should not have conflict")
+	suite.Assert().True(deleted, "Successful update should result in delete")
 
 	// Check tag item is deleted.
 	tagItems, err = datastoretest.ScanTagItems(suite.dynamo)
