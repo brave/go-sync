@@ -306,14 +306,16 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 				// so the client can continue to sync other entities.
 				var conflict bool
 				conflict, err = dbHelpers.insertSyncEntity(entityToCommit)
-				if err != nil {
-					log.Error().Err(err).Msg("Insert sync entity failed")
+				if err != nil || conflict {
+					if err != nil {
+						log.Error().Err(err).Msg("Insert sync entity failed")
+					}
 					rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
 					if conflict {
 						rspType = sync_pb.CommitResponse_CONFLICT
 					}
 					entryRsp.ResponseType = &rspType
-					entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Insert sync entity failed: %v", err.Error()))
+					entryRsp.ErrorMessage = aws.String("Insert sync entity failed")
 					continue
 				}
 

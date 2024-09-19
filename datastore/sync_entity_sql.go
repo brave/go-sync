@@ -44,7 +44,7 @@ func (sqlDB *SQLDB) InsertSyncEntities(tx *sqlx.Tx, entities []*SyncEntity) (con
 	}
 
 	// if rows affected is not len(entities), then there must be a conflict. return true to indicate this condition.
-	return int(rowsAffected) == len(entities), nil
+	return int(rowsAffected) != len(entities), nil
 }
 
 func (sqlDB *SQLDB) HasItem(tx *sqlx.Tx, chainID int64, clientTag string) (exists bool, err error) {
