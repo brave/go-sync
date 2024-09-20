@@ -35,7 +35,7 @@ func NewDBHelpers(dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDatasto
 
 	var itemCounts *ItemCounts
 	if initItemCounts {
-		itemCounts, err = getItemCounts(cache, dynamoDB, sqlDB, trx, clientID, *chainID)
+		itemCounts, err = GetItemCounts(cache, dynamoDB, sqlDB, trx, clientID, *chainID)
 		if err != nil {
 			trx.Rollback()
 			return nil, err
@@ -114,7 +114,7 @@ func (h *DBHelpers) insertSyncEntity(entity *datastore.SyncEntity) (conflict boo
 		conflict, err = h.dynamoDB.InsertSyncEntity(entity)
 	}
 	if err == nil && !conflict && (entity.Deleted == nil || !*entity.Deleted) {
-		if err = h.ItemCounts.recordChange(*entity.DataType, false, savedInSQL); err != nil {
+		if err = h.ItemCounts.RecordChange(*entity.DataType, false, savedInSQL); err != nil {
 			return false, err
 		}
 	}
@@ -159,7 +159,7 @@ func (h *DBHelpers) updateSyncEntity(entity *datastore.SyncEntity, oldVersion in
 			if oldEntity.Deleted == nil || !*oldEntity.Deleted {
 				// If the stored entity was not already deleted, decrement the
 				// Dynamo item count since we'll be migrating the entity to SQL.
-				if err = h.ItemCounts.recordChange(*entity.DataType, true, false); err != nil {
+				if err = h.ItemCounts.RecordChange(*entity.DataType, true, false); err != nil {
 					return false, nil, err
 				}
 			}
@@ -175,7 +175,7 @@ func (h *DBHelpers) updateSyncEntity(entity *datastore.SyncEntity, oldVersion in
 			if !conflict && (entity.Deleted == nil || !*entity.Deleted) {
 				// If the new entity is not considered deleted, increment the
 				// SQL interim count.
-				if err = h.ItemCounts.recordChange(*entity.DataType, false, true); err != nil {
+				if err = h.ItemCounts.RecordChange(*entity.DataType, false, true); err != nil {
 					return false, nil, err
 				}
 			}
@@ -188,7 +188,7 @@ func (h *DBHelpers) updateSyncEntity(entity *datastore.SyncEntity, oldVersion in
 		}
 	}
 	if !conflict && deleted {
-		if err = h.ItemCounts.recordChange(*entity.DataType, true, shouldSaveInSQL); err != nil {
+		if err = h.ItemCounts.RecordChange(*entity.DataType, true, shouldSaveInSQL); err != nil {
 			return false, nil, err
 		}
 	}

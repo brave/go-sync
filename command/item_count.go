@@ -22,7 +22,7 @@ type ItemCounts struct {
 	sqlTxNewHistoryCount int
 }
 
-func getItemCounts(cache *cache.Cache, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDatastore, tx *sqlx.Tx, clientID string, chainID int64) (*ItemCounts, error) {
+func GetItemCounts(cache *cache.Cache, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDatastore, tx *sqlx.Tx, clientID string, chainID int64) (*ItemCounts, error) {
 	dynamoItemCounts, err := dynamoDB.GetClientItemCount(clientID)
 	if err != nil {
 		return nil, err
@@ -66,8 +66,8 @@ func (itemCounts *ItemCounts) updateInterimItemCounts(clear bool) error {
 	return nil
 }
 
-func (itemCounts *ItemCounts) recordChange(dataType int, subtract bool, isStoredInSQL bool) error {
-	isHistory := dataType == datastore.HistoryTypeID
+func (itemCounts *ItemCounts) RecordChange(dataType int, subtract bool, isStoredInSQL bool) error {
+	isHistory := dataType == datastore.HistoryTypeID || dataType == datastore.HistoryDeleteDirectiveTypeID
 	if isStoredInSQL {
 		delta := 1
 		if subtract {
@@ -88,15 +88,15 @@ func (itemCounts *ItemCounts) recordChange(dataType int, subtract bool, isStored
 			return fmt.Errorf("failed to increment history cache count")
 		}
 		if isHistory {
-			itemCounts.cacheNewNormalCount = newCount
-		} else {
 			itemCounts.cacheNewHistoryCount = newCount
+		} else {
+			itemCounts.cacheNewNormalCount = newCount
 		}
 	}
 	return nil
 }
 
-func (itemCounts *ItemCounts) sumCounts(historyOnly bool) int {
+func (itemCounts *ItemCounts) SumCounts(historyOnly bool) int {
 	sum := itemCounts.dynamoItemCounts.SumHistoryCounts() + itemCounts.sqlItemCounts.HistoryItemCount + itemCounts.sqlTxNewHistoryCount + itemCounts.cacheNewHistoryCount
 	if !historyOnly {
 		sum += itemCounts.dynamoItemCounts.ItemCount + itemCounts.sqlItemCounts.NormalItemCount + itemCounts.sqlTxNewNormalCount + itemCounts.cacheNewNormalCount
@@ -104,7 +104,7 @@ func (itemCounts *ItemCounts) sumCounts(historyOnly bool) int {
 	return sum
 }
 
-func (itemCounts *ItemCounts) save() error {
+func (itemCounts *ItemCounts) Save() error {
 	err := itemCounts.updateInterimItemCounts(true)
 	if err != nil {
 		return fmt.Errorf("error getting interim item count: %w", err)

@@ -295,7 +295,7 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 		}
 
 		if !isUpdateOp { // Create
-			totalItemCount := dbHelpers.ItemCounts.sumCounts(false)
+			totalItemCount := dbHelpers.ItemCounts.SumCounts(false)
 			if totalItemCount >= maxClientObjectQuota {
 				rspType := sync_pb.CommitResponse_OVER_QUOTA
 				entryRsp.ResponseType = &rspType
@@ -303,7 +303,7 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 				continue
 			}
 
-			if !isHistoryRelatedItem || dbHelpers.ItemCounts.sumCounts(true) < maxClientHistoryObjectQuota {
+			if !isHistoryRelatedItem || dbHelpers.ItemCounts.SumCounts(true) < maxClientHistoryObjectQuota {
 				// Insert all non-history items. For history items, ignore any items above history quoto
 				// and lie to the client about the objects being synced instead of returning OVER_QUOTA
 				// so the client can continue to sync other entities.
@@ -370,7 +370,7 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 		}
 	}
 
-	err = dbHelpers.ItemCounts.save()
+	err = dbHelpers.ItemCounts.Save()
 	if err != nil {
 		log.Error().Err(err).Msg("Get interim item counts failed")
 		errCode = sync_pb.SyncEnums_TRANSIENT_ERROR

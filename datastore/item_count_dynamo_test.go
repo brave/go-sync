@@ -9,29 +9,29 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type ItemCountTestSuite struct {
+type ItemCountDynamoTestSuite struct {
 	suite.Suite
 	dynamo *datastore.Dynamo
 }
 
-func (suite *ItemCountTestSuite) SetupSuite() {
+func (suite *ItemCountDynamoTestSuite) SetupSuite() {
 	datastore.Table = "client-entity-test-datastore"
 	var err error
 	suite.dynamo, err = datastore.NewDynamo(true)
 	suite.Require().NoError(err, "Failed to get dynamoDB session")
 }
 
-func (suite *ItemCountTestSuite) SetupTest() {
+func (suite *ItemCountDynamoTestSuite) SetupTest() {
 	suite.Require().NoError(
 		datastoretest.ResetDynamoTable(suite.dynamo), "Failed to reset table")
 }
 
-func (suite *ItemCountTestSuite) TearDownTest() {
+func (suite *ItemCountDynamoTestSuite) TearDownTest() {
 	suite.Require().NoError(
 		datastoretest.DeleteTable(suite.dynamo), "Failed to delete table")
 }
 
-func (suite *ItemCountTestSuite) TestGetClientItemCount() {
+func (suite *ItemCountDynamoTestSuite) TestGetClientItemCount() {
 	// Insert two items for test.
 	items := []datastore.DynamoItemCounts{
 		{ClientID: "client1", ID: "client1", ItemCount: 5},
@@ -55,7 +55,7 @@ func (suite *ItemCountTestSuite) TestGetClientItemCount() {
 	suite.Assert().Equal(count.ItemCount, 0)
 }
 
-func (suite *ItemCountTestSuite) TestUpdateClientItemCount() {
+func (suite *ItemCountDynamoTestSuite) TestUpdateClientItemCount() {
 	items := []datastore.DynamoItemCounts{
 		{ClientID: "client1", ID: "client1", ItemCount: 1},
 		{ClientID: "client1", ID: "client1", ItemCount: 5},
@@ -85,5 +85,5 @@ func (suite *ItemCountTestSuite) TestUpdateClientItemCount() {
 }
 
 func TestItemCountTestSuite(t *testing.T) {
-	suite.Run(t, new(ItemCountTestSuite))
+	suite.Run(t, new(ItemCountDynamoTestSuite))
 }

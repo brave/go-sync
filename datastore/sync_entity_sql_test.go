@@ -42,6 +42,7 @@ func (suite *SyncEntitySQLTestSuite) TestInsertSyncEntity() {
 
 	tx, err := suite.sqlDB.Beginx()
 	suite.Require().NoError(err, "Begin transaction should succeed")
+	defer tx.Rollback()
 
 	chainID, err := suite.sqlDB.GetAndLockChainID(tx, "client1")
 	suite.Require().NoError(err, "GetAndLockChainID should succeed")
@@ -57,6 +58,7 @@ func (suite *SyncEntitySQLTestSuite) TestInsertSyncEntity() {
 	// Try to insert the same entity again
 	tx, err = suite.sqlDB.Beginx()
 	suite.Require().NoError(err, "Begin transaction should succeed")
+	defer tx.Rollback()
 
 	id, _ = uuid.NewV7()
 	entity.ID = id.String()
@@ -84,6 +86,7 @@ func (suite *SyncEntitySQLTestSuite) TestHasItem() {
 
 	tx, err := suite.sqlDB.Beginx()
 	suite.Require().NoError(err, "Begin transaction should succeed")
+	defer tx.Rollback()
 
 	chainID, err := suite.sqlDB.GetAndLockChainID(tx, "client1")
 	suite.Require().NoError(err, "GetAndLockChainID should succeed")
@@ -119,6 +122,7 @@ func (suite *SyncEntitySQLTestSuite) TestUpdateSyncEntity() {
 
 	tx, err := suite.sqlDB.Beginx()
 	suite.Require().NoError(err, "Begin transaction should succeed")
+	defer tx.Rollback()
 
 	chainID, err := suite.sqlDB.GetAndLockChainID(tx, "client1")
 	suite.Require().NoError(err, "GetAndLockChainID should succeed")
@@ -229,6 +233,7 @@ func (suite *SyncEntitySQLTestSuite) TestGetUpdatesForType() {
 
 	tx, err := suite.sqlDB.Beginx()
 	suite.Require().NoError(err, "Begin transaction should succeed")
+	defer tx.Rollback()
 
 	chainID, err := suite.sqlDB.GetAndLockChainID(tx, "client1")
 	suite.Require().NoError(err, "GetAndLockChainID should succeed")
@@ -285,6 +290,7 @@ func (suite *SyncEntitySQLTestSuite) TestDeleteChain() {
 	// Insert data for two chains
 	tx, err := suite.sqlDB.Beginx()
 	suite.Require().NoError(err, "Begin transaction should succeed")
+	defer tx.Rollback()
 
 	chainID1, err := suite.sqlDB.GetAndLockChainID(tx, "client1")
 	suite.Require().NoError(err, "GetAndLockChainID should succeed for client1")
@@ -303,6 +309,7 @@ func (suite *SyncEntitySQLTestSuite) TestDeleteChain() {
 	// Delete chain for client1
 	tx, err = suite.sqlDB.Beginx()
 	suite.Require().NoError(err, "Begin transaction should succeed")
+	defer tx.Rollback()
 
 	err = suite.sqlDB.DeleteChain(tx, *chainID1)
 	suite.Require().NoError(err, "DeleteChain should succeed")
@@ -338,6 +345,7 @@ func (suite *SyncEntitySQLTestSuite) TestConcurrentGetAndLockChainID() {
 	// Start first transaction
 	tx1, err := suite.sqlDB.Beginx()
 	suite.Require().NoError(err, "Begin transaction 1 should succeed")
+	defer tx1.Rollback()
 
 	// Get and lock chain ID in first transaction
 	chainID1, err := suite.sqlDB.GetAndLockChainID(tx1, clientID)
@@ -350,6 +358,7 @@ func (suite *SyncEntitySQLTestSuite) TestConcurrentGetAndLockChainID() {
 		// Start second transaction
 		tx2, err := suite.sqlDB.Beginx()
 		suite.Require().NoError(err, "Begin transaction 2 should succeed")
+		defer tx2.Rollback()
 
 		stepChan <- true
 		chainID2, err := suite.sqlDB.GetAndLockChainID(tx2, clientID)

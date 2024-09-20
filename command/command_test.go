@@ -616,7 +616,10 @@ func insertSyncEntitiesWithoutUpdateCache(
 		var err error
 		tx, err = suite.sqlDB.DB.Beginx()
 		suite.Require().NoError(err, "should be able to begin transaction")
+		defer tx.Rollback()
+
 		chainID, err = suite.sqlDB.GetAndLockChainID(tx, clientID)
+		suite.Require().NoError(err, "should be able to get chain ID")
 	}
 	for _, entry := range entries {
 		dbEntry, err := datastore.CreateDBSyncEntity(entry, nil, clientID, 1)
