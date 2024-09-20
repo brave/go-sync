@@ -106,7 +106,7 @@ func (suite *ItemCountTestSuite) TestPreloaded() {
 	chainID, err := suite.sqlDB.GetAndLockChainID(tx, "client1")
 	suite.Require().NoError(err, "Failed to get chain ID")
 
-	itemCounts, err := command.GetItemCounts(suite.cache, suite.dynamoDB, suite.sqlDB, tx, clientID, *chainID)
+	itemCounts, err := command.GetItemCounts(suite.cache, suite.dynamoDB, suite.sqlDB, tx, testClientID, *chainID)
 	suite.Require().NoError(err)
 
 	suite.Equal(0, itemCounts.SumCounts(false), "Expected initial sum of item counts to be zero")
@@ -125,6 +125,7 @@ func (suite *ItemCountTestSuite) TestInsertAndCountItems() {
 	suite.Require().NoError(err, "Failed to get chain ID")
 
 	itemCounts, err := command.GetItemCounts(suite.cache, suite.dynamoDB, suite.sqlDB, tx, clientID, *chainID)
+	suite.Require().NoError(err, "Failed to get item counts")
 
 	// Insert items
 	suite.insertSyncEntity(tx, itemCounts, true, 123, clientID, *chainID)

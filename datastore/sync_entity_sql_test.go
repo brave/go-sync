@@ -26,19 +26,23 @@ func (suite *SyncEntitySQLTestSuite) SetupTest() {
 	suite.Require().NoError(err, "Failed to reset SQL tables")
 }
 
-func (suite *SyncEntitySQLTestSuite) TestInsertSyncEntity() {
+func createSyncEntity(dataType int32, mtime int64) datastore.SyncEntity {
 	id, _ := uuid.NewV7()
-	entity := datastore.SyncEntity{
-		ID:                     id.String(),
-		Version:                &[]int64{1}[0],
-		Ctime:                  &[]int64{12345678}[0],
-		Mtime:                  &[]int64{12345678}[0],
-		DataType:               &[]int{123}[0],
-		Folder:                 &[]bool{false}[0],
-		Deleted:                &[]bool{false}[0],
-		Specifics:              []byte{1, 2},
-		ClientDefinedUniqueTag: &[]string{"tag1"}[0],
+	return datastore.SyncEntity{
+		ID:        id.String(),
+		Version:   &[]int64{1}[0],
+		Ctime:     &[]int64{12345678}[0],
+		Mtime:     &mtime,
+		DataType:  &[]int{int(dataType)}[0],
+		Folder:    &[]bool{false}[0],
+		Deleted:   &[]bool{false}[0],
+		Specifics: []byte{1, 2, 3},
 	}
+}
+
+func (suite *SyncEntitySQLTestSuite) TestInsertSyncEntity() {
+	entity := createSyncEntity(123, 12345678)
+	entity.ClientDefinedUniqueTag = &[]string{"test1"}[0]
 
 	tx, err := suite.sqlDB.Beginx()
 	suite.Require().NoError(err, "Begin transaction should succeed")
@@ -60,7 +64,7 @@ func (suite *SyncEntitySQLTestSuite) TestInsertSyncEntity() {
 	suite.Require().NoError(err, "Begin transaction should succeed")
 	defer tx.Rollback()
 
-	id, _ = uuid.NewV7()
+	id, _ := uuid.NewV7()
 	entity.ID = id.String()
 	conflict, err = suite.sqlDB.InsertSyncEntities(tx, []*datastore.SyncEntity{&entity})
 	suite.Require().NoError(err, "InsertSyncEntity should succeed")
@@ -71,18 +75,8 @@ func (suite *SyncEntitySQLTestSuite) TestInsertSyncEntity() {
 }
 
 func (suite *SyncEntitySQLTestSuite) TestHasItem() {
-	id, _ := uuid.NewV7()
-	entity := datastore.SyncEntity{
-		ID:                     id.String(),
-		Version:                &[]int64{1}[0],
-		Ctime:                  &[]int64{12345678}[0],
-		Mtime:                  &[]int64{12345678}[0],
-		DataType:               &[]int{123}[0],
-		Folder:                 &[]bool{false}[0],
-		Deleted:                &[]bool{false}[0],
-		Specifics:              []byte{1, 2},
-		ClientDefinedUniqueTag: &[]string{"tag1"}[0],
-	}
+	entity := createSyncEntity(123, 12345678)
+	entity.ClientDefinedUniqueTag = &[]string{"test1"}[0]
 
 	tx, err := suite.sqlDB.Beginx()
 	suite.Require().NoError(err, "Begin transaction should succeed")
@@ -108,17 +102,8 @@ func (suite *SyncEntitySQLTestSuite) TestHasItem() {
 }
 
 func (suite *SyncEntitySQLTestSuite) TestUpdateSyncEntity() {
-	id, _ := uuid.NewV7()
-	entity := datastore.SyncEntity{
-		ID:        id.String(),
-		Version:   &[]int64{1}[0],
-		Ctime:     &[]int64{12345678}[0],
-		Mtime:     &[]int64{12345678}[0],
-		DataType:  &[]int{123}[0],
-		Folder:    &[]bool{false}[0],
-		Deleted:   &[]bool{false}[0],
-		Specifics: []byte{1, 2},
-	}
+	entity := createSyncEntity(123, 12345678)
+	entity.Specifics = []byte{1, 2}
 
 	tx, err := suite.sqlDB.Beginx()
 	suite.Require().NoError(err, "Begin transaction should succeed")
@@ -184,51 +169,11 @@ func (suite *SyncEntitySQLTestSuite) TestUpdateSyncEntity() {
 }
 
 func (suite *SyncEntitySQLTestSuite) TestGetUpdatesForType() {
-	id1, _ := uuid.NewV7()
-	id2, _ := uuid.NewV7()
-	id3, _ := uuid.NewV7()
-	id4, _ := uuid.NewV7()
 	entities := []datastore.SyncEntity{
-		{
-			ID:        id1.String(),
-			Version:   &[]int64{1}[0],
-			Ctime:     &[]int64{12345678}[0],
-			Mtime:     &[]int64{12345678}[0],
-			DataType:  &[]int{123}[0],
-			Folder:    &[]bool{false}[0],
-			Deleted:   &[]bool{false}[0],
-			Specifics: []byte{1, 2},
-		},
-		{
-			ID:        id2.String(),
-			Version:   &[]int64{1}[0],
-			Ctime:     &[]int64{12345678}[0],
-			Mtime:     &[]int64{12345679}[0],
-			DataType:  &[]int{123}[0],
-			Folder:    &[]bool{true}[0],
-			Deleted:   &[]bool{false}[0],
-			Specifics: []byte{3, 4},
-		},
-		{
-			ID:        id3.String(),
-			Version:   &[]int64{1}[0],
-			Ctime:     &[]int64{12345679}[0],
-			Mtime:     &[]int64{12345680}[0],
-			DataType:  &[]int{123}[0],
-			Folder:    &[]bool{true}[0],
-			Deleted:   &[]bool{false}[0],
-			Specifics: []byte{3, 4},
-		},
-		{
-			ID:        id4.String(),
-			Version:   &[]int64{1}[0],
-			Ctime:     &[]int64{12345680}[0],
-			Mtime:     &[]int64{12345680}[0],
-			DataType:  &[]int{124}[0],
-			Folder:    &[]bool{false}[0],
-			Deleted:   &[]bool{false}[0],
-			Specifics: []byte{5, 6},
-		},
+		createSyncEntity(123, 12345678),
+		createSyncEntity(123, 12345679),
+		createSyncEntity(123, 12345680),
+		createSyncEntity(124, 12345680),
 	}
 
 	tx, err := suite.sqlDB.Beginx()
@@ -264,28 +209,8 @@ func (suite *SyncEntitySQLTestSuite) TestGetUpdatesForType() {
 }
 
 func (suite *SyncEntitySQLTestSuite) TestDeleteChain() {
-	id1, _ := uuid.NewV7()
-	id2, _ := uuid.NewV7()
-	entity1 := datastore.SyncEntity{
-		ID:        id1.String(),
-		Version:   &[]int64{1}[0],
-		Ctime:     &[]int64{12345678}[0],
-		Mtime:     &[]int64{12345678}[0],
-		DataType:  &[]int{123}[0],
-		Folder:    &[]bool{false}[0],
-		Deleted:   &[]bool{false}[0],
-		Specifics: []byte{1, 2},
-	}
-	entity2 := datastore.SyncEntity{
-		ID:        id2.String(),
-		Version:   &[]int64{1}[0],
-		Ctime:     &[]int64{12345678}[0],
-		Mtime:     &[]int64{12345678}[0],
-		DataType:  &[]int{123}[0],
-		Folder:    &[]bool{false}[0],
-		Deleted:   &[]bool{false}[0],
-		Specifics: []byte{3, 4},
-	}
+	entity1 := createSyncEntity(123, 12345678)
+	entity2 := createSyncEntity(123, 12345678)
 
 	// Insert data for two chains
 	tx, err := suite.sqlDB.Beginx()

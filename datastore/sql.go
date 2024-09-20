@@ -22,8 +22,8 @@ const (
 	// Default value is defined here, since the .env file will not be loaded
 	// because tests are run in the subdirectories where the tests live
 	defaultSQLTestURL              = "postgres://sync:password@localhost:5434/testing?sslmode=disable"
-	sqlMigrateUpdateIntervalEnvKey = "SQL_MIGRATE_UPDATE_INTERVAL"
-	sqlMigrateChunkSizeEnvKey      = "SQL_MIGRATE_CHUNK_SIZE"
+	SQLMigrateUpdateIntervalEnvKey = "SQL_MIGRATE_UPDATE_INTERVAL"
+	SQLMigrateChunkSizeEnvKey      = "SQL_MIGRATE_CHUNK_SIZE"
 	defaultMigrateUpdateInterval   = 4
 	defaultMigrateChunkSize        = 100
 )
@@ -89,8 +89,8 @@ func NewSQLDB(isTesting bool) (*SQLDB, error) {
 		variations.Ready = true
 	}
 
-	migrateInterval, _ := strconv.Atoi(os.Getenv(sqlMigrateUpdateIntervalEnvKey))
-	migrateChunkSize, _ := strconv.Atoi(os.Getenv(sqlMigrateChunkSizeEnvKey))
+	migrateInterval, _ := strconv.Atoi(os.Getenv(SQLMigrateUpdateIntervalEnvKey))
+	migrateChunkSize, _ := strconv.Atoi(os.Getenv(SQLMigrateChunkSizeEnvKey))
 
 	if migrateInterval <= 0 {
 		migrateInterval = defaultMigrateUpdateInterval
