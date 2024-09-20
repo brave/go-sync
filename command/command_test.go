@@ -15,6 +15,8 @@ import (
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
+	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -27,9 +29,16 @@ const (
 
 type CommandTestSuite struct {
 	suite.Suite
-	dynamoDB *datastore.Dynamo
-	cache    *cache.Cache
-	sqlDB    *datastore.SQLDB
+	storeInSQL bool
+	dynamoDB   *datastore.Dynamo
+	cache      *cache.Cache
+	sqlDB      *datastore.SQLDB
+}
+
+func NewCommandTestSuite(storeInSQL bool) *CommandTestSuite {
+	return &CommandTestSuite{
+		storeInSQL: storeInSQL,
+	}
 }
 
 type PBSyncAttrs struct {
@@ -59,6 +68,13 @@ func NewPBSyncAttrs(name *string, version *int64, deleted *bool, folder *bool, s
 }
 
 func (suite *CommandTestSuite) SetupSuite() {
+	var rollouts string
+	if suite.storeInSQL {
+		rollouts = strconv.Itoa(int(bookmarkType)) + "=1.0," + strconv.Itoa(int(nigoriType)) + "=1.0"
+	}
+	suite.T().Setenv(datastore.SQLSaveRolloutsEnvKey, rollouts)
+	suite.T().Setenv(datastore.SQLMigrateRolloutsEnvKey, rollouts)
+
 	datastore.Table = "client-entity-test-command"
 	var err error
 	suite.dynamoDB, err = datastore.NewDynamo(true)
@@ -594,17 +610,42 @@ func assertTypeMtimeCacheValue(suite *CommandTestSuite, key string, mtime int64,
 
 func insertSyncEntitiesWithoutUpdateCache(
 	suite *CommandTestSuite, entries []*sync_pb.SyncEntity, clientID string) (ret []*datastore.SyncEntity) {
+	var chainID *int64
+	var tx *sqlx.Tx
+	if suite.storeInSQL {
+		var err error
+		tx, err = suite.sqlDB.DB.Beginx()
+		suite.Require().NoError(err, "should be able to begin transaction")
+		chainID, err = suite.sqlDB.GetAndLockChainID(tx, clientID)
+	}
 	for _, entry := range entries {
 		dbEntry, err := datastore.CreateDBSyncEntity(entry, nil, clientID, 1)
 		suite.Require().NoError(err, "Create db entity from pb entity should succeed")
-		_, err = suite.dynamoDB.InsertSyncEntity(dbEntry)
-		suite.Require().NoError(err, "Insert sync entity should succeed")
+
+		if suite.storeInSQL {
+			id, _ := uuid.NewV7()
+			dbEntry.ID = id.String()
+			dbEntry.ChainID = chainID
+
+			conflict, err := suite.sqlDB.InsertSyncEntities(tx, []*datastore.SyncEntity{dbEntry})
+			suite.Require().NoError(err, "Insert sync entity should succeed")
+			suite.Require().False(conflict, "Insert should not conflict")
+
+		} else {
+			_, err = suite.dynamoDB.InsertSyncEntity(dbEntry)
+			suite.Require().NoError(err, "Insert sync entity should succeed")
+		}
+
 		val, err := suite.cache.Get(context.Background(),
 			clientID+"#"+strconv.Itoa(*dbEntry.DataType), false)
 		suite.Require().NoError(err, "Get from cache should succeed")
 		suite.Require().NotEqual(val, strconv.FormatInt(*dbEntry.Mtime, 10),
 			"Cache should not be updated")
 		ret = append(ret, dbEntry)
+	}
+	if tx != nil {
+		err := tx.Commit()
+		suite.Require().NoError(err, "Commit transaction should succeed")
 	}
 	return
 }
@@ -821,5 +862,10 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ch
 }
 
 func TestCommandTestSuite(t *testing.T) {
-	suite.Run(t, new(CommandTestSuite))
+	t.Run("Dynamo", func(t *testing.T) {
+		suite.Run(t, NewCommandTestSuite(false))
+	})
+	t.Run("SQL", func(t *testing.T) {
+		suite.Run(t, NewCommandTestSuite(true))
+	})
 }

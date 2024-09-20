@@ -9,8 +9,8 @@ import (
 	"strings"
 )
 
-const sqlSaveRolloutsEnvKey = "SQL_SAVE_ROLLOUTS"
-const sqlMigrateRolloutsEnvKey = "SQL_MIGRATE_ROLLOUTS"
+const SQLSaveRolloutsEnvKey = "SQL_SAVE_ROLLOUTS"
+const SQLMigrateRolloutsEnvKey = "SQL_MIGRATE_ROLLOUTS"
 
 func VariationHashDecimal(input string) float32 {
 	h := fnv.New32a()
@@ -58,11 +58,11 @@ func parseRollouts(envKey string) (map[int]float32, error) {
 }
 
 func LoadSQLVariations() (*SQLVariations, error) {
-	sqlSaveRollouts, err := parseRollouts(sqlSaveRolloutsEnvKey)
+	sqlSaveRollouts, err := parseRollouts(SQLSaveRolloutsEnvKey)
 	if err != nil {
 		return nil, err
 	}
-	sqlMigrateRollouts, err := parseRollouts(sqlMigrateRolloutsEnvKey)
+	sqlMigrateRollouts, err := parseRollouts(SQLMigrateRolloutsEnvKey)
 	if err != nil {
 		return nil, err
 	}
@@ -85,8 +85,8 @@ func (sqlVariations *SQLVariations) ShouldMigrateToSQL(dataType int, variationHa
 }
 
 func (sqlVariations *SQLVariations) GetStateDigest() string {
-	return sqlSaveRolloutsEnvKey + ":" + os.Getenv(sqlSaveRolloutsEnvKey) + ";" +
-		sqlMigrateRolloutsEnvKey + ":" + os.Getenv(sqlMigrateRolloutsEnvKey)
+	return SQLSaveRolloutsEnvKey + ":" + os.Getenv(SQLSaveRolloutsEnvKey) + ";" +
+		SQLMigrateRolloutsEnvKey + ":" + os.Getenv(SQLMigrateRolloutsEnvKey)
 }
 
 func (sqlDB *SQLDB) Variations() *SQLVariations {

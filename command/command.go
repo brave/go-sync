@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/brave/go-sync/cache"
@@ -266,6 +267,8 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 			continue
 		}
 
+		createTime := time.Now()
+
 		// Check if ParentID is a client-generated ID which appears in previous
 		// commit entries, if so, replace with corresponding server-generated ID.
 		if entityToCommit.ParentID != nil {
@@ -356,6 +359,15 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 		entryRsp.IdString = aws.String(entityToCommit.ID)
 		entryRsp.Version = entityToCommit.Version
 		entryRsp.Mtime = entityToCommit.Mtime
+
+		if time.Since(createTime) < time.Millisecond {
+			// To ensure that all entities are in perfect order (sorted by mtime),
+			// we should ensure that the mtime for each entity is unique.
+			// CreateDBSyncEntity sets the mtime to the current time.
+			// If processing the entity took less than a millisecond,
+			// wait a little longer.
+			time.Sleep(time.Millisecond - time.Since(createTime))
+		}
 	}
 
 	err = dbHelpers.ItemCounts.save()

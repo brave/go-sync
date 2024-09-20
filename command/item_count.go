@@ -97,9 +97,9 @@ func (itemCounts *ItemCounts) recordChange(dataType int, subtract bool, isStored
 }
 
 func (itemCounts *ItemCounts) sumCounts(historyOnly bool) int {
-	sum := itemCounts.dynamoItemCounts.SumHistoryCounts() + itemCounts.sqlTxNewHistoryCount + itemCounts.cacheNewHistoryCount
+	sum := itemCounts.dynamoItemCounts.SumHistoryCounts() + itemCounts.sqlItemCounts.HistoryItemCount + itemCounts.sqlTxNewHistoryCount + itemCounts.cacheNewHistoryCount
 	if !historyOnly {
-		sum += itemCounts.dynamoItemCounts.ItemCount + itemCounts.sqlTxNewNormalCount + itemCounts.cacheNewNormalCount
+		sum += itemCounts.dynamoItemCounts.ItemCount + itemCounts.sqlItemCounts.NormalItemCount + itemCounts.sqlTxNewNormalCount + itemCounts.cacheNewNormalCount
 	}
 	return sum
 }
