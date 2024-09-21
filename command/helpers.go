@@ -3,6 +3,7 @@ package command
 import (
 	"fmt"
 	"math/rand/v2"
+	"time"
 
 	"github.com/brave/go-sync/cache"
 	"github.com/brave/go-sync/datastore"
@@ -31,6 +32,7 @@ func NewDBHelpers(dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDatasto
 		trx.Rollback()
 		return nil, err
 	}
+	// Get this value to determine if the client should be included in SQL rollouts
 	variationHashDecimal := datastore.VariationHashDecimal(clientID)
 
 	var itemCounts *ItemCounts
@@ -73,11 +75,14 @@ func (h *DBHelpers) getUpdatesFromDBs(dataType int, token int64, fetchFolders bo
 		return false, nil, nil
 	}
 	if h.SQLDB.Variations().ShouldSaveToSQL(dataType, h.variationHashDecimal) {
+		// Get the earliest mtime for entities migrated from Dynamo to SQL, if available.
 		dynamoMigrationStatuses, err := h.SQLDB.GetDynamoMigrationStatuses(h.Trx, h.ChainID, []int{dataType})
 		if err != nil {
 			return false, nil, err
 		}
 
+		// First, get all entities from Dynamo that are past the given token.
+		// Only query up until the earliest mtime within SQL.
 		if migrationStatus := dynamoMigrationStatuses[dataType]; migrationStatus == nil || (migrationStatus.EarliestMtime != nil && *migrationStatus.EarliestMtime > token) {
 			var earliestMtime *int64
 			if migrationStatus != nil {
@@ -90,6 +95,8 @@ func (h *DBHelpers) getUpdatesFromDBs(dataType int, token int64, fetchFolders bo
 			curMaxSize -= len(syncEntities)
 		}
 
+		// Then get all entities from SQL. We can append the items to syncEntities because
+		// all Dynamo entities are guaranteed to be older (by mtime) than SQL entities.
 		if curMaxSize > 0 {
 			sqlHasChangesRemaining, sqlSyncEntities, err := h.SQLDB.GetUpdatesForType(h.Trx, dataType, token, fetchFolders, h.ChainID, curMaxSize)
 			if err != nil {
@@ -124,6 +131,8 @@ func (h *DBHelpers) insertSyncEntity(entity *datastore.SyncEntity) (conflict boo
 func getMigratedEntityID(entity *datastore.SyncEntity) (string, error) {
 	id := entity.ID
 	if *entity.DataType == datastore.HistoryTypeID {
+		// In Dynamo, History entities are stored with the client tag as the ID.
+		// Since the SQL table uses a UUID for the id, generate a new ID here.
 		newID, err := uuid.NewV7()
 		if err != nil {
 			return "", err
@@ -203,6 +212,7 @@ func (h *DBHelpers) maybeMigrateToSQL(dataTypes []int) (migratedEntities []*data
 		return nil, nil
 	}
 	var applicableDataTypes []int
+	// Get all applicable data types for migration for a given chain.
 	for _, dataType := range dataTypes {
 		if !h.SQLDB.Variations().ShouldMigrateToSQL(dataType, h.variationHashDecimal) {
 			continue
@@ -213,6 +223,8 @@ func (h *DBHelpers) maybeMigrateToSQL(dataTypes []int) (migratedEntities []*data
 		return nil, nil
 	}
 
+	// Get the earliest mtime for entities that were already migrated.
+	// We use this so we can apply a max mtime filter to our Dynamo query.
 	migrationStatuses, err := h.SQLDB.GetDynamoMigrationStatuses(h.Trx, h.ChainID, applicableDataTypes)
 	if err != nil {
 		return nil, err
@@ -227,6 +239,8 @@ func (h *DBHelpers) maybeMigrateToSQL(dataTypes []int) (migratedEntities []*data
 		}
 		migrationStatus := migrationStatuses[dataType]
 		if migrationStatus != nil && migrationStatus.EarliestMtime == nil {
+			// earliest_mtime = null in migration status means that all entities
+			// for the data type have already been migrated. skip this data type
 			continue
 		}
 
@@ -234,13 +248,17 @@ func (h *DBHelpers) maybeMigrateToSQL(dataTypes []int) (migratedEntities []*data
 		if migrationStatus != nil {
 			earliestMtime = migrationStatus.EarliestMtime
 		} else {
+			now := time.Now().UnixMilli()
 			migrationStatus = &datastore.MigrationStatus{
 				ChainID:       h.ChainID,
 				DataType:      dataType,
-				EarliestMtime: nil,
+				EarliestMtime: &now,
 			}
 		}
 
+		// Query the entities in descending order, so we insert the latest items first.
+		// If the total entity count exceeds the chunk size, then we only want to insert a subset of the latest
+		// entities from Dynamo for this particular update.
 		hasChangesRemaining, syncEntities, err := h.dynamoDB.GetUpdatesForType(dataType, nil, earliestMtime, true, h.clientID, currLimit, false)
 		if err != nil {
 			return nil, err
@@ -249,8 +267,12 @@ func (h *DBHelpers) maybeMigrateToSQL(dataTypes []int) (migratedEntities []*data
 		currLimit -= len(syncEntities)
 
 		if !hasChangesRemaining {
+			// No entities from Dynamo remaining. mark earliest_mtime as null to
+			// indicate that all entities have been moved over.
 			migrationStatus.EarliestMtime = nil
 		} else if len(syncEntities) > 0 {
+			// Since the dynamo query was sorted in descending order, the last item
+			// will contain the earliest_mtime in the slice.
 			if lastItem := &syncEntities[len(syncEntities)-1]; lastItem.Mtime != nil {
 				migrationStatus.EarliestMtime = lastItem.Mtime
 			}
@@ -266,6 +288,8 @@ func (h *DBHelpers) maybeMigrateToSQL(dataTypes []int) (migratedEntities []*data
 				return nil, err
 			}
 			if migratedEntityID != syncEntity.ID {
+				// Only apply new entity ID to the entity that will be inserted,
+				// and NOT the original entity which will be deleted later on.
 				entityClone := syncEntity
 				entityClone.ID = migratedEntityID
 				newEntity = &entityClone

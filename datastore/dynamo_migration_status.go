@@ -13,6 +13,7 @@ type MigrationStatus struct {
 	EarliestMtime *int64 `db:"earliest_mtime"`
 }
 
+// GetDynamoMigrationStatuses retrieves migration statuses for specified data types
 func (sqlDB *SQLDB) GetDynamoMigrationStatuses(tx *sqlx.Tx, chainID int64, dataTypes []int) (dataTypeToStatusMap map[int]*MigrationStatus, err error) {
 	dataTypeToStatusMap = make(map[int]*MigrationStatus)
 
@@ -34,6 +35,7 @@ func (sqlDB *SQLDB) GetDynamoMigrationStatuses(tx *sqlx.Tx, chainID int64, dataT
 	return dataTypeToStatusMap, nil
 }
 
+// UpdateDynamoMigrationStatuses updates migration statuses in the database
 func (sqlDB *SQLDB) UpdateDynamoMigrationStatuses(tx *sqlx.Tx, statuses []*MigrationStatus) error {
 	_, err := tx.NamedExec(`
 		INSERT INTO dynamo_migration_statuses (chain_id, data_type, earliest_mtime)

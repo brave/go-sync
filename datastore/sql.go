@@ -21,11 +21,15 @@ const (
 	sqlTestURLEnvKey = "SQL_TEST_DATABASE_URL"
 	// Default value is defined here, since the .env file will not be loaded
 	// because tests are run in the subdirectories where the tests live
-	defaultSQLTestURL              = "postgres://sync:password@localhost:5434/testing?sslmode=disable"
+	defaultSQLTestURL = "postgres://sync:password@localhost:5434/testing?sslmode=disable"
+	// SQLMigrateUpdateIntervalEnvKey is the env var name used to define the frequency
+	// of chunked migration within "get update" requests
 	SQLMigrateUpdateIntervalEnvKey = "SQL_MIGRATE_UPDATE_INTERVAL"
-	SQLMigrateChunkSizeEnvKey      = "SQL_MIGRATE_CHUNK_SIZE"
-	defaultMigrateUpdateInterval   = 4
-	defaultMigrateChunkSize        = 100
+	// SQLMigrateChunkSizeEnvKey is the env var name used to define the max migration
+	// chunk size
+	SQLMigrateChunkSizeEnvKey    = "SQL_MIGRATE_CHUNK_SIZE"
+	defaultMigrateUpdateInterval = 4
+	defaultMigrateChunkSize      = 100
 )
 
 //go:embed migrations/*
@@ -104,10 +108,13 @@ func NewSQLDB(isTesting bool) (*SQLDB, error) {
 	return &wrappedDB, nil
 }
 
+// MigrateIntervalPercent returns the percentage of update requests that will perform
+// a chunked migration
 func (db *SQLDB) MigrateIntervalPercent() float32 {
 	return db.migrateIntervalPercent
 }
 
+// MigrateChunkSize returns the max chunk size of migration attempts
 func (db *SQLDB) MigrateChunkSize() int {
 	return db.migrateChunkSize
 }

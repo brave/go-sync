@@ -33,6 +33,7 @@ func buildInsertQuery() string {
 		joinedSetValues + ` WHERE entities.deleted = true`
 }
 
+// InsertSyncEntities inserts multiple sync entities into the database
 func (sqlDB *SQLDB) InsertSyncEntities(tx *sqlx.Tx, entities []*SyncEntity) (conflict bool, err error) {
 	res, err := tx.NamedExec(sqlDB.insertQuery, entities)
 	if err != nil {
@@ -47,6 +48,7 @@ func (sqlDB *SQLDB) InsertSyncEntities(tx *sqlx.Tx, entities []*SyncEntity) (con
 	return int(rowsAffected) != len(entities), nil
 }
 
+// HasItem checks if an item exists in the database
 func (sqlDB *SQLDB) HasItem(tx *sqlx.Tx, chainID int64, clientTag string) (exists bool, err error) {
 	err = tx.QueryRowx("SELECT EXISTS(SELECT 1 FROM entities WHERE chain_id = $1 AND client_defined_unique_tag = $2)", chainID, clientTag).Scan(&exists)
 	if err != nil {
@@ -55,6 +57,7 @@ func (sqlDB *SQLDB) HasItem(tx *sqlx.Tx, chainID int64, clientTag string) (exist
 	return exists, nil
 }
 
+// UpdateSyncEntity updates a sync entity in the database
 func (sqlDB *SQLDB) UpdateSyncEntity(tx *sqlx.Tx, entity *SyncEntity, oldVersion int64) (conflict bool, deleted bool, err error) {
 	var idCondition string
 	if *entity.DataType == HistoryTypeID {
@@ -112,6 +115,7 @@ func (sqlDB *SQLDB) UpdateSyncEntity(tx *sqlx.Tx, entity *SyncEntity, oldVersion
 	return rowsAffected == 0, entity.Deleted != nil && *entity.Deleted, nil
 }
 
+// GetAndLockChainID retrieves and locks a chain ID for a given client ID
 func (sqlDB *SQLDB) GetAndLockChainID(tx *sqlx.Tx, clientID string) (chainID *int64, err error) {
 	// Get chain ID and lock for updates
 	clientIDBytes, err := hex.DecodeString(clientID)
@@ -144,6 +148,7 @@ func (sqlDB *SQLDB) GetAndLockChainID(tx *sqlx.Tx, clientID string) (chainID *in
 	return &id, nil
 }
 
+// GetUpdatesForType retrieves updates for a specific data type
 func (sqlDB *SQLDB) GetUpdatesForType(tx *sqlx.Tx, dataType int, clientToken int64, fetchFolders bool, chainID int64, maxSize int) (hasChangesRemaining bool, entities []SyncEntity, err error) {
 	var additionalCondition string
 	if !fetchFolders {
@@ -158,6 +163,7 @@ func (sqlDB *SQLDB) GetUpdatesForType(tx *sqlx.Tx, dataType int, clientToken int
 	return len(entities) == maxSize, entities, nil
 }
 
+// DeleteChain removes a chain and its associated data from the database
 func (sqlDB *SQLDB) DeleteChain(tx *sqlx.Tx, chainID int64) error {
 	_, err := tx.Exec(`DELETE FROM chains WHERE id = $1`, chainID)
 	if err != nil {

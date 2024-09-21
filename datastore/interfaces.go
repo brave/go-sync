@@ -57,9 +57,10 @@ type SQLDatastore interface {
 	Beginx() (*sqlx.Tx, error)
 	// Variations returns the SQLVariations utility
 	Variations() *SQLVariations
-	// MigrateIntervalPercent returns migration update interval percentage
+	// MigrateIntervalPercent returns the percentage of update requests that will perform
+	// a chunked migration
 	MigrateIntervalPercent() float32
-	// MigrateChunkSize returns the max entity count for each migration chunk
+	// MigrateChunkSize returns the max chunk size of migration attempts
 	MigrateChunkSize() int
 	// DeleteChain removes a chain and its associated data from the database
 	DeleteChain(tx *sqlx.Tx, chainID int64) error

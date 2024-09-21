@@ -9,9 +9,17 @@ import (
 	"strings"
 )
 
+// SQLSaveRolloutsEnvKey defines the data types and rollout percentages for saving
+// new items into the SQL database, instead of Dynamo.
 const SQLSaveRolloutsEnvKey = "SQL_SAVE_ROLLOUTS"
+
+// SQLSaveRolloutsEnvKey defines the data types and rollout percentages for periodic
+// chunked migration from Dynamo to SQL.
 const SQLMigrateRolloutsEnvKey = "SQL_MIGRATE_ROLLOUTS"
 
+// VariationHashDecimal returns a decimal from 0.0 to 1.0 for a given client ID.
+// The decimal is typically checked against a rollout percentage to determine if a user
+// should be included in a rollout.
 func VariationHashDecimal(input string) float32 {
 	h := fnv.New32a()
 	h.Write([]byte(input))
@@ -21,6 +29,7 @@ func VariationHashDecimal(input string) float32 {
 	return float32(hashValue) / math.MaxUint32
 }
 
+// SQLVariations handles SQL variation rollout functions
 type SQLVariations struct {
 	sqlSaveRollouts    map[int]float32
 	sqlMigrateRollouts map[int]float32
@@ -57,6 +66,7 @@ func parseRollouts(envKey string) (map[int]float32, error) {
 	return rollouts, nil
 }
 
+// LoadSQLVariations creates a SQLVariations struct, configured by env vars
 func LoadSQLVariations() (*SQLVariations, error) {
 	sqlSaveRollouts, err := parseRollouts(SQLSaveRolloutsEnvKey)
 	if err != nil {
@@ -74,16 +84,19 @@ func LoadSQLVariations() (*SQLVariations, error) {
 	}, nil
 }
 
+// ShouldSaveToSQL returns true if a client should save the entity to the SQL database for a given data type
 func (sqlVariations *SQLVariations) ShouldSaveToSQL(dataType int, variationHashDecimal float32) bool {
 	rolloutPercent, exists := sqlVariations.sqlSaveRollouts[dataType]
 	return exists && variationHashDecimal <= rolloutPercent
 }
 
+// ShouldMigrateToSQL returns true if chunked migration from Dynamo to SQL should occur for a given data type
 func (sqlVariations *SQLVariations) ShouldMigrateToSQL(dataType int, variationHashDecimal float32) bool {
 	rolloutPercent, exists := sqlVariations.sqlMigrateRollouts[dataType]
 	return exists && variationHashDecimal <= rolloutPercent
 }
 
+// GetStateDigest returns a string that combines the env vars related to variations
 func (sqlVariations *SQLVariations) GetStateDigest() string {
 	return SQLSaveRolloutsEnvKey + ":" + os.Getenv(SQLSaveRolloutsEnvKey) + ";" +
 		SQLMigrateRolloutsEnvKey + ":" + os.Getenv(SQLMigrateRolloutsEnvKey)

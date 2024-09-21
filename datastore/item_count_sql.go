@@ -11,6 +11,7 @@ type SQLItemCounts struct {
 	HistoryItemCount int `db:"history_item_count"`
 }
 
+// GetItemCounts returns the counts of items in the SQL database for a given chain ID
 func (sqlDB *SQLDB) GetItemCounts(tx *sqlx.Tx, chainID int64) (*SQLItemCounts, error) {
 	counts := SQLItemCounts{}
 	err := tx.Get(&counts, `

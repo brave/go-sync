@@ -22,6 +22,7 @@ type ItemCounts struct {
 	sqlTxNewHistoryCount int
 }
 
+// GetItemCounts returns consolidated item counts from Dynamo and SQL
 func GetItemCounts(cache *cache.Cache, dynamoDB datastore.DynamoDatastore, sqlDB datastore.SQLDatastore, tx *sqlx.Tx, clientID string, chainID int64) (*ItemCounts, error) {
 	dynamoItemCounts, err := dynamoDB.GetClientItemCount(clientID)
 	if err != nil {
@@ -66,6 +67,7 @@ func (itemCounts *ItemCounts) updateInterimItemCounts(clear bool) error {
 	return nil
 }
 
+// RecordChange updates the interim count according to the addition of deletion of an entity
 func (itemCounts *ItemCounts) RecordChange(dataType int, subtract bool, isStoredInSQL bool) error {
 	isHistory := dataType == datastore.HistoryTypeID || dataType == datastore.HistoryDeleteDirectiveTypeID
 	if isStoredInSQL {
@@ -96,6 +98,7 @@ func (itemCounts *ItemCounts) RecordChange(dataType int, subtract bool, isStored
 	return nil
 }
 
+// SumCounts returns of count of entities for a chain
 func (itemCounts *ItemCounts) SumCounts(historyOnly bool) int {
 	sum := itemCounts.dynamoItemCounts.SumHistoryCounts() + itemCounts.sqlItemCounts.HistoryItemCount + itemCounts.sqlTxNewHistoryCount + itemCounts.cacheNewHistoryCount
 	if !historyOnly {
@@ -104,6 +107,7 @@ func (itemCounts *ItemCounts) SumCounts(historyOnly bool) int {
 	return sum
 }
 
+// Save persists the interim counts to Dynamo
 func (itemCounts *ItemCounts) Save() error {
 	err := itemCounts.updateInterimItemCounts(true)
 	if err != nil {
