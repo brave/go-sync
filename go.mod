@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/aws/aws-sdk-go v1.55.5
-	github.com/brave-intl/bat-go/libs v0.0.0-20231020145457-cc9860c87bae
+	github.com/brave-intl/bat-go/libs v0.0.0-20240925123800-e1fba490665b
 	github.com/getsentry/sentry-go v0.28.1
 	github.com/go-chi/chi/v5 v5.0.12
 	github.com/prometheus/client_golang v1.19.0
