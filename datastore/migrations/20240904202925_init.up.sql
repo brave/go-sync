@@ -1,3 +1,6 @@
+CREATE SCHEMA IF NOT EXISTS partman;
+CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;
+
 CREATE TABLE chains (
 	id BIGSERIAL PRIMARY KEY,
 	last_usage_time TIMESTAMP NOT NULL,
@@ -33,5 +36,16 @@ CREATE TABLE entities (
 	deleted BOOLEAN NOT NULL,
 	PRIMARY KEY (id, chain_id),
 	UNIQUE (chain_id, client_defined_unique_tag)
-);
+)
+PARTITION BY RANGE (chain_id);
 CREATE INDEX entities_chain_id_data_type_mtime_idx ON entities (chain_id, data_type, mtime);
+
+SELECT partman.create_parent(
+	p_parent_table := 'public.entities',
+	p_control := 'chain_id',
+	p_interval := '3500'
+);
+
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+SELECT cron.schedule('@hourly', $$CALL partman.run_maintenance_proc()$$);

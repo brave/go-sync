@@ -76,7 +76,8 @@ services:
     networks:
       - sync
   postgres:
-    image: public.ecr.aws/docker/library/postgres:16
+    build:
+      dockerfile: pg.Dockerfile
     ports:
       - "5434:5432"
     environment:
@@ -84,5 +85,6 @@ services:
       - POSTGRES_PASSWORD=password
     networks:
       - sync
+    command: ["postgres", "-c", "shared_preload_libraries=pg_cron"]
     volumes:
       - "./misc/create_additional_dbs.sql:/docker-entrypoint-initdb.d/create_additional_dbs.sql"
