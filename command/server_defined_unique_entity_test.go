@@ -13,7 +13,8 @@ import (
 
 type ServerDefinedUniqueEntityTestSuite struct {
 	suite.Suite
-	dynamo *datastore.Dynamo
+	sqlDB    *datastore.SQLDB
+	dynamoDB *datastore.Dynamo
 }
 
 type SyncAttrs struct {
@@ -29,26 +30,34 @@ type SyncAttrs struct {
 func (suite *ServerDefinedUniqueEntityTestSuite) SetupSuite() {
 	datastore.Table = "client-entity-test-command"
 	var err error
-	suite.dynamo, err = datastore.NewDynamo()
+	suite.dynamoDB, err = datastore.NewDynamo(true)
 	suite.Require().NoError(err, "Failed to get dynamoDB session")
+	suite.sqlDB, err = datastore.NewSQLDB(true)
+	suite.Require().NoError(err, "Failed to get SQL DB session")
 }
 
 func (suite *ServerDefinedUniqueEntityTestSuite) SetupTest() {
 	suite.Require().NoError(
-		datastoretest.ResetTable(suite.dynamo), "Failed to reset table")
+		datastoretest.ResetDynamoTable(suite.dynamoDB), "Failed to reset Dynamo table")
+	suite.Require().NoError(
+		datastoretest.ResetSQLTables(suite.sqlDB), "Failed to reset SQL tables")
 }
 
 func (suite *ServerDefinedUniqueEntityTestSuite) TearDownTest() {
 	suite.Require().NoError(
-		datastoretest.DeleteTable(suite.dynamo), "Failed to delete table")
+		datastoretest.DeleteTable(suite.dynamoDB), "Failed to delete table")
 }
 
 func (suite *ServerDefinedUniqueEntityTestSuite) TestInsertServerDefinedUniqueEntities() {
+	dbHelpers, err := command.NewDBHelpers(suite.dynamoDB, suite.sqlDB, "client1", nil, false)
+	suite.Require().NoError(err, "NewDBHelpers should succeed")
+	defer dbHelpers.Trx.Rollback()
+
 	suite.Require().NoError(
-		command.InsertServerDefinedUniqueEntities(suite.dynamo, "client1"),
+		dbHelpers.InsertServerDefinedUniqueEntities(),
 		"InsertServerDefinedUniqueEntities should succeed")
 	suite.Require().NoError(
-		command.InsertServerDefinedUniqueEntities(suite.dynamo, "client1"),
+		dbHelpers.InsertServerDefinedUniqueEntities(),
 		"InsertServerDefinedUniqueEntities again for a same client should succeed")
 
 	expectedSyncAttrsMap := map[string]*SyncAttrs{
@@ -102,7 +111,7 @@ func (suite *ServerDefinedUniqueEntityTestSuite) TestInsertServerDefinedUniqueEn
 		expectedTagItems = append(expectedTagItems,
 			datastore.ServerClientUniqueTagItem{ClientID: "client1", ID: "Server#" + key})
 	}
-	tagItems, err := datastoretest.ScanTagItems(suite.dynamo)
+	tagItems, err := datastoretest.ScanTagItems(suite.dynamoDB)
 	suite.Require().NoError(err, "ScanTagItems should succeed")
 
 	// Check that Ctime and Mtime have been set, reset to zero value for subsequent
@@ -119,7 +128,7 @@ func (suite *ServerDefinedUniqueEntityTestSuite) TestInsertServerDefinedUniqueEn
 	sort.Sort(datastore.TagItemByClientIDID(expectedTagItems))
 	suite.Assert().Equal(tagItems, expectedTagItems)
 
-	syncItems, err := datastoretest.ScanSyncEntities(suite.dynamo)
+	syncItems, err := datastoretest.ScanSyncEntities(suite.dynamoDB)
 	suite.Require().NoError(err, "ScanSyncEntities should succeed")
 
 	// Find bookmark root folder to update parentID of its subfolders.
@@ -154,8 +163,14 @@ func (suite *ServerDefinedUniqueEntityTestSuite) TestInsertServerDefinedUniqueEn
 	}
 	suite.Assert().Equal(0, len(expectedSyncAttrsMap))
 
+	suite.Require().NoError(dbHelpers.Trx.Commit(), "Transaction commit should succeed")
+
+	dbHelpers, err = command.NewDBHelpers(suite.dynamoDB, suite.sqlDB, "client2", nil, false)
+	suite.Require().NoError(err, "NewDBHelpers should succeed")
+	defer dbHelpers.Trx.Rollback()
+
 	suite.Require().NoError(
-		command.InsertServerDefinedUniqueEntities(suite.dynamo, "client2"),
+		dbHelpers.InsertServerDefinedUniqueEntities(),
 		"InsertServerDefinedUniqueEntities should succeed for another client")
 }
 

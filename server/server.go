@@ -44,7 +44,7 @@ func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	return logging.SetupLogger(ctx)
 }
 
-func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux) {
+func setupRouter(ctx context.Context, logger *zerolog.Logger, isTesting bool) (context.Context, *chi.Mux) {
 	r := chi.NewRouter()
 
 	r.Use(chiware.RequestID)
@@ -63,22 +63,30 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(batware.BearerToken)
 	r.Use(middleware.CommonResponseHeaders)
 
-	db, err := datastore.NewDynamo()
+	dynamoDB, err := datastore.NewDynamo(isTesting)
 	if err != nil {
 		sentry.CaptureException(err)
-		log.Panic().Err(err).Msg("Must be able to init datastore to start")
+		log.Panic().Err(err).Msg("Must be able to init Dynamo datastore to start")
+	}
+
+	sqlDB, err := datastore.NewSQLDB(isTesting)
+	if err != nil {
+		sentry.CaptureException(err)
+		log.Panic().Err(err).Msg("Must be able to init SQL datastore to start")
 	}
 
 	redis := cache.NewRedisClient()
 	cache := cache.NewCache(cache.NewRedisClientWithPrometheus(redis, "redis"))
 
+	go maybeWaitOnRolloutConfigChange(sqlDB.Variations(), cache)
+
 	// Provide datastore & cache via context
-	ctx = context.WithValue(ctx, syncContext.ContextKeyDatastore, db)
+	ctx = context.WithValue(ctx, syncContext.ContextKeyDatastore, dynamoDB)
 	ctx = context.WithValue(ctx, syncContext.ContextKeyCache, &cache)
 
 	r.Mount("/v2", controller.SyncRouter(
 		cache,
-		datastore.NewDatastoreWithPrometheus(db, "dynamo")))
+		datastore.NewDynamoDatastoreWithPrometheus(dynamoDB, "dynamo"), datastore.NewSQLDatastoreWithPrometheus(sqlDB, "sql")))
 	r.Get("/metrics", batware.Metrics())
 
 	log.Info().
@@ -123,7 +131,7 @@ func StartServer() {
 	subLog := logger.Info().Str("prefix", "main")
 	subLog.Msg("Starting server")
 
-	serverCtx, r := setupRouter(serverCtx, logger)
+	serverCtx, r := setupRouter(serverCtx, logger, false)
 
 	port := ":8295"
 	srv := http.Server{
