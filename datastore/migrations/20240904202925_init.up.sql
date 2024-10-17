@@ -23,28 +23,52 @@ CREATE TABLE entities (
 	mtime BIGINT NOT NULL,
 	version BIGINT NOT NULL,
 	data_type INTEGER NOT NULL,
-	specifics BYTEA STORAGE EXTERNAL NOT NULL,
-	client_defined_unique_tag TEXT STORAGE PLAIN,
-	server_defined_unique_tag TEXT STORAGE PLAIN,
-	name TEXT STORAGE PLAIN,
-	originator_cache_guid TEXT STORAGE PLAIN,
-	originator_client_item_id TEXT STORAGE PLAIN,
-	parent_id TEXT STORAGE PLAIN,
-	non_unique_name TEXT STORAGE PLAIN,
-	unique_position BYTEA STORAGE PLAIN,
+	specifics BYTEA NOT NULL,
+	client_defined_unique_tag TEXT,
+	server_defined_unique_tag TEXT,
+	name TEXT,
+	originator_cache_guid TEXT,
+	originator_client_item_id TEXT,
+	parent_id TEXT,
+	non_unique_name TEXT,
+	unique_position BYTEA,
 	folder BOOLEAN,
 	deleted BOOLEAN NOT NULL,
 	PRIMARY KEY (id, chain_id),
 	UNIQUE (chain_id, client_defined_unique_tag)
 )
 PARTITION BY RANGE (chain_id);
+
+ALTER TABLE entities ALTER specifics SET STORAGE EXTERNAL;
+ALTER TABLE entities ALTER client_defined_unique_tag SET STORAGE PLAIN;
+ALTER TABLE entities ALTER server_defined_unique_tag SET STORAGE PLAIN;
+ALTER TABLE entities ALTER name SET STORAGE PLAIN;
+ALTER TABLE entities ALTER originator_cache_guid SET STORAGE PLAIN;
+ALTER TABLE entities ALTER originator_client_item_id SET STORAGE PLAIN;
+ALTER TABLE entities ALTER parent_id SET STORAGE PLAIN;
+ALTER TABLE entities ALTER non_unique_name SET STORAGE PLAIN;
+ALTER TABLE entities ALTER unique_position SET STORAGE PLAIN;
+
 CREATE INDEX entities_chain_id_data_type_mtime_idx ON entities (chain_id, data_type, mtime);
 
-SELECT partman.create_parent(
-	p_parent_table := 'public.entities',
-	p_control := 'chain_id',
-	p_interval := '3500'
-);
+DO $$
+BEGIN
+	-- for vanilla postgres
+	PERFORM partman.create_parent(
+		p_parent_table := 'public.entities',
+		p_control := 'chain_id',
+		p_interval := '3500',
+		p_type := 'range'
+	);
+EXCEPTION WHEN OTHERS THEN
+	-- for Aurora
+	PERFORM partman.create_parent(
+		p_parent_table := 'public.entities',
+		p_control := 'chain_id',
+		p_interval := '3500',
+		p_type := 'native'
+	);
+END $$;
 
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 

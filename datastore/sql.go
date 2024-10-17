@@ -1,6 +1,8 @@
 package datastore
 
 import (
+	"context"
+	"database/sql"
 	"embed"
 	"errors"
 	"fmt"
@@ -11,6 +13,7 @@ import (
 	// import postgres package for migrations
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+
 	// import pgx so it can be used with sqlx
 	_ "github.com/jackc/pgx/stdlib"
 	"github.com/jmoiron/sqlx"
@@ -58,12 +61,22 @@ func NewSQLDB(isTesting bool) (*SQLDB, error) {
 		envKey = sqlURLEnvKey
 	}
 
+	var rdsConnector *rdsConnector
+	if os.Getenv(rdsHostKey) != "" {
+		rdsConnector = newRDSConnector()
+	}
+
 	sqlURL := os.Getenv(envKey)
-	if sqlURL == "" {
+	if rdsConnector != nil {
+		sqlURL, err = rdsConnector.getConnectionString(context.Background())
+		if err != nil {
+			return nil, err
+		}
+	} else if sqlURL == "" {
 		if isTesting {
 			sqlURL = defaultSQLTestURL
 		} else {
-			return nil, fmt.Errorf("%s must be defined", envKey)
+			return nil, fmt.Errorf("%s or %s must be defined", envKey, rdsHostKey)
 		}
 	}
 	iofsDriver, err := iofs.New(migrationFiles, "migrations")
@@ -82,9 +95,16 @@ func NewSQLDB(isTesting bool) (*SQLDB, error) {
 		if !errors.Is(err, migrate.ErrNoChange) {
 			return nil, fmt.Errorf("Failed to run migrations: %w", err)
 		}
+		err = nil
 	}
 
-	db, err := sqlx.Connect("pgx", sqlURL)
+	var db *sqlx.DB
+	if rdsConnector != nil {
+		baseDB := sql.OpenDB(rdsConnector)
+		db = sqlx.NewDb(baseDB, "pgx")
+	} else {
+		db, err = sqlx.Connect("pgx", sqlURL)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("Failed to connect to SQL DB: %w", err)
 	}
