@@ -21,3 +21,5 @@
 # Temp files
 
 /tmp/
+
+.env
