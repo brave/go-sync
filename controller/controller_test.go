@@ -24,27 +24,32 @@ import (
 
 type ControllerTestSuite struct {
 	suite.Suite
-	dynamo *datastore.Dynamo
-	cache  *cache.Cache
+	sqlDB    *datastore.SQLDB
+	dynamoDB *datastore.Dynamo
+	cache    *cache.Cache
 }
 
 func (suite *ControllerTestSuite) SetupSuite() {
 	datastore.Table = "client-entity-test-controllor"
 	var err error
-	suite.dynamo, err = datastore.NewDynamo()
+	suite.dynamoDB, err = datastore.NewDynamo(true)
 	suite.Require().NoError(err, "Failed to get dynamoDB session")
+	suite.sqlDB, err = datastore.NewSQLDB(true)
+	suite.Require().NoError(err, "Failed to get SQL DB session")
 
 	suite.cache = cache.NewCache(cache.NewRedisClient())
 }
 
 func (suite *ControllerTestSuite) SetupTest() {
 	suite.Require().NoError(
-		datastoretest.ResetTable(suite.dynamo), "Failed to reset table")
+		datastoretest.ResetDynamoTable(suite.dynamoDB), "Failed to reset Dynamo table")
+	suite.Require().NoError(
+		datastoretest.ResetSQLTables(suite.sqlDB), "Failed to reset SQL tables")
 }
 
 func (suite *ControllerTestSuite) TearDownTest() {
 	suite.Require().NoError(
-		datastoretest.DeleteTable(suite.dynamo), "Failed to delete table")
+		datastoretest.DeleteTable(suite.dynamoDB), "Failed to delete table")
 	suite.Require().NoError(
 		suite.cache.FlushAll(context.Background()), "Failed to clear cache")
 }
@@ -83,7 +88,7 @@ func (suite *ControllerTestSuite) TestCommand() {
 	suite.Require().NoError(err, "NewRequest should succeed")
 	req.Header.Set("Authorization", "Bearer token")
 
-	handler := controller.Command(suite.cache, suite.dynamo)
+	handler := controller.Command(suite.cache, suite.dynamoDB, suite.sqlDB)
 
 	// Test unauthorized response.
 	rr := httptest.NewRecorder()

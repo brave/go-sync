@@ -25,9 +25,9 @@ func DeleteTable(dynamo *datastore.Dynamo) error {
 			if aerr.Code() == dynamodb.ErrCodeResourceNotFoundException {
 				return nil
 			}
-		} else {
-			return fmt.Errorf("error deleting table: %w", err)
+			return err
 		}
+		return fmt.Errorf("error deleting table: %w", err)
 	}
 
 	return dynamo.WaitUntilTableNotExists(
@@ -59,8 +59,8 @@ func CreateTable(dynamo *datastore.Dynamo) error {
 		&dynamodb.DescribeTableInput{TableName: aws.String(datastore.Table)})
 }
 
-// ResetTable deletes and creates datastore.Table in dynamoDB.
-func ResetTable(dynamo *datastore.Dynamo) error {
+// ResetDynamoTable deletes and creates datastore.Table in dynamoDB.
+func ResetDynamoTable(dynamo *datastore.Dynamo) error {
 	if err := DeleteTable(dynamo); err != nil {
 		return fmt.Errorf("error deleting table to reset table: %w", err)
 	}
@@ -125,7 +125,7 @@ func ScanTagItems(dynamo *datastore.Dynamo) ([]datastore.ServerClientUniqueTagIt
 
 // ScanClientItemCounts scans the dynamoDB table and returns all client item
 // counts.
-func ScanClientItemCounts(dynamo *datastore.Dynamo) ([]datastore.ClientItemCounts, error) {
+func ScanClientItemCounts(dynamo *datastore.Dynamo) ([]datastore.DynamoItemCounts, error) {
 	filter := expression.AttributeExists(expression.Name("ItemCount"))
 	expr, err := expression.NewBuilder().WithFilter(filter).Build()
 	if err != nil {
@@ -142,7 +142,7 @@ func ScanClientItemCounts(dynamo *datastore.Dynamo) ([]datastore.ClientItemCount
 	if err != nil {
 		return nil, fmt.Errorf("error doing scan for item counts: %w", err)
 	}
-	clientItemCounts := []datastore.ClientItemCounts{}
+	clientItemCounts := []datastore.DynamoItemCounts{}
 	err = dynamodbattribute.UnmarshalListOfMaps(out.Items, &clientItemCounts)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshalling item counts: %w", err)

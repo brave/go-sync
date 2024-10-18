@@ -16,6 +16,7 @@ services:
     depends_on:
       - dynamo-local
       - redis
+      - postgres
     networks:
       - sync
     environment:
@@ -28,6 +29,8 @@ services:
       - AWS_REGION=us-west-2
       - AWS_ENDPOINT=http://dynamo-local:8000
       - REDIS_URL=redis:6379
+      - SQL_DATABASE_URL=postgres://sync:password@postgres/postgres?sslmode=disable
+      - SQL_TEST_DATABASE_URL=postgres://sync:password@postgres/testing?sslmode=disable
   web:
     build:
       context: .
@@ -54,6 +57,8 @@ services:
       - AWS_ENDPOINT=http://dynamo-local:8000
       - TABLE_NAME=client-entity-dev
       - REDIS_URL=redis:6379
+      - SQL_DATABASE_URL=postgres://sync:password@postgres/postgres?sslmode=disable
+      - SQL_TEST_DATABASE_URL=postgres://sync:password@postgres/testing?sslmode=disable
   dynamo-local:
     build:
       context: .
@@ -70,3 +75,16 @@ services:
       - ALLOW_EMPTY_PASSWORD=yes
     networks:
       - sync
+  postgres:
+    build:
+      dockerfile: pg.Dockerfile
+    ports:
+      - "5434:5432"
+    environment:
+      - POSTGRES_USER=sync
+      - POSTGRES_PASSWORD=password
+    networks:
+      - sync
+    command: ["postgres", "-c", "shared_preload_libraries=pg_cron"]
+    volumes:
+      - "./misc/create_additional_dbs.sql:/docker-entrypoint-initdb.d/create_additional_dbs.sql"
