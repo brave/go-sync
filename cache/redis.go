@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -18,14 +19,11 @@ type RedisClient interface {
 	Get(ctx context.Context, key string, delete bool) (string, error)
 	Del(ctx context.Context, keys ...string) error
 	FlushAll(ctx context.Context) error
+	SubscribeAndWait(ctx context.Context, channel string) error
 }
 
-type redisSimpleClient struct {
-	client *redis.Client
-}
-
-type redisClusterClient struct {
-	client *redis.ClusterClient
+type redisClientImpl struct {
+	client redis.UniversalClient
 }
 
 // NewRedisClient create a client for standalone redis or redis cluster.
@@ -50,24 +48,24 @@ func NewRedisClient() RedisClient {
 		client := redis.NewClient(&redis.Options{
 			Addr: addrs[0],
 		})
-		r = &redisSimpleClient{client}
+		r = &redisClientImpl{client}
 	} else {
 		client := redis.NewClusterClient(&redis.ClusterOptions{
 			Addrs:    addrs,
 			PoolSize: poolSize,
 			ReadOnly: true,
 		})
-		r = &redisClusterClient{client}
+		r = &redisClientImpl{client}
 	}
 
 	return r
 }
 
-func (r *redisSimpleClient) Set(ctx context.Context, key string, val string, ttl time.Duration) error {
+func (r *redisClientImpl) Set(ctx context.Context, key string, val string, ttl time.Duration) error {
 	return r.client.Set(ctx, key, val, ttl).Err()
 }
 
-func (r *redisSimpleClient) Incr(ctx context.Context, key string, subtract bool) (int, error) {
+func (r *redisClientImpl) Incr(ctx context.Context, key string, subtract bool) (int, error) {
 	var res *redis.IntCmd
 	if subtract {
 		res = r.client.Decr(ctx, key)
@@ -78,7 +76,7 @@ func (r *redisSimpleClient) Incr(ctx context.Context, key string, subtract bool)
 	return int(val), err
 }
 
-func (r *redisSimpleClient) Get(ctx context.Context, key string, delete bool) (string, error) {
+func (r *redisClientImpl) Get(ctx context.Context, key string, delete bool) (string, error) {
 	var res *redis.StringCmd
 	if delete {
 		res = r.client.GetDel(ctx, key)
@@ -92,47 +90,31 @@ func (r *redisSimpleClient) Get(ctx context.Context, key string, delete bool) (s
 	return val, err
 }
 
-func (r *redisSimpleClient) Del(ctx context.Context, keys ...string) error {
+func (r *redisClientImpl) Del(ctx context.Context, keys ...string) error {
 	return r.client.Del(ctx, keys...).Err()
 }
 
-func (r *redisSimpleClient) FlushAll(ctx context.Context) error {
+func (r *redisClientImpl) FlushAll(ctx context.Context) error {
 	return r.client.FlushAll(ctx).Err()
 }
 
-func (r *redisClusterClient) Set(ctx context.Context, key string, val string, ttl time.Duration) error {
-	return r.client.Set(ctx, key, val, ttl).Err()
-}
+func (r *redisClientImpl) SubscribeAndWait(ctx context.Context, channel string) error {
+	pubsub := r.client.Subscribe(ctx, channel)
+	defer pubsub.Close()
 
-func (r *redisClusterClient) Incr(ctx context.Context, key string, subtract bool) (int, error) {
-	var res *redis.IntCmd
-	if subtract {
-		res = r.client.Decr(ctx, key)
-	} else {
-		res = r.client.Incr(ctx, key)
+	ch := pubsub.Channel()
+
+	for {
+		select {
+		case msg, ok := <-ch:
+			if !ok {
+				return fmt.Errorf("redis channel unexpectedly closed")
+			}
+			if msg != nil {
+				return nil
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
-	val, err := res.Result()
-	return int(val), err
-}
-
-func (r *redisClusterClient) Get(ctx context.Context, key string, delete bool) (string, error) {
-	var res *redis.StringCmd
-	if delete {
-		res = r.client.GetDel(ctx, key)
-	} else {
-		res = r.client.Get(ctx, key)
-	}
-	val, err := res.Result()
-	if err == redis.Nil {
-		return "", nil
-	}
-	return val, err
-}
-
-func (r *redisClusterClient) Del(ctx context.Context, keys ...string) error {
-	return r.client.Del(ctx, keys...).Err()
-}
-
-func (r *redisClusterClient) FlushAll(ctx context.Context) error {
-	return r.client.FlushAll(ctx).Err()
 }
