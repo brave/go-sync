@@ -2,7 +2,6 @@ package datastore
 
 import (
 	"context"
-	"database/sql/driver"
 	"fmt"
 	"net/url"
 	"os"
@@ -11,7 +10,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
-	"github.com/jackc/pgx/stdlib"
+	"github.com/jackc/pgx/v5"
 )
 
 const defaultRegion = "us-west-2"
@@ -53,7 +52,7 @@ func newRDSConnector() *rdsConnector {
 	}
 }
 
-func (c *rdsConnector) getConnectionString(ctx context.Context) (string, error) {
+func (c *rdsConnector) getAuthToken(ctx context.Context) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -68,26 +67,27 @@ func (c *rdsConnector) getConnectionString(ctx context.Context) (string, error) 
 		if err != nil {
 			return "", fmt.Errorf("failed to create authentication token: %w", err)
 		}
-		c.token = url.QueryEscape(token)
+		c.token = token
 		c.tokenCacheTime = time.Now()
 	}
-
-	return fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=require", c.user, c.token, c.hostAndPort, c.dbName), nil
+	return c.token, nil
 }
 
-func (c *rdsConnector) Connect(ctx context.Context) (driver.Conn, error) {
-	connStr, err := c.getConnectionString(ctx)
+func (c *rdsConnector) getConnectionString(ctx context.Context) (string, error) {
+	token, err := c.getAuthToken(ctx)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	return stdlib.GetDefaultDriver().Open(connStr)
+	return fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=require", c.user, url.QueryEscape(token), c.hostAndPort, c.dbName), nil
 }
 
-func (c *rdsConnector) Driver() driver.Driver {
-	return c
-}
+func (c *rdsConnector) updateConnConfig(ctx context.Context, config *pgx.ConnConfig) error {
+	token, err := c.getAuthToken(ctx)
+	if err != nil {
+		return err
+	}
+	config.Password = token
 
-func (c *rdsConnector) Open(_ string) (driver.Conn, error) {
-	return nil, fmt.Errorf("open method unsupported")
+	return nil
 }

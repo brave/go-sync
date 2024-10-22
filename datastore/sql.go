@@ -2,7 +2,6 @@ package datastore
 
 import (
 	"context"
-	"database/sql"
 	"embed"
 	"errors"
 	"fmt"
@@ -15,7 +14,8 @@ import (
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 
 	// import pgx so it can be used with sqlx
-	_ "github.com/jackc/pgx/stdlib"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -100,7 +100,11 @@ func NewSQLDB(isTesting bool) (*SQLDB, error) {
 
 	var db *sqlx.DB
 	if rdsConnector != nil {
-		baseDB := sql.OpenDB(rdsConnector)
+		config, err := pgx.ParseConfig(sqlURL)
+		if err != nil {
+			return nil, err
+		}
+		baseDB := stdlib.OpenDB(*config, stdlib.OptionBeforeConnect(rdsConnector.updateConnConfig))
 		db = sqlx.NewDb(baseDB, "pgx")
 	} else {
 		db, err = sqlx.Connect("pgx", sqlURL)
