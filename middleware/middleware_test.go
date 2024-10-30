@@ -4,15 +4,18 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
 	"time"
 
 	"github.com/brave/go-sync/auth/authtest"
 	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/datastore/datastoretest"
 	"github.com/brave/go-sync/middleware"
+
 	"github.com/brave/go-sync/utils"
 	"github.com/stretchr/testify/suite"
 )

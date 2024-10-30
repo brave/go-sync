@@ -4,31 +4,54 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/aws/aws-sdk-go/service/dynamodb/expression"
 	"github.com/brave/go-sync/cache"
 	"github.com/brave/go-sync/command"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
+	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/suite"
 )
 
 const (
-	clientID     string = "client"
-	bookmarkType int32  = 32904
-	nigoriType   int32  = 47745
-	cacheGUID    string = "cache_guid"
+	testClientID    string = "client"
+	bookmarkType    int32  = 32904
+	nigoriType      int32  = 47745
+	cacheGUID       string = "cache_guid"
+	testDynamoTable        = "client-entity-test-command"
 )
+
+func buildRolloutConfigString(dataTypes []int32) string {
+	var configParts []string
+	for _, dataType := range dataTypes {
+		configParts = append(configParts, fmt.Sprintf("%d=1.0", dataType))
+	}
+	return strings.Join(configParts, ",")
+}
 
 type CommandTestSuite struct {
 	suite.Suite
-	dynamo *datastore.Dynamo
-	cache  *cache.Cache
+	storeInSQL bool
+	dynamoDB   *datastore.Dynamo
+	cache      *cache.Cache
+	sqlDB      *datastore.SQLDB
+}
+
+func NewCommandTestSuite(storeInSQL bool) *CommandTestSuite {
+	return &CommandTestSuite{
+		storeInSQL: storeInSQL,
+	}
 }
 
 type PBSyncAttrs struct {
@@ -58,22 +81,35 @@ func NewPBSyncAttrs(name *string, version *int64, deleted *bool, folder *bool, s
 }
 
 func (suite *CommandTestSuite) SetupSuite() {
-	datastore.Table = "client-entity-test-command"
+	var rollouts string
+	if suite.storeInSQL {
+		rollouts = buildRolloutConfigString([]int32{bookmarkType, nigoriType})
+	}
+	suite.T().Setenv(datastore.SQLSaveRolloutsEnvKey, rollouts)
+
+	datastore.Table = testDynamoTable
 	var err error
-	suite.dynamo, err = datastore.NewDynamo()
+	suite.dynamoDB, err = datastore.NewDynamo(true)
 	suite.Require().NoError(err, "Failed to get dynamoDB session")
+	suite.sqlDB, err = datastore.NewSQLDB(true)
+	suite.Require().NoError(err, "Failed to get SQL DB session")
 
 	suite.cache = cache.NewCache(cache.NewRedisClient())
 }
 
 func (suite *CommandTestSuite) SetupTest() {
 	suite.Require().NoError(
-		datastoretest.ResetTable(suite.dynamo), "Failed to reset table")
+		datastoretest.ResetDynamoTable(suite.dynamoDB), "Failed to reset Dynamo table")
+	suite.Require().NoError(
+		datastoretest.ResetSQLTables(suite.sqlDB), "Failed to reset SQL tables")
 }
 
 func (suite *CommandTestSuite) TearDownTest() {
+	isEmpty, err := verifyNoDataInOtherDB(suite.storeInSQL, suite.dynamoDB, suite.sqlDB)
+	suite.Require().NoError(err, "Empty table verification should succeed")
+	suite.Require().True(isEmpty, "Other datastore should be empty")
 	suite.Require().NoError(
-		datastoretest.DeleteTable(suite.dynamo), "Failed to delete table")
+		datastoretest.DeleteTable(suite.dynamoDB), "Failed to delete table")
 	suite.Require().NoError(
 		suite.cache.FlushAll(context.Background()), "Failed to clear cache")
 }
@@ -126,16 +162,28 @@ func getClientToServerCommitMsg(entries []*sync_pb.SyncEntity) *sync_pb.ClientTo
 	}
 }
 
-func getMarker(suite *CommandTestSuite, tokens []int64) []*sync_pb.DataTypeProgressMarker {
-	types := []int32{nigoriType, bookmarkType} // hard-coded types used in tests.
-	suite.Assert().Equal(len(types), len(tokens))
+type MarkerTokens struct {
+	Nigori   *int64
+	Bookmark *int64
+}
+
+func getMarker(tokens MarkerTokens) []*sync_pb.DataTypeProgressMarker {
 	marker := []*sync_pb.DataTypeProgressMarker{}
-	for i, token := range tokens {
-		tokenBytes := make([]byte, binary.MaxVarintLen64)
-		binary.PutVarint(tokenBytes, token)
-		marker = append(marker, &sync_pb.DataTypeProgressMarker{
-			DataTypeId: aws.Int32(types[i]), Token: tokenBytes})
+
+	createMarker := func(tokenPtr *int64, dataTypeID int32) {
+		if tokenPtr != nil {
+			tokenBytes := make([]byte, binary.MaxVarintLen64)
+			binary.PutVarint(tokenBytes, *tokenPtr)
+			marker = append(marker, &sync_pb.DataTypeProgressMarker{
+				DataTypeId: aws.Int32(dataTypeID),
+				Token:      tokenBytes,
+			})
+		}
 	}
+
+	createMarker(tokens.Nigori, nigoriType)
+	createMarker(tokens.Bookmark, bookmarkType)
+
 	return marker
 }
 
@@ -154,12 +202,15 @@ func getClientToServerGUMsg(marker []*sync_pb.DataTypeProgressMarker,
 	}
 }
 
-func getTokensFromNewMarker(suite *CommandTestSuite, newMarker []*sync_pb.DataTypeProgressMarker) (int64, int64) {
+func getTokensFromNewMarker(suite *CommandTestSuite, newMarker []*sync_pb.DataTypeProgressMarker) MarkerTokens {
 	nigoriToken, n := binary.Varint(newMarker[0].Token)
 	suite.Assert().Greater(n, 0)
 	bookmarkToken, n := binary.Varint(newMarker[1].Token)
 	suite.Assert().Greater(n, 0)
-	return nigoriToken, bookmarkToken
+	return MarkerTokens{
+		Nigori:   &nigoriToken,
+		Bookmark: &bookmarkToken,
+	}
 }
 
 func assertCommonResponse(suite *CommandTestSuite, rsp *sync_pb.ClientToServerResponse, isCommit bool) {
@@ -221,7 +272,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 
 	// Commit and check response.
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
@@ -236,12 +287,16 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 	}
 
 	// GetUpdates with token 0 should get all of them.
-	marker := getMarker(suite, []int64{0, 0})
+	marker := getMarker(MarkerTokens{
+		Nigori:   aws.Int64(0),
+		Bookmark: aws.Int64(0),
+	})
+
 	msg = getClientToServerGUMsg(
 		marker, sync_pb.SyncEnums_GU_TRIGGER, false, nil)
 	rsp = &sync_pb.ClientToServerResponse{}
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
 
@@ -265,7 +320,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 	rsp = &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 
@@ -281,13 +336,12 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 
 	// GetUpdates again with previous returned mtimes and check the result, it
 	// should include update items and newly commit items.
-	nigoriToken, bookmarkToken := getTokensFromNewMarker(suite, newMarker)
-	marker = getMarker(suite, []int64{nigoriToken, bookmarkToken})
+	marker = getMarker(getTokensFromNewMarker(suite, newMarker))
 	msg = getClientToServerGUMsg(
 		marker, sync_pb.SyncEnums_GU_TRIGGER, false, nil)
 	rsp = &sync_pb.ClientToServerResponse{}
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
 
@@ -312,7 +366,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 	msg = getClientToServerCommitMsg(entries)
 	rsp = &sync_pb.ClientToServerResponse{}
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
@@ -322,13 +376,12 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 	}
 
 	// GetUpdates again with previous returned tokens should return 0 updates.
-	nigoriToken, bookmarkToken = getTokensFromNewMarker(suite, newMarker)
-	marker = getMarker(suite, []int64{nigoriToken, bookmarkToken})
+	marker = getMarker(getTokensFromNewMarker(suite, newMarker))
 	msg = getClientToServerGUMsg(
 		marker, sync_pb.SyncEnums_GU_TRIGGER, false, nil)
 	rsp = &sync_pb.ClientToServerResponse{}
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
 
@@ -339,13 +392,17 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 
 func (suite *CommandTestSuite) TestHandleClientToServerMessage_NewClient() {
 	// Prepare input message for NEW_CLIENT get updates request.
-	marker := getMarker(suite, []int64{0, 0})
+	marker := getMarker(MarkerTokens{
+		Nigori:   aws.Int64(0),
+		Bookmark: aws.Int64(0),
+	})
+
 	msg := getClientToServerGUMsg(
 		marker, sync_pb.SyncEnums_NEW_CLIENT, true, nil)
 	rsp := &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
 
@@ -389,7 +446,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_GUBatchSize() {
 
 	// Commit and check response.
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(4, len(rsp.Commit.Entryresponse))
@@ -413,7 +470,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 	rsp := &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
@@ -438,7 +495,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 	rsp = &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(4, len(rsp.Commit.Entryresponse))
@@ -459,7 +516,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 	rsp = &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
@@ -476,7 +533,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 	rsp = &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
@@ -496,7 +553,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 	rsp = &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(4, len(rsp.Commit.Entryresponse))
@@ -518,7 +575,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_ReplaceParentIDTo
 	msg := getClientToServerCommitMsg([]*sync_pb.SyncEntity{child0})
 	rsp := &sync_pb.ClientToServerResponse{}
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(1, len(rsp.Commit.Entryresponse))
@@ -547,7 +604,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_ReplaceParentIDTo
 	rsp = &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(6, len(rsp.Commit.Entryresponse))
@@ -557,12 +614,15 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_ReplaceParentIDTo
 
 	// Get updates to check if child's parent ID is replaced with the server
 	// generated ID of its parent.
-	marker := getMarker(suite, []int64{0, 0})
+	marker := getMarker(MarkerTokens{
+		Nigori:   aws.Int64(0),
+		Bookmark: aws.Int64(0),
+	})
 	msg = getClientToServerGUMsg(
 		marker, sync_pb.SyncEnums_GU_TRIGGER, true, nil)
 	rsp = &sync_pb.ClientToServerResponse{}
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
 	suite.Require().Equal(6, len(rsp.GetUpdates.Entries))
@@ -589,17 +649,45 @@ func assertTypeMtimeCacheValue(suite *CommandTestSuite, key string, mtime int64,
 
 func insertSyncEntitiesWithoutUpdateCache(
 	suite *CommandTestSuite, entries []*sync_pb.SyncEntity, clientID string) (ret []*datastore.SyncEntity) {
+	var chainID *int64
+	var tx *sqlx.Tx
+	if suite.storeInSQL {
+		var err error
+		tx, err = suite.sqlDB.DB.Beginx()
+		suite.Require().NoError(err, "should be able to begin transaction")
+		defer tx.Rollback()
+
+		chainID, err = suite.sqlDB.GetAndLockChainID(tx, clientID)
+		suite.Require().NoError(err, "should be able to get chain ID")
+	}
 	for _, entry := range entries {
-		dbEntry, err := datastore.CreateDBSyncEntity(entry, nil, clientID)
+		dbEntry, err := datastore.CreateDBSyncEntity(entry, nil, clientID, 1)
 		suite.Require().NoError(err, "Create db entity from pb entity should succeed")
-		_, err = suite.dynamo.InsertSyncEntity(dbEntry)
-		suite.Require().NoError(err, "Insert sync entity should succeed")
+
+		if suite.storeInSQL {
+			id, _ := uuid.NewV7()
+			dbEntry.ID = id.String()
+			dbEntry.ChainID = chainID
+
+			conflict, err := suite.sqlDB.InsertSyncEntities(tx, []*datastore.SyncEntity{dbEntry})
+			suite.Require().NoError(err, "Insert sync entity should succeed")
+			suite.Require().False(conflict, "Insert should not conflict")
+
+		} else {
+			_, err = suite.dynamoDB.InsertSyncEntity(dbEntry)
+			suite.Require().NoError(err, "Insert sync entity should succeed")
+		}
+
 		val, err := suite.cache.Get(context.Background(),
 			clientID+"#"+strconv.Itoa(*dbEntry.DataType), false)
 		suite.Require().NoError(err, "Get from cache should succeed")
 		suite.Require().NotEqual(val, strconv.FormatInt(*dbEntry.Mtime, 10),
 			"Cache should not be updated")
 		ret = append(ret, dbEntry)
+	}
+	if tx != nil {
+		err := tx.Commit()
+		suite.Require().NoError(err, "Commit transaction should succeed")
 	}
 	return
 }
@@ -616,7 +704,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ba
 	rsp := &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(3, len(rsp.Commit.Entryresponse))
@@ -634,10 +722,10 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ba
 	}
 
 	// Latest mtime of each type in the commit should be stored in the cache.
-	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
+	assertTypeMtimeCacheValue(suite, testClientID+"#"+strconv.Itoa(int(bookmarkType)),
 		latestBookmarkMtime,
 		"Successful commit should write the latest mtime into cache")
-	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(nigoriType)),
+	assertTypeMtimeCacheValue(suite, testClientID+"#"+strconv.Itoa(int(nigoriType)),
 		latestNigoriMtime,
 		"Successful commit should write the latest mtime into cache")
 
@@ -648,29 +736,32 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ba
 			getCommitEntity("id4_bookmark", 0, false, getBookmarkSpecifics()),
 			getCommitEntity("id5_nigori", 0, false, getNigoriSpecifics()),
 		},
-		clientID)
+		testClientID)
 
 	// GU request with the same or newer token should be short circuited, so
 	// should return no updates.
-	marker := getMarker(suite, []int64{latestNigoriMtime, latestBookmarkMtime + 1})
+	marker := getMarker(MarkerTokens{
+		Nigori:   aws.Int64(latestNigoriMtime),
+		Bookmark: aws.Int64(latestBookmarkMtime + 1),
+	})
 	msg = getClientToServerGUMsg(
 		marker, sync_pb.SyncEnums_PERIODIC, false, nil)
 	rsp = &sync_pb.ClientToServerResponse{}
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
 	suite.Assert().Equal(0, len(rsp.GetUpdates.Entries))
-	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
+	assertTypeMtimeCacheValue(suite, testClientID+"#"+strconv.Itoa(int(bookmarkType)),
 		latestBookmarkMtime, "cache is not updated when short circuited")
-	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(nigoriType)),
+	assertTypeMtimeCacheValue(suite, testClientID+"#"+strconv.Itoa(int(nigoriType)),
 		latestNigoriMtime, "cache is not updated when short circuited")
 
 	// Manually update cache for our DB insert.
 	latestBookmarkMtime = *dbEntries[0].Mtime
 	latestNigoriMtime = *dbEntries[1].Mtime
-	suite.cache.SetTypeMtime(context.Background(), clientID, int(bookmarkType), latestBookmarkMtime)
-	suite.cache.SetTypeMtime(context.Background(), clientID, int(nigoriType), latestNigoriMtime)
+	suite.cache.SetTypeMtime(context.Background(), testClientID, int(bookmarkType), latestBookmarkMtime)
+	suite.cache.SetTypeMtime(context.Background(), testClientID, int(nigoriType), latestNigoriMtime)
 
 	// Commit another entry and check if cache is updated.
 	entries = []*sync_pb.SyncEntity{
@@ -680,7 +771,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ba
 	rsp = &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(1, len(rsp.Commit.Entryresponse))
@@ -688,25 +779,28 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ba
 	suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
 
 	latestBookmarkMtime = *entryRsp.Mtime
-	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
+	assertTypeMtimeCacheValue(suite, testClientID+"#"+strconv.Itoa(int(bookmarkType)),
 		latestBookmarkMtime, "Successful commit should update the cache")
 
 	// Send GU with an old token will get updates immediately.
 	// Check the cache value again, should be the same as the latest mtime in rsp.
-	marker = getMarker(suite, []int64{latestNigoriMtime - 1, latestBookmarkMtime - 1})
+	marker = getMarker(MarkerTokens{
+		Nigori:   aws.Int64(latestNigoriMtime - 1),
+		Bookmark: aws.Int64(latestBookmarkMtime - 1),
+	})
 	msg = getClientToServerGUMsg(
 		marker, sync_pb.SyncEnums_PERIODIC, false, nil)
 	rsp = &sync_pb.ClientToServerResponse{}
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
 	suite.Assert().Equal(2, len(rsp.GetUpdates.Entries))
 	suite.Assert().Equal(latestNigoriMtime, *rsp.GetUpdates.Entries[0].Mtime)
 	suite.Assert().Equal(latestBookmarkMtime, *rsp.GetUpdates.Entries[1].Mtime)
-	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
+	assertTypeMtimeCacheValue(suite, testClientID+"#"+strconv.Itoa(int(bookmarkType)),
 		latestBookmarkMtime, "Cached token should be equal to latest mtime")
-	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(nigoriType)),
+	assertTypeMtimeCacheValue(suite, testClientID+"#"+strconv.Itoa(int(nigoriType)),
 		latestNigoriMtime, "Cached token should be equal to latest mtime")
 }
 
@@ -719,14 +813,14 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Sk
 	rsp := &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(1, len(rsp.Commit.Entryresponse))
 	commitSuccess := sync_pb.CommitResponse_SUCCESS
 	suite.Assert().Equal(commitSuccess, *rsp.Commit.Entryresponse[0].ResponseType)
 	latestBookmarkMtime := *rsp.Commit.Entryresponse[0].Mtime
-	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
+	assertTypeMtimeCacheValue(suite, testClientID+"#"+strconv.Itoa(int(bookmarkType)),
 		latestBookmarkMtime,
 		"Commit should write the latest mtime into cache")
 
@@ -738,20 +832,23 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Sk
 		[]*sync_pb.SyncEntity{
 			getCommitEntity("id2_bookmark", 0, false, getBookmarkSpecifics()),
 		},
-		clientID)
+		testClientID)
 
 	// Check that we will receive the manually inserted item from DB immediately.
-	marker := getMarker(suite, []int64{0, latestBookmarkMtime})
+	marker := getMarker(MarkerTokens{
+		Nigori:   aws.Int64(0),
+		Bookmark: aws.Int64(latestBookmarkMtime),
+	})
 	msg = getClientToServerGUMsg(
 		marker, sync_pb.SyncEnums_GU_TRIGGER, true, nil)
 	rsp = &sync_pb.ClientToServerResponse{}
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
 	suite.Require().Equal(1, len(rsp.GetUpdates.Entries))
 	suite.Require().Equal(dbEntries[0].Mtime, rsp.GetUpdates.Entries[0].Mtime)
-	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
+	assertTypeMtimeCacheValue(suite, testClientID+"#"+strconv.Itoa(int(bookmarkType)),
 		*dbEntries[0].Mtime, "Successful commit should update the cache")
 }
 
@@ -765,7 +862,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ch
 	rsp := &sync_pb.ClientToServerResponse{}
 
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
@@ -776,45 +873,98 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ch
 		suite.Assert().NotEqual(latestBookmarkMtime, *entryRsp.Mtime)
 		latestBookmarkMtime = *entryRsp.Mtime
 	}
-	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
+	assertTypeMtimeCacheValue(suite, testClientID+"#"+strconv.Itoa(int(bookmarkType)),
 		latestBookmarkMtime,
 		"Commit should write the latest mtime into cache")
 
 	// Send a GU with batch size set to 1, changesRemaining in rsp should be 1
 	// and cache should not be updated.
-	marker := getMarker(suite, []int64{0, 0})
+	marker := getMarker(MarkerTokens{
+		Nigori:   aws.Int64(0),
+		Bookmark: aws.Int64(0),
+	})
 	clientBatch := int32(2)
 	msg = getClientToServerGUMsg(
 		marker, sync_pb.SyncEnums_PERIODIC, true, &clientBatch)
 	rsp = &sync_pb.ClientToServerResponse{}
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
 	suite.Require().Equal(2, len(rsp.GetUpdates.Entries))
 	suite.Require().Equal(int64(0), *rsp.GetUpdates.ChangesRemaining)
 	mtime := *rsp.GetUpdates.Entries[0].Mtime
-	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
+	assertTypeMtimeCacheValue(suite, testClientID+"#"+strconv.Itoa(int(bookmarkType)),
 		latestBookmarkMtime,
 		"cache should not be updated when changes remaining = 1")
 
 	// Send a second GU with changesRemaining in rsp = 0 and check cache is now
 	// updated.
-	marker = getMarker(suite, []int64{0, mtime})
+	marker = getMarker(MarkerTokens{
+		Nigori:   aws.Int64(0),
+		Bookmark: aws.Int64(mtime),
+	})
 	msg = getClientToServerGUMsg(
 		marker, sync_pb.SyncEnums_PERIODIC, true, nil)
 	rsp = &sync_pb.ClientToServerResponse{}
 	suite.Require().NoError(
-		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
+		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamoDB, suite.sqlDB, testClientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
 	suite.Require().Equal(1, len(rsp.GetUpdates.Entries))
 	suite.Require().Equal(int64(0), *rsp.GetUpdates.ChangesRemaining)
-	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
+	assertTypeMtimeCacheValue(suite, testClientID+"#"+strconv.Itoa(int(bookmarkType)),
 		latestBookmarkMtime,
 		"cache should be updated when changes remaining = 0")
 }
 
+func getDatastoreCount(checkSQL bool, dynamoDB *datastore.Dynamo, sqlDB *datastore.SQLDB, dataTypes []int32) (int64, error) {
+	var count int64
+	if !checkSQL {
+		filt := expression.Name("DataType").Equal(expression.Value(dataTypes[0]))
+		for _, dataType := range dataTypes[1:] {
+			filt = filt.Or(expression.Name("DataType").Equal(expression.Value(dataType)))
+		}
+
+		expr, err := expression.NewBuilder().WithFilter(filt).Build()
+		if err != nil {
+			return 0, err
+		}
+
+		input := &dynamodb.ScanInput{
+			TableName:                 aws.String(datastore.Table),
+			ExpressionAttributeNames:  expr.Names(),
+			ExpressionAttributeValues: expr.Values(),
+			FilterExpression:          expr.Filter(),
+		}
+		result, err := dynamoDB.Scan(input)
+		if err != nil {
+			return 0, err
+		}
+		count = *result.Count
+	} else {
+		query := "SELECT COUNT(*) FROM entities WHERE data_type = ANY($1)"
+		err := sqlDB.QueryRow(query, pq.Array(dataTypes)).Scan(&count)
+		if err != nil {
+			return 0, err
+		}
+	}
+	return count, nil
+}
+
+func verifyNoDataInOtherDB(storeInSQL bool, dynamoDB *datastore.Dynamo, sqlDB *datastore.SQLDB) (bool, error) {
+	count, err := getDatastoreCount(!storeInSQL, dynamoDB, sqlDB, []int32{nigoriType, bookmarkType})
+	if err != nil {
+		return false, err
+	}
+	return count == 0, nil
+}
+
 func TestCommandTestSuite(t *testing.T) {
-	suite.Run(t, new(CommandTestSuite))
+	t.Run("Dynamo", func(t *testing.T) {
+		suite.Run(t, NewCommandTestSuite(false))
+	})
+	t.Run("SQL", func(t *testing.T) {
+		suite.Run(t, NewCommandTestSuite(true))
+	})
 }

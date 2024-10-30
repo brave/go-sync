@@ -21,7 +21,7 @@ func DisabledChain(next http.Handler) http.Handler {
 			return
 		}
 
-		db, ok := ctx.Value(syncContext.ContextKeyDatastore).(datastore.Datastore)
+		db, ok := ctx.Value(syncContext.ContextKeyDatastore).(datastore.DynamoDatastore)
 		if !ok {
 			http.Error(w, "unable to complete request", http.StatusInternalServerError)
 			return
