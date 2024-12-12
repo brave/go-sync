@@ -15,7 +15,7 @@ import (
 type RedisClient interface {
 	Set(ctx context.Context, key string, val string, ttl time.Duration) error
 	Incr(ctx context.Context, key string, subtract bool) (int, error)
-	Get(ctx context.Context, key string, delete bool) (string, error)
+	Get(ctx context.Context, key string, deleteAfterGet bool) (string, error)
 	Del(ctx context.Context, keys ...string) error
 	FlushAll(ctx context.Context) error
 }
@@ -78,9 +78,9 @@ func (r *redisSimpleClient) Incr(ctx context.Context, key string, subtract bool)
 	return int(val), err
 }
 
-func (r *redisSimpleClient) Get(ctx context.Context, key string, delete bool) (string, error) {
+func (r *redisSimpleClient) Get(ctx context.Context, key string, deleteAfterGet bool) (string, error) {
 	var res *redis.StringCmd
-	if delete {
+	if deleteAfterGet {
 		res = r.client.GetDel(ctx, key)
 	} else {
 		res = r.client.Get(ctx, key)
@@ -115,9 +115,9 @@ func (r *redisClusterClient) Incr(ctx context.Context, key string, subtract bool
 	return int(val), err
 }
 
-func (r *redisClusterClient) Get(ctx context.Context, key string, delete bool) (string, error) {
+func (r *redisClusterClient) Get(ctx context.Context, key string, deleteAfterGet bool) (string, error) {
 	var res *redis.StringCmd
-	if delete {
+	if deleteAfterGet {
 		res = r.client.GetDel(ctx, key)
 	} else {
 		res = r.client.Get(ctx, key)
