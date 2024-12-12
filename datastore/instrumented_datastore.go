@@ -178,7 +178,7 @@ func (_d DatastoreWithPrometheus) UpdateClientItemCount(counts *ClientItemCounts
 }
 
 // UpdateSyncEntity implements Datastore
-func (_d DatastoreWithPrometheus) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (conflict bool, delete bool, err error) {
+func (_d DatastoreWithPrometheus) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (conflict bool, deleted bool, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
