@@ -67,7 +67,7 @@ func (_d RedisClientWithPrometheus) FlushAll(ctx context.Context) (err error) {
 }
 
 // Get implements RedisClient
-func (_d RedisClientWithPrometheus) Get(ctx context.Context, key string, delete bool) (s1 string, err error) {
+func (_d RedisClientWithPrometheus) Get(ctx context.Context, key string, deleteAfterGet bool) (s1 string, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -77,7 +77,7 @@ func (_d RedisClientWithPrometheus) Get(ctx context.Context, key string, delete 
 
 		redisclientDurationSummaryVec.WithLabelValues(_d.instanceName, "Get", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.Get(ctx, key, delete)
+	return _d.base.Get(ctx, key, deleteAfterGet)
 }
 
 // Set implements RedisClient
