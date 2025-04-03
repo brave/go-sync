@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/aws/aws-sdk-go v1.55.6
-	github.com/brave-intl/bat-go/libs v0.0.0-20231020145457-cc9860c87bae
+	github.com/brave-intl/bat-go/libs v0.0.0-20250328134229-f5eded45f35c
 	github.com/getsentry/sentry-go v0.30.0
 	github.com/go-chi/chi/v5 v5.0.12
 	github.com/prometheus/client_golang v1.19.0
@@ -37,6 +37,7 @@ require (
 	github.com/shengdoushi/base58 v1.0.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/throttled/throttled v2.2.5+incompatible // indirect
+	github.com/throttled/throttled/v2 v2.12.0 // indirect
 	golang.org/x/crypto v0.31.0 // indirect
 	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
