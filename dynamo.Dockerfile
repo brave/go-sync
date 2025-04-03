@@ -1,5 +1,5 @@
 ARG DB_LOCATION=/home/dynamodblocal/db
-FROM amazon/dynamodb-local:2.5.3 AS install
+FROM amazon/dynamodb-local:2.6.0 AS install
 
 USER root
 RUN yum -y install awscli
@@ -24,7 +24,7 @@ RUN mkdir -p ${DB_LOCATION} && \
     --endpoint-url http://localhost:8000 && \
     kill $DYNAMO_PID
 
-FROM amazon/dynamodb-local:2.5.3
+FROM amazon/dynamodb-local:2.6.0
 
 ARG DB_LOCATION
 COPY --chown=dynamodblocal:dynamodblocal --from=install ${DB_LOCATION} /db
