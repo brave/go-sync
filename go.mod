@@ -9,7 +9,7 @@ require (
 	github.com/go-chi/chi/v5 v5.0.12
 	github.com/prometheus/client_golang v1.19.0
 	github.com/redis/go-redis/v9 v9.7.3
-	github.com/rs/zerolog v1.32.0
+	github.com/rs/zerolog v1.34.0
 	github.com/satori/go.uuid v1.2.0
 	github.com/stretchr/testify v1.10.0
 	google.golang.org/protobuf v1.34.1
@@ -33,7 +33,7 @@ require (
 	github.com/prometheus/common v0.48.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
-	github.com/rs/xid v1.5.0 // indirect
+	github.com/rs/xid v1.6.0 // indirect
 	github.com/shengdoushi/base58 v1.0.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/throttled/throttled v2.2.5+incompatible // indirect
