@@ -1,4 +1,4 @@
-FROM public.ecr.aws/docker/library/golang:1.23 as builder
+FROM public.ecr.aws/docker/library/golang:1.24 as builder
 
 ARG VERSION
 ARG BUILD_TIME
