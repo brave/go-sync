@@ -12,7 +12,7 @@ require (
 	github.com/rs/zerolog v1.32.0
 	github.com/satori/go.uuid v1.2.0
 	github.com/stretchr/testify v1.10.0
-	google.golang.org/protobuf v1.34.1
+	google.golang.org/protobuf v1.36.6
 )
 
 require (
