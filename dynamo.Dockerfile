@@ -1,32 +1,19 @@
-ARG DB_LOCATION=/home/dynamodblocal/db
-FROM amazon/dynamodb-local:2.6.1 AS install
-
-USER root
-RUN yum -y install awscli
+FROM amazon/dynamodb-local:2.6.1
 
 USER dynamodblocal
 ENV AWS_ACCESS_KEY_ID=GOSYNC
 ENV AWS_SECRET_ACCESS_KEY=GOSYNC
-ARG AWS_ENDPOINT=http://localhost:8000
-ARG AWS_REGION=us-west-2
-ARG DB_LOCATION
-ARG TABLE_NAME=client-entity-dev
 
-COPY schema/dynamodb/ .
-RUN mkdir -p ${DB_LOCATION} && \
-    java -jar DynamoDBLocal.jar -sharedDb -dbPath ${DB_LOCATION} & \
-    DYNAMO_PID=$! && \
-    sleep 15 && \
-    aws dynamodb create-table --cli-input-json file://table.json \
-    --endpoint-url ${AWS_ENDPOINT} --region ${AWS_REGION} && \
-    aws dynamodb update-time-to-live --table-name client-entity-dev \
-    --time-to-live-specification "Enabled=true, AttributeName=ExpirationTime" \
-    --endpoint-url http://localhost:8000 && \
-    kill $DYNAMO_PID
+COPY schema/dynamodb/ /schema/
 
-FROM amazon/dynamodb-local:2.6.1
+VOLUME ["/db"]
 
-ARG DB_LOCATION
-COPY --chown=dynamodblocal:dynamodblocal --from=install ${DB_LOCATION} /db
+USER root
+RUN dnf -y install awscli util-linux \
+ && dnf clean all \
+ && rm -rf /var/cache/dnf
+COPY dynamo.entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/db"]
