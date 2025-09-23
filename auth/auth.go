@@ -11,8 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/brave/go-sync/utils"
 )
 
 const (
@@ -76,7 +74,7 @@ func authenticate(tkn string) (string, error) {
 	}
 
 	// Verify that this token is within +/- 1 day.
-	if abs(utils.UnixMilli(time.Now())-timestamp) > TokenMaxDuration {
+	if abs(time.Now().UnixMilli()-timestamp) > TokenMaxDuration {
 		return "", fmt.Errorf("token is expired")
 	}
 

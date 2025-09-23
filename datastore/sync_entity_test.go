@@ -11,7 +11,6 @@ import (
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
-	"github.com/brave/go-sync/utils"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/proto"
 )
@@ -616,7 +615,7 @@ func (suite *SyncEntityTestSuite) TestGetUpdatesForType() {
 		Specifics: []byte{1, 2},
 	}
 
-	mtime := utils.UnixMilli(time.Now())
+	mtime := time.Now().UnixMilli()
 	for i := 1; i <= 250; i++ {
 		mtime = mtime + 1
 		entity := entity1
