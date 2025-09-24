@@ -58,6 +58,8 @@ services:
       dockerfile: dynamo.Dockerfile
     ports:
       - "8000:8000"
+    volumes:
+      - ./dynamo-data:/db
     networks:
       - sync
   redis:
