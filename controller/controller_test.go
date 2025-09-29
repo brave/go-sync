@@ -17,7 +17,6 @@ import (
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
-	"github.com/brave/go-sync/utils"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/proto"
 )
@@ -95,7 +94,7 @@ func (suite *ControllerTestSuite) TestCommand() {
 	suite.Require().NoError(err, "NewRequestWithContext should succeed")
 
 	// Generate a valid token to use.
-	token, _, _, err := authtest.GenerateToken(utils.UnixMilli(time.Now()))
+	token, _, _, err := authtest.GenerateToken(time.Now().UnixMilli())
 	suite.Require().NoError(err, "generate token should succeed")
 	req.Header.Set("Authorization", "Bearer "+token)
 

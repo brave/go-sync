@@ -14,7 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/aws/aws-sdk-go/service/dynamodb/expression"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
-	"github.com/brave/go-sync/utils"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/proto"
@@ -131,7 +130,7 @@ func getTagPrefix(isServer bool) string {
 // uniqueness of server-defined or client-defined unique tags for a client.
 func NewServerClientUniqueTagItem(clientID string, tag string, isServer bool) *ServerClientUniqueTagItem {
 	prefix := getTagPrefix(isServer)
-	now := aws.Int64(utils.UnixMilli(time.Now()))
+	now := aws.Int64(time.Now().UnixMilli())
 
 	return &ServerClientUniqueTagItem{
 		ClientID: clientID,
@@ -342,7 +341,7 @@ func (dynamo *Dynamo) InsertSyncEntitiesWithServerTags(entities []*SyncEntity) e
 
 // DisableSyncChain marks a chain as disabled so no further updates or commits can happen
 func (dynamo *Dynamo) DisableSyncChain(clientID string) error {
-	now := aws.Int64(utils.UnixMilli(time.Now()))
+	now := aws.Int64(time.Now().UnixMilli())
 	disabledMarker := DisabledMarkerItem{
 		ClientID: clientID,
 		ID:       disabledChainID,
