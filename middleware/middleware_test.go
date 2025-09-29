@@ -13,7 +13,6 @@ import (
 	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/datastore/datastoretest"
 	"github.com/brave/go-sync/middleware"
-	"github.com/brave/go-sync/utils"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -79,7 +78,7 @@ func (suite *MiddlewareTestSuite) TestAuthMiddleware() {
 	ctx := context.Background()
 	req, err := http.NewRequestWithContext(ctx, "POST", "v2/command/", bytes.NewBuffer([]byte{}))
 	suite.Require().NoError(err, "NewRequestWithContext should succeed")
-	token, _, _, err := authtest.GenerateToken(utils.UnixMilli(time.Now()))
+	token, _, _, err := authtest.GenerateToken(time.Now().UnixMilli())
 	suite.Require().NoError(err, "generate token should succeed")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()

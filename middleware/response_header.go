@@ -4,12 +4,10 @@ import (
 	"net/http"
 	"strconv"
 	"time"
-
-	"github.com/brave/go-sync/utils"
 )
 
 func saneTimeMillsHeaderFunc(w http.ResponseWriter) {
-	w.Header().Set("Sane-Time-Millis", strconv.FormatInt(utils.UnixMilli(time.Now()), 10))
+	w.Header().Set("Sane-Time-Millis", strconv.FormatInt(time.Now().UnixMilli(), 10))
 }
 
 var (
