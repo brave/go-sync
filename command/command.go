@@ -206,12 +206,12 @@ func getItemCounts(cache *cache.Cache, db datastore.Datastore, clientID string) 
 	return itemCounts, newNormalCount, newHistoryCount, nil
 }
 
-func getInterimItemCounts(cache *cache.Cache, clientID string, clear bool) (int, int, error) {
-	newNormalCount, err := cache.GetInterimCount(context.Background(), clientID, normalCountTypeStr, clear)
+func getInterimItemCounts(cache *cache.Cache, clientID string, clearCache bool) (int, int, error) {
+	newNormalCount, err := cache.GetInterimCount(context.Background(), clientID, normalCountTypeStr, clearCache)
 	if err != nil {
 		return 0, 0, err
 	}
-	newHistoryCount, err := cache.GetInterimCount(context.Background(), clientID, historyCountTypeStr, clear)
+	newHistoryCount, err := cache.GetInterimCount(context.Background(), clientID, historyCountTypeStr, clearCache)
 	if err != nil {
 		return 0, 0, err
 	}
