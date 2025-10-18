@@ -1,37 +1,42 @@
 package datastoretest
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"runtime"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
-	"github.com/aws/aws-sdk-go/service/dynamodb/expression"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/smithy-go"
 	"github.com/brave/go-sync/datastore"
 )
 
 // DeleteTable deletes datastore.Table in dynamoDB.
 func DeleteTable(dynamo *datastore.Dynamo) error {
-	_, err := dynamo.DeleteTable(
+	_, err := dynamo.DeleteTable(context.TODO(),
 		&dynamodb.DeleteTableInput{TableName: aws.String(datastore.Table)})
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) {
 			// Return as successful if the table is not existed.
-			if aerr.Code() == dynamodb.ErrCodeResourceNotFoundException {
+			if apiErr.ErrorCode() == "ResourceNotFoundException" {
 				return nil
 			}
-		} else {
-			return fmt.Errorf("error deleting table: %w", err)
 		}
+		return fmt.Errorf("error deleting table: %w", err)
 	}
 
-	return dynamo.WaitUntilTableNotExists(
-		&dynamodb.DescribeTableInput{TableName: aws.String(datastore.Table)})
+	// Wait for table to be deleted using waiter
+	waiter := dynamodb.NewTableNotExistsWaiter(dynamo)
+	return waiter.Wait(context.TODO(),
+		&dynamodb.DescribeTableInput{TableName: aws.String(datastore.Table)},
+		5*60) // 5 minutes timeout
 }
 
 // CreateTable creates datastore.Table in dynamoDB.
@@ -50,13 +55,16 @@ func CreateTable(dynamo *datastore.Dynamo) error {
 	}
 	input.TableName = aws.String(datastore.Table)
 
-	_, err = dynamo.CreateTable(&input)
+	_, err = dynamo.CreateTable(context.TODO(), &input)
 	if err != nil {
 		return fmt.Errorf("error creating table: %w", err)
 	}
 
-	return dynamo.WaitUntilTableExists(
-		&dynamodb.DescribeTableInput{TableName: aws.String(datastore.Table)})
+	// Wait for table to be active using waiter
+	waiter := dynamodb.NewTableExistsWaiter(dynamo)
+	return waiter.Wait(context.TODO(),
+		&dynamodb.DescribeTableInput{TableName: aws.String(datastore.Table)},
+		5*60) // 5 minutes timeout
 }
 
 // ResetTable deletes and creates datastore.Table in dynamoDB.
@@ -81,12 +89,12 @@ func ScanSyncEntities(dynamo *datastore.Dynamo) ([]datastore.SyncEntity, error) 
 		FilterExpression:          expr.Filter(),
 		TableName:                 aws.String(datastore.Table),
 	}
-	out, err := dynamo.Scan(input)
+	out, err := dynamo.Scan(context.TODO(), input)
 	if err != nil {
 		return nil, fmt.Errorf("error doing scan for sync entities: %w", err)
 	}
 	syncItems := []datastore.SyncEntity{}
-	err = dynamodbattribute.UnmarshalListOfMaps(out.Items, &syncItems)
+	err = attributevalue.UnmarshalListOfMaps(out.Items, &syncItems)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshalling sync entitites: %w", err)
 	}
@@ -110,12 +118,12 @@ func ScanTagItems(dynamo *datastore.Dynamo) ([]datastore.ServerClientUniqueTagIt
 		FilterExpression:          expr.Filter(),
 		TableName:                 aws.String(datastore.Table),
 	}
-	out, err := dynamo.Scan(input)
+	out, err := dynamo.Scan(context.TODO(), input)
 	if err != nil {
 		return nil, fmt.Errorf("error doing scan for tag items: %w", err)
 	}
 	tagItems := []datastore.ServerClientUniqueTagItem{}
-	err = dynamodbattribute.UnmarshalListOfMaps(out.Items, &tagItems)
+	err = attributevalue.UnmarshalListOfMaps(out.Items, &tagItems)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshalling tag items: %w", err)
 	}
@@ -138,12 +146,12 @@ func ScanClientItemCounts(dynamo *datastore.Dynamo) ([]datastore.ClientItemCount
 		FilterExpression:          expr.Filter(),
 		TableName:                 aws.String(datastore.Table),
 	}
-	out, err := dynamo.Scan(input)
+	out, err := dynamo.Scan(context.TODO(), input)
 	if err != nil {
 		return nil, fmt.Errorf("error doing scan for item counts: %w", err)
 	}
 	clientItemCounts := []datastore.ClientItemCounts{}
-	err = dynamodbattribute.UnmarshalListOfMaps(out.Items, &clientItemCounts)
+	err = attributevalue.UnmarshalListOfMaps(out.Items, &clientItemCounts)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshalling item counts: %w", err)
 	}
