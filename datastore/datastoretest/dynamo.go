@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -36,7 +37,7 @@ func DeleteTable(dynamo *datastore.Dynamo) error {
 	waiter := dynamodb.NewTableNotExistsWaiter(dynamo)
 	return waiter.Wait(context.TODO(),
 		&dynamodb.DescribeTableInput{TableName: aws.String(datastore.Table)},
-		5*60) // 5 minutes timeout
+		5*time.Minute)
 }
 
 // CreateTable creates datastore.Table in dynamoDB.
@@ -64,7 +65,7 @@ func CreateTable(dynamo *datastore.Dynamo) error {
 	waiter := dynamodb.NewTableExistsWaiter(dynamo)
 	return waiter.Wait(context.TODO(),
 		&dynamodb.DescribeTableInput{TableName: aws.String(datastore.Table)},
-		5*60) // 5 minutes timeout
+		5*time.Minute)
 }
 
 // ResetTable deletes and creates datastore.Table in dynamoDB.
