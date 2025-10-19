@@ -20,7 +20,7 @@ import (
 
 // DeleteTable deletes datastore.Table in dynamoDB.
 func DeleteTable(dynamo *datastore.Dynamo) error {
-	_, err := dynamo.DeleteTable(context.TODO(),
+	_, err := dynamo.DeleteTable(context.Background(),
 		&dynamodb.DeleteTableInput{TableName: aws.String(datastore.Table)})
 	if err != nil {
 		var apiErr smithy.APIError
@@ -35,7 +35,7 @@ func DeleteTable(dynamo *datastore.Dynamo) error {
 
 	// Wait for table to be deleted using waiter
 	waiter := dynamodb.NewTableNotExistsWaiter(dynamo)
-	return waiter.Wait(context.TODO(),
+	return waiter.Wait(context.Background(),
 		&dynamodb.DescribeTableInput{TableName: aws.String(datastore.Table)},
 		5*time.Minute)
 }
@@ -56,14 +56,14 @@ func CreateTable(dynamo *datastore.Dynamo) error {
 	}
 	input.TableName = aws.String(datastore.Table)
 
-	_, err = dynamo.CreateTable(context.TODO(), &input)
+	_, err = dynamo.CreateTable(context.Background(), &input)
 	if err != nil {
 		return fmt.Errorf("error creating table: %w", err)
 	}
 
 	// Wait for table to be active using waiter
 	waiter := dynamodb.NewTableExistsWaiter(dynamo)
-	return waiter.Wait(context.TODO(),
+	return waiter.Wait(context.Background(),
 		&dynamodb.DescribeTableInput{TableName: aws.String(datastore.Table)},
 		5*time.Minute)
 }
@@ -90,7 +90,7 @@ func ScanSyncEntities(dynamo *datastore.Dynamo) ([]datastore.SyncEntity, error) 
 		FilterExpression:          expr.Filter(),
 		TableName:                 aws.String(datastore.Table),
 	}
-	out, err := dynamo.Scan(context.TODO(), input)
+	out, err := dynamo.Scan(context.Background(), input)
 	if err != nil {
 		return nil, fmt.Errorf("error doing scan for sync entities: %w", err)
 	}
@@ -119,7 +119,7 @@ func ScanTagItems(dynamo *datastore.Dynamo) ([]datastore.ServerClientUniqueTagIt
 		FilterExpression:          expr.Filter(),
 		TableName:                 aws.String(datastore.Table),
 	}
-	out, err := dynamo.Scan(context.TODO(), input)
+	out, err := dynamo.Scan(context.Background(), input)
 	if err != nil {
 		return nil, fmt.Errorf("error doing scan for tag items: %w", err)
 	}
@@ -147,7 +147,7 @@ func ScanClientItemCounts(dynamo *datastore.Dynamo) ([]datastore.ClientItemCount
 		FilterExpression:          expr.Filter(),
 		TableName:                 aws.String(datastore.Table),
 	}
-	out, err := dynamo.Scan(context.TODO(), input)
+	out, err := dynamo.Scan(context.Background(), input)
 	if err != nil {
 		return nil, fmt.Errorf("error doing scan for item counts: %w", err)
 	}
