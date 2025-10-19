@@ -51,7 +51,7 @@ func NewDynamo() (*Dynamo, error) {
 	}
 
 	ctx := context.Background()
-	
+
 	// Load default AWS configuration
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(os.Getenv("AWS_REGION")),

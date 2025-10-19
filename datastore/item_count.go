@@ -79,10 +79,10 @@ func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(counts *ClientItemCou
 			if err != nil {
 				return fmt.Errorf("error querying history item count: %w", err)
 			}
-		counts.HistoryItemCountPeriod1 = 0
-		counts.HistoryItemCountPeriod2 = 0
-		counts.HistoryItemCountPeriod3 = 0
-		counts.HistoryItemCountPeriod4 = int(out.Count)
+			counts.HistoryItemCountPeriod1 = 0
+			counts.HistoryItemCountPeriod2 = 0
+			counts.HistoryItemCountPeriod3 = 0
+			counts.HistoryItemCountPeriod4 = int(out.Count)
 			filterCond = expression.And(
 				expression.AttributeExists(expression.Name(dataTypeAttrName)),
 				expression.Name(dataTypeAttrName).NotEqual(expression.Value(HistoryTypeID)),
@@ -101,11 +101,11 @@ func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(counts *ClientItemCou
 				TableName:                 aws.String(Table),
 				Select:                    types.SelectCount,
 			}
-		out, err = dynamo.Query(context.TODO(), normalCountInput)
-		if err != nil {
-			return fmt.Errorf("error querying history item count: %w", err)
-		}
-		counts.ItemCount = int(out.Count)
+			out, err = dynamo.Query(context.TODO(), normalCountInput)
+			if err != nil {
+				return fmt.Errorf("error querying history item count: %w", err)
+			}
+			counts.ItemCount = int(out.Count)
 		}
 		counts.LastPeriodChangeTime = now
 		counts.Version = CurrentCountVersion
