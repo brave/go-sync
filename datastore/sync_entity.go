@@ -170,7 +170,7 @@ func (dynamo *Dynamo) InsertSyncEntity(entity *SyncEntity) (bool, error) {
 	// Write tag item for all data types, except for
 	// the history type, which does not use tag items.
 	if entity.ClientDefinedUniqueTag != nil && *entity.DataType != HistoryTypeID {
-		items := []types.TransactWriteItem{}
+		items := make([]types.TransactWriteItem, 0, 2)
 		// Additional item for ensuring tag's uniqueness for a specific client.
 		item := NewServerClientUniqueTagItem(entity.ClientID, *entity.ClientDefinedUniqueTag, false)
 		av, err := attributevalue.MarshalMap(*item)
@@ -291,7 +291,7 @@ func (dynamo *Dynamo) HasItem(clientID string, ID string) (bool, error) {
 // we will write a tag item and a sync item. Items for all the entities in the
 // array would be written into DB in one transaction.
 func (dynamo *Dynamo) InsertSyncEntitiesWithServerTags(entities []*SyncEntity) error {
-	items := []types.TransactWriteItem{}
+	items := make([]types.TransactWriteItem, 0, len(entities)*2)
 	for _, entity := range entities {
 		// Create a condition for inserting new items only.
 		cond := expression.AttributeNotExists(expression.Name(pk))
@@ -410,7 +410,7 @@ func (dynamo *Dynamo) ClearServerData(clientID string) ([]SyncEntity, error) {
 			j = count
 		}
 
-		items := []types.TransactWriteItem{}
+		items := make([]types.TransactWriteItem, 0, j-i)
 		for _, item := range syncEntities[i:j] {
 			if item.ID == disabledChainID {
 				continue
@@ -550,7 +550,7 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (bo
 			return false, false, fmt.Errorf("error marshalling key to update sync entity: %w", err)
 		}
 
-		items := []types.TransactWriteItem{}
+		items := make([]types.TransactWriteItem, 0, 2)
 		updateSyncItem := types.TransactWriteItem{
 			Update: &types.Update{
 				Key:                                 key,
