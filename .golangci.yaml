@@ -1,28 +1,32 @@
+version: "2"
 run:
-  go: "1.14" ## TODO update to 1.18 once all linters support it
+  go: "1.25"
   timeout: 3m
 
-linters-settings:
-  cyclop:
-    # The maximal code complexity to report.
-    # Default: 10
-    max-complexity: 10
-    # The maximal average package complexity.
-    # If it's higher than 0.0 (float) the check is enabled
-    # Default: 0.0
-    package-average: 10.0
-
-  errcheck:
-    # Report about not checking of errors in type assertions: `a := b.(MyStruct)`.
-    # Such cases aren't reported by default.
-    # Default: false
-    check-type-assertions: true
-
+linters:
+  default: none
+  enable:
+    - govet # Vet examines Go source code and reports suspicious constructs, such as Printf calls whose arguments do not align with the format string
+    - ineffassign # Detects when assignments to existing variables are not used
+    - revive # Fast, configurable, extensible, flexible, and beautiful linter for Go. Drop-in replacement of golint.
+    - unused # Finds unused code
+  settings:
+    cyclop:
+      # The maximal code complexity to report.
+      # Default: 10
+      max-complexity: 10
+      # The maximal average package complexity.
+      # If it's higher than 0.0 (float) the check is enabled
+      # Default: 0.0
+      package-average: 10
+    errcheck:
+      # Report about not checking of errors in type assertions: `a := b.(MyStruct)`.
+      # Such cases aren't reported by default.
+      # Default: false
+      check-type-assertions: true
     gocritic:
-      # Settings passed to gocritic.
-      # The settings key is the name of a supported gocritic checker.
-      # The list of supported checkers can be find in https://go-critic.github.io/overview.
       settings:
+        # Must be valid enabled check name.
         captLocal:
           # Whether to restrict checker to params only.
           # Default: true
@@ -31,35 +35,27 @@ linters-settings:
           # Whether to skip (*x).method() calls where x is a pointer receiver.
           # Default: true
           skipRecvDeref: false
+    unused:
+      exported-fields-are-used: false
 
-  varcheck:
-    # Check usage of exported fields and variables.
-    # Default: false
-    exported-fields: true
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 
-linters:
-  disable-all: true
+formatters:
   enable:
-    ## enabled by default
-    - unused # Finds unused code
-#    - errcheck # Errcheck is a program for checking for unchecked errors in go programs. These unchecked errors can be critical bugs in some cases
-#    - gosimple # Linter for Go source code that specializes in simplifying a code
-    - govet # Vet examines Go source code and reports suspicious constructs, such as Printf calls whose arguments do not align with the format string
-    - ineffassign # Detects when assignments to existing variables are not used
-#    - staticcheck # Staticcheck is a go vet on steroids, applying a ton of static analysis checks
-#    - structcheck # Finds unused struct fields
-    - typecheck # Like the front-end of a Go compiler, parses and type-checks Go code
-#    - unused # Checks Go code for unused constants, variables, functions and types
-#    - varcheck # Finds unused global variables and constants
-    #    ## disabled by default
-#    - contextcheck # check the function whether use a non-inherited context
-#    - cyclop # checks function and package cyclomatic complexity
-#    - errname # Checks that sentinel errors are prefixed with the Err and error types are suffixed with the Error.
-#    - gocritic # Provides diagnostics that check for bugs, performance and style issues.
-#    - gocyclo # Computes and checks the cyclomatic complexity of functions
-#    - nestif # Reports deeply nested if statements
-    - revive # Fast, configurable, extensible, flexible, and beautiful linter for Go. Drop-in replacement of golint.
-#    - sqlclosecheck # Checks that sql.Rows and sql.Stmt are closed
-#    - stylecheck # Stylecheck is a replacement for golint
-#    - wastedassign # wastedassign finds wasted assignment statements.
-#    - whitespace # Tool for detection of leading and trailing whitespace
+    - gofmt
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
