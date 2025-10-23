@@ -607,7 +607,7 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (bo
 		var conditionalCheckFailedException *types.ConditionalCheckFailedException
 		if errors.As(err, &conditionalCheckFailedException) {
 			// Return conflict if the write condition fails.
-				return true, false, nil
+			return true, false, nil
 		}
 		return false, false, fmt.Errorf("error calling UpdateItem to update sync entity: %w", err)
 	}
@@ -702,11 +702,15 @@ func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFo
 			},
 		}
 
-		batchOut, err := dynamo.BatchGetItem(context.TODO(), batchInput)
-		if err != nil {
-			return false, syncEntities, fmt.Errorf("error getting update items in a batch: %w", err)
+		// Use paginator to automatically handle UnprocessedKeys
+		paginator := dynamodb.NewBatchGetItemPaginator(dynamo.Client, batchInput)
+		for paginator.HasMorePages() {
+			batchOut, err := paginator.NextPage(context.TODO())
+			if err != nil {
+				return false, syncEntities, fmt.Errorf("error getting update items in a batch: %w", err)
+			}
+			outAv = append(outAv, batchOut.Responses[Table]...)
 		}
-		outAv = append(outAv, batchOut.Responses[Table]...)
 	}
 
 	err = attributevalue.UnmarshalListOfMaps(outAv, &syncEntities)
