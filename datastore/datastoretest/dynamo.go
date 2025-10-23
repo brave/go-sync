@@ -14,7 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/aws/smithy-go"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/brave/go-sync/datastore"
 )
 
@@ -23,12 +23,10 @@ func DeleteTable(dynamo *datastore.Dynamo) error {
 	_, err := dynamo.DeleteTable(context.Background(),
 		&dynamodb.DeleteTableInput{TableName: aws.String(datastore.Table)})
 	if err != nil {
-		var apiErr smithy.APIError
-		if errors.As(err, &apiErr) {
+		var notFoundException *types.ResourceNotFoundException
+		if errors.As(err, &notFoundException) {
 			// Return as successful if the table is not existed.
-			if apiErr.ErrorCode() == "ResourceNotFoundException" {
-				return nil
-			}
+			return nil
 		}
 		return fmt.Errorf("error deleting table: %w", err)
 	}

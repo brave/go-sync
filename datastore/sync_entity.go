@@ -15,7 +15,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/aws/smithy-go"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
@@ -605,12 +604,10 @@ func (dynamo *Dynamo) UpdateSyncEntity(entity *SyncEntity, oldVersion int64) (bo
 
 	out, err := dynamo.UpdateItem(context.TODO(), input)
 	if err != nil {
-		var apiErr smithy.APIError
-		if errors.As(err, &apiErr) {
+		var conditionalCheckFailedException *types.ConditionalCheckFailedException
+		if errors.As(err, &conditionalCheckFailedException) {
 			// Return conflict if the write condition fails.
-			if apiErr.ErrorCode() == "ConditionalCheckFailedException" {
 				return true, false, nil
-			}
 		}
 		return false, false, fmt.Errorf("error calling UpdateItem to update sync entity: %w", err)
 	}
