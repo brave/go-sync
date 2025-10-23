@@ -62,15 +62,12 @@ func NewDynamo() (*Dynamo, error) {
 	}
 
 	// Create DynamoDB client with optional endpoint override
-	var db *dynamodb.Client
 	endpoint := os.Getenv("AWS_ENDPOINT")
-	if endpoint != "" {
-		db = dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
+	db := dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
+		if endpoint != "" {
 			o.BaseEndpoint = aws.String(endpoint)
-		})
-	} else {
-		db = dynamodb.NewFromConfig(cfg)
-	}
+		}
+	})
 
 	return &Dynamo{db}, nil
 }
