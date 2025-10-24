@@ -130,7 +130,7 @@ func handleGetUpdatesRequest(ctx context.Context, cache *cache.Cache, guMsg *syn
 
 		// Check cache to short circuit with 0 updates for polling requests.
 		if isPoll &&
-			!cache.IsTypeMtimeUpdated(context.Background(), clientID, int(*fromProgressMarker.DataTypeId), token) {
+			!cache.IsTypeMtimeUpdated(ctx, clientID, int(*fromProgressMarker.DataTypeId), token) {
 			continue
 		}
 
@@ -187,7 +187,7 @@ func handleGetUpdatesRequest(ctx context.Context, cache *cache.Cache, guMsg *syn
 			} else {
 				mtime = *entities[j-1].Mtime
 			}
-			cache.SetTypeMtime(context.Background(), clientID, int(*fromProgressMarker.DataTypeId), mtime)
+			cache.SetTypeMtime(ctx, clientID, int(*fromProgressMarker.DataTypeId), mtime)
 		}
 	}
 
@@ -199,19 +199,19 @@ func getItemCounts(ctx context.Context, cache *cache.Cache, db datastore.Datasto
 	if err != nil {
 		return nil, 0, 0, err
 	}
-	newNormalCount, newHistoryCount, err := getInterimItemCounts(cache, clientID, false)
+	newNormalCount, newHistoryCount, err := getInterimItemCounts(ctx, cache, clientID, false)
 	if err != nil {
 		return nil, 0, 0, err
 	}
 	return itemCounts, newNormalCount, newHistoryCount, nil
 }
 
-func getInterimItemCounts(cache *cache.Cache, clientID string, clearCache bool) (int, int, error) {
-	newNormalCount, err := cache.GetInterimCount(context.Background(), clientID, normalCountTypeStr, clearCache)
+func getInterimItemCounts(ctx context.Context, cache *cache.Cache, clientID string, clearCache bool) (int, int, error) {
+	newNormalCount, err := cache.GetInterimCount(ctx, clientID, normalCountTypeStr, clearCache)
 	if err != nil {
 		return 0, 0, err
 	}
-	newHistoryCount, err := cache.GetInterimCount(context.Background(), clientID, historyCountTypeStr, clearCache)
+	newHistoryCount, err := cache.GetInterimCount(ctx, clientID, historyCountTypeStr, clearCache)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -324,9 +324,9 @@ func handleCommitRequest(ctx context.Context, cache *cache.Cache, commitMsg *syn
 				}
 
 				if isHistoryRelatedItem {
-					newHistoryCount, err = cache.IncrementInterimCount(context.Background(), clientID, historyCountTypeStr, false)
+					newHistoryCount, _ = cache.IncrementInterimCount(ctx, clientID, historyCountTypeStr, false)
 				} else {
-					newNormalCount, err = cache.IncrementInterimCount(context.Background(), clientID, normalCountTypeStr, false)
+					newNormalCount, _ = cache.IncrementInterimCount(ctx, clientID, normalCountTypeStr, false)
 				}
 			}
 		} else { // Update
@@ -345,9 +345,9 @@ func handleCommitRequest(ctx context.Context, cache *cache.Cache, commitMsg *syn
 			}
 			if deleted {
 				if isHistoryRelatedItem {
-					newHistoryCount, err = cache.IncrementInterimCount(context.Background(), clientID, historyCountTypeStr, true)
+					newHistoryCount, _ = cache.IncrementInterimCount(ctx, clientID, historyCountTypeStr, true)
 				} else {
-					newNormalCount, err = cache.IncrementInterimCount(context.Background(), clientID, normalCountTypeStr, true)
+					newNormalCount, _ = cache.IncrementInterimCount(ctx, clientID, normalCountTypeStr, true)
 				}
 			}
 		}
@@ -366,7 +366,7 @@ func handleCommitRequest(ctx context.Context, cache *cache.Cache, commitMsg *syn
 		entryRsp.Mtime = entityToCommit.Mtime
 	}
 
-	newNormalCount, newHistoryCount, err = getInterimItemCounts(cache, clientID, true)
+	newNormalCount, newHistoryCount, err = getInterimItemCounts(ctx, cache, clientID, true)
 	if err != nil {
 		log.Error().Err(err).Msg("Get interim item counts failed")
 		errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
@@ -375,7 +375,7 @@ func handleCommitRequest(ctx context.Context, cache *cache.Cache, commitMsg *syn
 
 	// Save (clientID#dataType, mtime) into cache after writing into DB.
 	for dataType, mtime := range typeMtimeMap {
-		cache.SetTypeMtime(context.Background(), clientID, dataType, mtime)
+		cache.SetTypeMtime(ctx, clientID, dataType, mtime)
 	}
 
 	err = db.UpdateClientItemCount(ctx, itemCounts, newNormalCount, newHistoryCount)
@@ -420,7 +420,7 @@ func handleClearServerDataRequest(ctx context.Context, cache *cache.Cache, db da
 	}
 
 	if len(typeMtimeCacheKeys) > 0 {
-		err = cache.Del(context.Background(), typeMtimeCacheKeys...)
+		err = cache.Del(ctx, typeMtimeCacheKeys...)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to clear cache")
 			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
