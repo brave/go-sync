@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/brave/go-sync/auth/authtest"
 	"github.com/brave/go-sync/cache"
 	syncContext "github.com/brave/go-sync/context"
