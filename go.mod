@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.39.1
 	github.com/aws/smithy-go v1.22.1
 	github.com/brave-intl/bat-go/libs v0.0.0-20250620104757-9e2f8ff87fd8
-	github.com/getsentry/sentry-go v0.34.0
+	github.com/getsentry/sentry-go v0.36.0
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/prometheus/client_golang v1.23.2
 	github.com/redis/go-redis/v9 v9.14.0
