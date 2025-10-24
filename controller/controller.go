@@ -72,7 +72,7 @@ func Command(cache *cache.Cache, db datastore.Datastore) http.HandlerFunc {
 		}
 
 		pbRsp := &sync_pb.ClientToServerResponse{}
-		err = command.HandleClientToServerMessage(cache, pb, pbRsp, db, clientID)
+		err = command.HandleClientToServerMessage(ctx, cache, pb, pbRsp, db, clientID)
 		if err != nil {
 			log.Error().Err(err).Msg("Handle command message failed")
 			http.Error(w, err.Error(), http.StatusInternalServerError)
