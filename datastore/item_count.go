@@ -51,7 +51,7 @@ func (counts *ClientItemCounts) SumHistoryCounts() int {
 		counts.HistoryItemCountPeriod4
 }
 
-func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(counts *ClientItemCounts) error {
+func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(ctx context.Context, counts *ClientItemCounts) error {
 	now := time.Now().Unix()
 	if counts.Version < CurrentCountVersion {
 		if counts.ItemCount > 0 {
@@ -75,7 +75,7 @@ func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(counts *ClientItemCou
 				TableName:                 aws.String(Table),
 				Select:                    types.SelectCount,
 			}
-			out, err := dynamo.Query(context.TODO(), historyCountInput)
+			out, err := dynamo.Query(ctx, historyCountInput)
 			if err != nil {
 				return fmt.Errorf("error querying history item count: %w", err)
 			}
@@ -101,7 +101,7 @@ func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(counts *ClientItemCou
 				TableName:                 aws.String(Table),
 				Select:                    types.SelectCount,
 			}
-			out, err = dynamo.Query(context.TODO(), normalCountInput)
+			out, err = dynamo.Query(ctx, normalCountInput)
 			if err != nil {
 				return fmt.Errorf("error querying history item count: %w", err)
 			}
@@ -129,7 +129,7 @@ func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(counts *ClientItemCou
 
 // GetClientItemCount returns the count of non-deleted sync items stored for
 // a given client.
-func (dynamo *Dynamo) GetClientItemCount(clientID string) (*ClientItemCounts, error) {
+func (dynamo *Dynamo) GetClientItemCount(ctx context.Context, clientID string) (*ClientItemCounts, error) {
 	primaryKey := PrimaryKey{ClientID: clientID, ID: clientID}
 	key, err := attributevalue.MarshalMap(primaryKey)
 	if err != nil {
@@ -141,7 +141,7 @@ func (dynamo *Dynamo) GetClientItemCount(clientID string) (*ClientItemCounts, er
 		TableName: aws.String(Table),
 	}
 
-	out, err := dynamo.GetItem(context.TODO(), input)
+	out, err := dynamo.GetItem(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("error getting an item-count item: %w", err)
 	}
@@ -157,7 +157,7 @@ func (dynamo *Dynamo) GetClientItemCount(clientID string) (*ClientItemCounts, er
 		clientItemCounts.ID = clientID
 	}
 
-	if err = dynamo.initRealCountsAndUpdateHistoryCounts(clientItemCounts); err != nil {
+	if err = dynamo.initRealCountsAndUpdateHistoryCounts(ctx, clientItemCounts); err != nil {
 		return nil, err
 	}
 
@@ -166,7 +166,7 @@ func (dynamo *Dynamo) GetClientItemCount(clientID string) (*ClientItemCounts, er
 
 // UpdateClientItemCount updates the count of non-deleted sync items for a
 // given client stored in the dynamoDB.
-func (dynamo *Dynamo) UpdateClientItemCount(counts *ClientItemCounts, newNormalItemCount int, newHistoryItemCount int) error {
+func (dynamo *Dynamo) UpdateClientItemCount(ctx context.Context, counts *ClientItemCounts, newNormalItemCount int, newHistoryItemCount int) error {
 	counts.HistoryItemCountPeriod4 += newHistoryItemCount
 	counts.ItemCount += newNormalItemCount
 
@@ -180,7 +180,7 @@ func (dynamo *Dynamo) UpdateClientItemCount(counts *ClientItemCounts, newNormalI
 		TableName: aws.String(Table),
 	}
 
-	_, err = dynamo.PutItem(context.TODO(), input)
+	_, err = dynamo.PutItem(ctx, input)
 	if err != nil {
 		return fmt.Errorf("error updating item-count item in dynamoDB: %w", err)
 	}

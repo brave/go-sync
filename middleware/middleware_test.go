@@ -25,9 +25,9 @@ func (suite *MiddlewareTestSuite) TestDisabledChainMiddleware() {
 
 	// Active Chain
 	datastore := new(datastoretest.MockDatastore)
-	datastore.On("IsSyncChainDisabled", clientID).Return(false, nil)
 	ctx := context.WithValue(context.Background(), syncContext.ContextKeyClientID, clientID)
 	ctx = context.WithValue(ctx, syncContext.ContextKeyDatastore, datastore)
+	datastore.On("IsSyncChainDisabled", ctx, clientID).Return(false, nil)
 	next := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})
 	handler := middleware.DisabledChain(next)
 	req, err := http.NewRequestWithContext(ctx, "POST", "v2/command/", bytes.NewBuffer([]byte{}))
@@ -38,9 +38,9 @@ func (suite *MiddlewareTestSuite) TestDisabledChainMiddleware() {
 
 	// Disabled chain
 	datastore = new(datastoretest.MockDatastore)
-	datastore.On("IsSyncChainDisabled", clientID).Return(true, nil)
 	ctx = context.WithValue(context.Background(), syncContext.ContextKeyClientID, clientID)
 	ctx = context.WithValue(ctx, syncContext.ContextKeyDatastore, datastore)
+	datastore.On("IsSyncChainDisabled", ctx, clientID).Return(true, nil)
 	next = http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		suite.Require().Equal(false, true)
 	})
@@ -53,12 +53,11 @@ func (suite *MiddlewareTestSuite) TestDisabledChainMiddleware() {
 
 	// DB error
 	datastore = new(datastoretest.MockDatastore)
-	datastore.On("IsSyncChainDisabled", clientID).Return(false, fmt.Errorf("unable to query db"))
 	ctx = context.WithValue(context.Background(), syncContext.ContextKeyClientID, clientID)
 	ctx = context.WithValue(ctx, syncContext.ContextKeyDatastore, datastore)
+	datastore.On("IsSyncChainDisabled", ctx, clientID).Return(false, fmt.Errorf("unable to query db"))
 	next = http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})
 	handler = middleware.DisabledChain(next)
-	rr = httptest.NewRecorder()
 	req, err = http.NewRequestWithContext(ctx, "POST", "v2/command/", bytes.NewBuffer([]byte{}))
 	suite.Require().NoError(err, "NewRequestWithContext should succeed")
 	rr = httptest.NewRecorder()
