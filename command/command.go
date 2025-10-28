@@ -475,7 +475,7 @@ func HandleClientToServerMessage(ctx context.Context, cache *cache.Cache, pb *sy
 	} else if *pb.MessageContents == sync_pb.ClientToServerMessage_CLEAR_SERVER_DATA {
 		csdRsp := &sync_pb.ClearServerDataResponse{}
 		pbRsp.ClearServerData = csdRsp
-		pbRsp.ErrorCode, err = handleClearServerDataRequest(ctx, cache, db, pb.ClearServerData, clientID)
+		pbRsp.ErrorCode, err = handleClearServerDataRequest(context.Background(), cache, db, pb.ClearServerData, clientID)
 		if err != nil {
 			if pbRsp.ErrorCode != nil {
 				pbRsp.ErrorMessage = aws.String(err.Error())
