@@ -255,8 +255,6 @@ func handleCommitRequest(ctx context.Context, cache *cache.Cache, commitMsg *syn
 
 	// Map client-generated ID to its server-generated ID.
 	idMap := make(map[string]string)
-	// Map to save commit data type ID & mtime
-	typeMtimeMap := make(map[int]int64)
 	for i, v := range commitMsg.Entries {
 		entryRsp := &sync_pb.CommitResponse_EntryResponse{}
 		commitRsp.Entryresponse[i] = entryRsp
@@ -281,6 +279,7 @@ func handleCommitRequest(ctx context.Context, cache *cache.Cache, commitMsg *syn
 		isUpdateOp := oldVersion != 0
 		isHistoryRelatedItem := *entityToCommit.DataType == datastore.HistoryTypeID || *entityToCommit.DataType == datastore.HistoryDeleteDirectiveTypeID
 		*entityToCommit.Version = *entityToCommit.Mtime
+
 		if *entityToCommit.DataType == datastore.HistoryTypeID {
 			// Check if item exists using client_unique_tag
 			isUpdateOp, err = db.HasItem(ctx, clientID, *entityToCommit.ClientDefinedUniqueTag)
@@ -292,6 +291,9 @@ func handleCommitRequest(ctx context.Context, cache *cache.Cache, commitMsg *syn
 				continue
 			}
 		}
+
+		// Optimistically update cache with the latest mtime for this data type.
+		cache.SetTypeMtime(ctx, clientID, *entityToCommit.DataType, *entityToCommit.Mtime)
 
 		var interimErr error
 		if !isUpdateOp { // Create
@@ -358,7 +360,6 @@ func handleCommitRequest(ctx context.Context, cache *cache.Cache, commitMsg *syn
 			return &errCode, fmt.Errorf("Interim count update failed: %w", interimErr)
 		}
 
-		typeMtimeMap[*entityToCommit.DataType] = *entityToCommit.Mtime
 		// Prepare success response
 		rspType := sync_pb.CommitResponse_SUCCESS
 		entryRsp.ResponseType = &rspType
@@ -372,11 +373,6 @@ func handleCommitRequest(ctx context.Context, cache *cache.Cache, commitMsg *syn
 		log.Error().Err(err).Msg("Get interim item counts failed")
 		errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
 		return &errCode, fmt.Errorf("error getting interim item count: %w", err)
-	}
-
-	// Save (clientID#dataType, mtime) into cache after writing into DB.
-	for dataType, mtime := range typeMtimeMap {
-		cache.SetTypeMtime(ctx, clientID, dataType, mtime)
 	}
 
 	err = db.UpdateClientItemCount(ctx, itemCounts, newNormalCount, newHistoryCount)
