@@ -567,7 +567,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_ReplaceParentIDTo
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
 	suite.Require().Equal(6, len(rsp.GetUpdates.Entries))
-	for i := 0; i < len(rsp.GetUpdates.Entries); i++ {
+	for i := range rsp.GetUpdates.Entries {
 		if i != len(rsp.GetUpdates.Entries)-1 {
 			suite.Assert().Equal(rsp.GetUpdates.Entries[i].OriginatorClientItemId, entries[i].IdString)
 		} else {

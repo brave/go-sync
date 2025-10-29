@@ -108,7 +108,7 @@ func (suite *ServerDefinedUniqueEntityTestSuite) TestInsertServerDefinedUniqueEn
 
 	// Check that Ctime and Mtime have been set, reset to zero value for subsequent
 	// tests
-	for i := 0; i < len(tagItems); i++ {
+	for i := range tagItems {
 		suite.Assert().NotNil(tagItems[i].Ctime)
 		suite.Assert().NotNil(tagItems[i].Mtime)
 
