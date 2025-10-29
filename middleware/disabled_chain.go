@@ -3,11 +3,12 @@ package middleware
 import (
 	"net/http"
 
+	"github.com/rs/zerolog/log"
+	"google.golang.org/protobuf/proto"
+
 	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
-	"github.com/rs/zerolog/log"
-	"google.golang.org/protobuf/proto"
 )
 
 // DisabledChain is a middleware to check for disabled sync chains referenced in a request,

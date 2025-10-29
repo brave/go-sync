@@ -15,10 +15,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/brave/go-sync/schema/protobuf/sync_pb"
-	"github.com/rs/zerolog/log"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 )
 
 const (

@@ -9,11 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/brave/go-sync/auth/authtest"
 	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/datastore/datastoretest"
 	"github.com/brave/go-sync/middleware"
-	"github.com/stretchr/testify/suite"
 )
 
 type MiddlewareTestSuite struct {

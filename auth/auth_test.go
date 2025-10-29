@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/brave/go-sync/auth"
 	"github.com/brave/go-sync/auth/authtest"
-	"github.com/stretchr/testify/suite"
 )
 
 type AuthTestSuite struct {

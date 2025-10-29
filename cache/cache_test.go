@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/brave/go-sync/cache"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/brave/go-sync/cache"
 )
 
 type CacheTestSuite struct {

@@ -4,9 +4,10 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
-	"github.com/stretchr/testify/suite"
 )
 
 type ItemCountTestSuite struct {
