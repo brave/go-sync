@@ -23,7 +23,7 @@ test:
 	go test -v ./...
 
 lint:
-	docker run -t --rm -v "$$(pwd):/app" -w /app golangci/golangci-lint golangci-lint run -v
+	docker run -t --rm -v "$$(pwd):/app" -w /app golangci/golangci-lint golangci-lint run -v $(ARGS)
 
 clean:
 	rm -f sync-server
