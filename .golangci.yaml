@@ -69,7 +69,6 @@ linters:
     - funcorder # checks the order of functions, methods, and constructors
     - funlen # tool for detection of long functions
     - gocheckcompilerdirectives # validates go compiler directive comments (//go:)
-    - gochecknoglobals # checks that no global variables exist
     - gochecknoinits # checks that no init functions are present in Go code
     - gochecksumtype # checks exhaustiveness on Go "sum types"
     - gocognit # computes and checks the cognitive complexity of functions
@@ -77,7 +76,6 @@ linters:
     - gocritic # provides diagnostics that check for bugs, performance and style issues
     - gocyclo # computes and checks the cyclomatic complexity of functions
     - godoclint # checks Golang's documentation practice
-    - godot # checks if comments end in a period
     - gomoddirectives # manages the use of 'replace', 'retract', and 'excludes' directives in go.mod
     - goprintffuncname # checks that printf-like functions are named with f at the end
     - gosec # inspects source code for security problems
@@ -127,6 +125,9 @@ linters:
 
     # enable after initial code cleanup
     #- exhaustruct # [highly recommend to enable] checks if all structure fields are initialized
+    #- godot # checks if comments end in a period
+    #- gochecknoglobals # checks that no global variables exist
+
 
     ## you may want to enable
     #- arangolint # opinionated best practices for arangodb client
