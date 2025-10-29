@@ -3,7 +3,6 @@ package controller
 import (
 	"compress/gzip"
 	"io"
-	"io/ioutil"
 	"net/http"
 
 	"github.com/brave-intl/bat-go/libs/closers"
@@ -56,7 +55,7 @@ func Command(cache *cache.Cache, db datastore.Datastore) http.HandlerFunc {
 			reader = gr
 		}
 
-		msg, err := ioutil.ReadAll(io.LimitReader(reader, payloadLimit10MB))
+		msg, err := io.ReadAll(io.LimitReader(reader, payloadLimit10MB))
 		if err != nil {
 			log.Error().Err(err).Msg("Read request body failed")
 			http.Error(w, "Read request body error", http.StatusInternalServerError)

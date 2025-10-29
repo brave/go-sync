@@ -2,7 +2,7 @@ package server_test
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -33,7 +33,7 @@ func TestPing(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 
 	expected := "."
-	actual, err := ioutil.ReadAll(rr.Result().Body)
+	actual, err := io.ReadAll(rr.Result().Body)
 	require.NoError(t, err)
 	assert.Equal(t, expected, string(actual))
 }
