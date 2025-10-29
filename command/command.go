@@ -293,6 +293,7 @@ func handleCommitRequest(ctx context.Context, cache *cache.Cache, commitMsg *syn
 			}
 		}
 
+		var interimErr error
 		if !isUpdateOp { // Create
 			if currentNormalItemCount+currentHistoryItemCount+newNormalCount+newHistoryCount >= maxClientObjectQuota+boostedQuotaAddition {
 				rspType := sync_pb.CommitResponse_OVER_QUOTA
@@ -324,9 +325,9 @@ func handleCommitRequest(ctx context.Context, cache *cache.Cache, commitMsg *syn
 				}
 
 				if isHistoryRelatedItem {
-					newHistoryCount, _ = cache.IncrementInterimCount(ctx, clientID, historyCountTypeStr, false)
+					newHistoryCount, interimErr = cache.IncrementInterimCount(ctx, clientID, historyCountTypeStr, false)
 				} else {
-					newNormalCount, _ = cache.IncrementInterimCount(ctx, clientID, normalCountTypeStr, false)
+					newNormalCount, interimErr = cache.IncrementInterimCount(ctx, clientID, normalCountTypeStr, false)
 				}
 			}
 		} else { // Update
@@ -345,16 +346,16 @@ func handleCommitRequest(ctx context.Context, cache *cache.Cache, commitMsg *syn
 			}
 			if deleted {
 				if isHistoryRelatedItem {
-					newHistoryCount, _ = cache.IncrementInterimCount(ctx, clientID, historyCountTypeStr, true)
+					newHistoryCount, interimErr = cache.IncrementInterimCount(ctx, clientID, historyCountTypeStr, true)
 				} else {
-					newNormalCount, _ = cache.IncrementInterimCount(ctx, clientID, normalCountTypeStr, true)
+					newNormalCount, interimErr = cache.IncrementInterimCount(ctx, clientID, normalCountTypeStr, true)
 				}
 			}
 		}
-		if err != nil {
-			log.Error().Err(err).Msg("Interim count update failed")
+		if interimErr != nil {
+			log.Error().Err(interimErr).Msg("Interim count update failed")
 			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-			return &errCode, fmt.Errorf("Interim count update failed: %w", err)
+			return &errCode, fmt.Errorf("Interim count update failed: %w", interimErr)
 		}
 
 		typeMtimeMap[*entityToCommit.DataType] = *entityToCommit.Mtime
