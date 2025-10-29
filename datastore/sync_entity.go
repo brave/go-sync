@@ -17,7 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 	"github.com/rs/zerolog/log"
-	uuid "github.com/satori/go.uuid"
+	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -789,7 +789,7 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 	var originatorCacheGUID, originatorClientItemID *string
 	if cacheGUID != nil {
 		if *entity.Version == 0 {
-			id = uuid.NewV4().String()
+			id = uuid.New().String()
 		}
 		originatorCacheGUID = cacheGUID
 		originatorClientItemID = entity.IdString
