@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/brave/go-sync/server"
 )
@@ -25,7 +26,7 @@ func init() {
 
 func TestPing(t *testing.T) {
 	req, err := http.NewRequest("GET", "/", nil)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req.WithContext(serverCtx))
@@ -33,13 +34,13 @@ func TestPing(t *testing.T) {
 
 	expected := "."
 	actual, err := ioutil.ReadAll(rr.Result().Body)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, expected, string(actual))
 }
 
 func TestCommand(t *testing.T) {
 	req, err := http.NewRequest("POST", "/v2/command/", nil)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req.WithContext(serverCtx))

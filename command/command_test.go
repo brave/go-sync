@@ -129,7 +129,7 @@ func getClientToServerCommitMsg(entries []*sync_pb.SyncEntity) *sync_pb.ClientTo
 
 func getMarker(suite *CommandTestSuite, tokens []int64) []*sync_pb.DataTypeProgressMarker {
 	types := []int32{nigoriType, bookmarkType} // hard-coded types used in tests.
-	suite.Assert().Equal(len(types), len(tokens))
+	suite.Len(tokens, len(types))
 	marker := []*sync_pb.DataTypeProgressMarker{}
 	for i, token := range tokens {
 		tokenBytes := make([]byte, binary.MaxVarintLen64)
@@ -157,20 +157,20 @@ func getClientToServerGUMsg(marker []*sync_pb.DataTypeProgressMarker,
 
 func getTokensFromNewMarker(suite *CommandTestSuite, newMarker []*sync_pb.DataTypeProgressMarker) (int64, int64) {
 	nigoriToken, n := binary.Varint(newMarker[0].Token)
-	suite.Assert().Greater(n, 0)
+	suite.Positive(n)
 	bookmarkToken, n := binary.Varint(newMarker[1].Token)
-	suite.Assert().Greater(n, 0)
+	suite.Positive(n)
 	return nigoriToken, bookmarkToken
 }
 
 func assertCommonResponse(suite *CommandTestSuite, rsp *sync_pb.ClientToServerResponse, isCommit bool) {
-	suite.Assert().Equal(sync_pb.SyncEnums_SUCCESS, *rsp.ErrorCode, "errorCode should match")
-	suite.Assert().Equal(getClientCommand(), rsp.ClientCommand, "ClientCommand should match")
-	suite.Assert().Equal(command.StoreBirthday, *rsp.StoreBirthday, "Birthday should match")
+	suite.Equal(sync_pb.SyncEnums_SUCCESS, *rsp.ErrorCode, "errorCode should match")
+	suite.Equal(getClientCommand(), rsp.ClientCommand, "ClientCommand should match")
+	suite.Equal(command.StoreBirthday, *rsp.StoreBirthday, "Birthday should match")
 	if isCommit {
-		suite.Assert().NotNil(rsp.Commit)
+		suite.NotNil(rsp.Commit)
 	} else {
-		suite.Assert().NotNil(rsp.GetUpdates)
+		suite.NotNil(rsp.GetUpdates)
 	}
 }
 
@@ -187,7 +187,7 @@ func assertGetUpdatesResponse(suite *CommandTestSuite, rsp *sync_pb.GetUpdatesRe
 			tokenPtr = &(*newMarker)[1].Token
 		}
 		token, n := binary.Varint(*tokenPtr)
-		suite.Assert().Greater(n, 0)
+		suite.Positive(n)
 		if token < *entity.Mtime {
 			binary.PutVarint(*tokenPtr, *entity.Mtime)
 		}
@@ -205,10 +205,10 @@ func assertGetUpdatesResponse(suite *CommandTestSuite, rsp *sync_pb.GetUpdatesRe
 	suite.Require().NoError(err, "json.Marshal should succeed")
 	s2, err := json.Marshal(PBSyncAttrs)
 	suite.Require().NoError(err, "json.Marshal should succeed")
-	suite.Assert().Equal(s1, s2)
+	suite.Equal(s1, s2)
 
-	suite.Assert().Equal(*newMarker, rsp.NewProgressMarker)
-	suite.Assert().Equal(expectedChangesRemaining, *rsp.ChangesRemaining)
+	suite.Equal(*newMarker, rsp.NewProgressMarker)
+	suite.Equal(expectedChangesRemaining, *rsp.ChangesRemaining)
 }
 
 func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
@@ -225,13 +225,13 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
-	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
+	suite.Len(rsp.Commit.Entryresponse, 2)
 	commitSuccess := sync_pb.CommitResponse_SUCCESS
 	serverIDs := []string{}
 	commitVersions := []int64{}
 	for _, entryRsp := range rsp.Commit.Entryresponse {
-		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
-		suite.Assert().Equal(*entryRsp.Mtime, *entryRsp.Version)
+		suite.Equal(commitSuccess, *entryRsp.ResponseType)
+		suite.Equal(*entryRsp.Mtime, *entryRsp.Version)
 		serverIDs = append(serverIDs, *entryRsp.IdString)
 		commitVersions = append(commitVersions, *entryRsp.Version)
 	}
@@ -270,12 +270,12 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
 
-	suite.Assert().Equal(4, len(rsp.Commit.Entryresponse))
+	suite.Len(rsp.Commit.Entryresponse, 4)
 	serverIDs = []string{}
 	commitVersions = []int64{}
 	for _, entryRsp := range rsp.Commit.Entryresponse {
-		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
-		suite.Assert().Equal(*entryRsp.Mtime, *entryRsp.Version)
+		suite.Equal(commitSuccess, *entryRsp.ResponseType)
+		suite.Equal(*entryRsp.Mtime, *entryRsp.Version)
 		serverIDs = append(serverIDs, *entryRsp.IdString)
 		commitVersions = append(commitVersions, *entryRsp.Version)
 	}
@@ -316,10 +316,10 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
-	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
+	suite.Len(rsp.Commit.Entryresponse, 2)
 	commitConflict := sync_pb.CommitResponse_CONFLICT
 	for _, entryRsp := range rsp.Commit.Entryresponse {
-		suite.Assert().Equal(commitConflict, *entryRsp.ResponseType)
+		suite.Equal(commitConflict, *entryRsp.ResponseType)
 	}
 
 	// GetUpdates again with previous returned tokens should return 0 updates.
@@ -374,7 +374,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_NewClient() {
 	// Check dummy encryption keys only for NEW_CLIENT case.
 	expectedEncryptionKeys := make([][]byte, 1)
 	expectedEncryptionKeys[0] = []byte("1234")
-	suite.Assert().Equal(expectedEncryptionKeys, rsp.GetUpdates.EncryptionKeys)
+	suite.Equal(expectedEncryptionKeys, rsp.GetUpdates.EncryptionKeys)
 }
 
 func (suite *CommandTestSuite) TestHandleClientToServerMessage_GUBatchSize() {
@@ -393,11 +393,11 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_GUBatchSize() {
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
-	suite.Assert().Equal(4, len(rsp.Commit.Entryresponse))
+	suite.Len(rsp.Commit.Entryresponse, 4)
 	commitSuccess := sync_pb.CommitResponse_SUCCESS
 	for _, entryRsp := range rsp.Commit.Entryresponse {
-		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
-		suite.Assert().Equal(*entryRsp.Mtime, *entryRsp.Version)
+		suite.Equal(commitSuccess, *entryRsp.ResponseType)
+		suite.Equal(*entryRsp.Mtime, *entryRsp.Version)
 	}
 }
 
@@ -417,13 +417,13 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
-	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
+	suite.Len(rsp.Commit.Entryresponse, 2)
 	commitSuccess := sync_pb.CommitResponse_SUCCESS
 	serverIDs := []string{}
 	commitVersions := []int64{}
 	for _, entryRsp := range rsp.Commit.Entryresponse {
-		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
-		suite.Assert().Equal(*entryRsp.Mtime, *entryRsp.Version)
+		suite.Equal(commitSuccess, *entryRsp.ResponseType)
+		suite.Equal(*entryRsp.Mtime, *entryRsp.Version)
 		serverIDs = append(serverIDs, *entryRsp.IdString)
 		commitVersions = append(commitVersions, *entryRsp.Version)
 	}
@@ -442,13 +442,13 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
-	suite.Assert().Equal(4, len(rsp.Commit.Entryresponse))
+	suite.Len(rsp.Commit.Entryresponse, 4)
 	overQuota := sync_pb.CommitResponse_OVER_QUOTA
 	expectedEntryRsp := []sync_pb.CommitResponse_ResponseType{commitSuccess, commitSuccess, overQuota, overQuota}
 	expectedVersion := []*int64{rsp.Commit.Entryresponse[0].Mtime, rsp.Commit.Entryresponse[1].Mtime, nil, nil}
 	for i, entryRsp := range rsp.Commit.Entryresponse {
-		suite.Assert().Equal(expectedEntryRsp[i], *entryRsp.ResponseType)
-		suite.Assert().Equal(expectedVersion[i], entryRsp.Version)
+		suite.Equal(expectedEntryRsp[i], *entryRsp.ResponseType)
+		suite.Equal(expectedVersion[i], entryRsp.Version)
 	}
 
 	// Commit 2 items again when quota is already exceed should get two OVER_QUOTA
@@ -463,9 +463,9 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
-	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
+	suite.Len(rsp.Commit.Entryresponse, 2)
 	for _, entryRsp := range rsp.Commit.Entryresponse {
-		suite.Assert().Equal(overQuota, *entryRsp.ResponseType)
+		suite.Equal(overQuota, *entryRsp.ResponseType)
 	}
 
 	// Commit updates to delete two previous inserted items.
@@ -480,10 +480,10 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
-	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
+	suite.Len(rsp.Commit.Entryresponse, 2)
 	for _, entryRsp := range rsp.Commit.Entryresponse {
-		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
-		suite.Assert().Equal(*entryRsp.Mtime, *entryRsp.Version)
+		suite.Equal(commitSuccess, *entryRsp.ResponseType)
+		suite.Equal(*entryRsp.Mtime, *entryRsp.Version)
 	}
 
 	// Commit 4 items should have two success and two OVER_QUOTA.
@@ -500,14 +500,14 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_QuotaLimit() {
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
-	suite.Assert().Equal(4, len(rsp.Commit.Entryresponse))
+	suite.Len(rsp.Commit.Entryresponse, 4)
 	expectedVersion = []*int64{rsp.Commit.Entryresponse[0].Mtime, rsp.Commit.Entryresponse[1].Mtime, nil, nil}
 	for i, entryRsp := range rsp.Commit.Entryresponse {
-		suite.Assert().Equal(expectedEntryRsp[i], *entryRsp.ResponseType)
+		suite.Equal(expectedEntryRsp[i], *entryRsp.ResponseType)
 		if *entryRsp.ResponseType == commitSuccess {
-			suite.Assert().Equal(*expectedVersion[i], *entryRsp.Version)
+			suite.Equal(*expectedVersion[i], *entryRsp.Version)
 		} else {
-			suite.Assert().Equal(expectedVersion[i], entryRsp.Version)
+			suite.Equal(expectedVersion[i], entryRsp.Version)
 		}
 	}
 
@@ -522,10 +522,10 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_ReplaceParentIDTo
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
-	suite.Assert().Equal(1, len(rsp.Commit.Entryresponse))
+	suite.Len(rsp.Commit.Entryresponse, 1)
 	commitSuccess := sync_pb.CommitResponse_SUCCESS
 	for _, entryRsp := range rsp.Commit.Entryresponse {
-		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
+		suite.Equal(commitSuccess, *entryRsp.ResponseType)
 	}
 
 	// Commit parents with its child bookmarks in one commit request.
@@ -551,9 +551,9 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_ReplaceParentIDTo
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
-	suite.Assert().Equal(6, len(rsp.Commit.Entryresponse))
+	suite.Len(rsp.Commit.Entryresponse, 6)
 	for _, entryRsp := range rsp.Commit.Entryresponse {
-		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
+		suite.Equal(commitSuccess, *entryRsp.ResponseType)
 	}
 
 	// Get updates to check if child's parent ID is replaced with the server
@@ -566,26 +566,26 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_ReplaceParentIDTo
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
-	suite.Require().Equal(6, len(rsp.GetUpdates.Entries))
+	suite.Require().Len(rsp.GetUpdates.Entries, 6)
 	for i := range rsp.GetUpdates.Entries {
 		if i != len(rsp.GetUpdates.Entries)-1 {
-			suite.Assert().Equal(rsp.GetUpdates.Entries[i].OriginatorClientItemId, entries[i].IdString)
+			suite.Equal(rsp.GetUpdates.Entries[i].OriginatorClientItemId, entries[i].IdString)
 		} else {
-			suite.Assert().Equal(rsp.GetUpdates.Entries[i].OriginatorClientItemId, child0.IdString)
+			suite.Equal(rsp.GetUpdates.Entries[i].OriginatorClientItemId, child0.IdString)
 		}
-		suite.Assert().NotNil(rsp.GetUpdates.Entries[i].IdString)
+		suite.NotNil(rsp.GetUpdates.Entries[i].IdString)
 	}
 
-	suite.Assert().Equal(rsp.GetUpdates.Entries[1].ParentIdString, rsp.GetUpdates.Entries[0].IdString)
-	suite.Assert().Equal(rsp.GetUpdates.Entries[3].ParentIdString, rsp.GetUpdates.Entries[0].IdString)
-	suite.Assert().Equal(rsp.GetUpdates.Entries[4].ParentIdString, rsp.GetUpdates.Entries[2].IdString)
-	suite.Assert().Equal(rsp.GetUpdates.Entries[5].ParentIdString, rsp.GetUpdates.Entries[0].IdString)
+	suite.Equal(rsp.GetUpdates.Entries[1].ParentIdString, rsp.GetUpdates.Entries[0].IdString)
+	suite.Equal(rsp.GetUpdates.Entries[3].ParentIdString, rsp.GetUpdates.Entries[0].IdString)
+	suite.Equal(rsp.GetUpdates.Entries[4].ParentIdString, rsp.GetUpdates.Entries[2].IdString)
+	suite.Equal(rsp.GetUpdates.Entries[5].ParentIdString, rsp.GetUpdates.Entries[0].IdString)
 }
 
 func assertTypeMtimeCacheValue(suite *CommandTestSuite, key string, mtime int64, errMsg string) {
 	val, err := suite.cache.Get(context.Background(), key, false)
 	suite.Require().NoError(err, "cache.Get should succeed")
-	suite.Assert().Equal(val, strconv.FormatInt(mtime, 10), errMsg)
+	suite.Equal(val, strconv.FormatInt(mtime, 10), errMsg)
 }
 
 func insertSyncEntitiesWithoutUpdateCache(
@@ -620,12 +620,12 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ba
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
-	suite.Assert().Equal(3, len(rsp.Commit.Entryresponse))
+	suite.Len(rsp.Commit.Entryresponse, 3)
 	commitSuccess := sync_pb.CommitResponse_SUCCESS
 	var latestBookmarkMtime int64
 	var latestNigoriMtime int64
 	for i, entryRsp := range rsp.Commit.Entryresponse {
-		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
+		suite.Equal(commitSuccess, *entryRsp.ResponseType)
 		if i < 2 {
 			latestBookmarkMtime = *entryRsp.Mtime
 		}
@@ -661,7 +661,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ba
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
-	suite.Assert().Equal(0, len(rsp.GetUpdates.Entries))
+	suite.Empty(rsp.GetUpdates.Entries)
 	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
 		latestBookmarkMtime, "cache is not updated when short circuited")
 	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(nigoriType)),
@@ -684,9 +684,9 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ba
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
-	suite.Assert().Equal(1, len(rsp.Commit.Entryresponse))
+	suite.Len(rsp.Commit.Entryresponse, 1)
 	entryRsp := rsp.Commit.Entryresponse[0]
-	suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
+	suite.Equal(commitSuccess, *entryRsp.ResponseType)
 
 	latestBookmarkMtime = *entryRsp.Mtime
 	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
@@ -702,9 +702,9 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ba
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
-	suite.Assert().Equal(2, len(rsp.GetUpdates.Entries))
-	suite.Assert().Equal(latestNigoriMtime, *rsp.GetUpdates.Entries[0].Mtime)
-	suite.Assert().Equal(latestBookmarkMtime, *rsp.GetUpdates.Entries[1].Mtime)
+	suite.Len(rsp.GetUpdates.Entries, 2)
+	suite.Equal(latestNigoriMtime, *rsp.GetUpdates.Entries[0].Mtime)
+	suite.Equal(latestBookmarkMtime, *rsp.GetUpdates.Entries[1].Mtime)
 	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
 		latestBookmarkMtime, "Cached token should be equal to latest mtime")
 	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(nigoriType)),
@@ -723,9 +723,9 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Sk
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
-	suite.Assert().Equal(1, len(rsp.Commit.Entryresponse))
+	suite.Len(rsp.Commit.Entryresponse, 1)
 	commitSuccess := sync_pb.CommitResponse_SUCCESS
-	suite.Assert().Equal(commitSuccess, *rsp.Commit.Entryresponse[0].ResponseType)
+	suite.Equal(commitSuccess, *rsp.Commit.Entryresponse[0].ResponseType)
 	latestBookmarkMtime := *rsp.Commit.Entryresponse[0].Mtime
 	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
 		latestBookmarkMtime,
@@ -750,7 +750,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Sk
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
-	suite.Require().Equal(1, len(rsp.GetUpdates.Entries))
+	suite.Require().Len(rsp.GetUpdates.Entries, 1)
 	suite.Require().Equal(dbEntries[0].Mtime, rsp.GetUpdates.Entries[0].Mtime)
 	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
 		*dbEntries[0].Mtime, "Successful commit should update the cache")
@@ -769,12 +769,12 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ch
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, true)
-	suite.Assert().Equal(2, len(rsp.Commit.Entryresponse))
+	suite.Len(rsp.Commit.Entryresponse, 2)
 	commitSuccess := sync_pb.CommitResponse_SUCCESS
 	var latestBookmarkMtime int64
 	for _, entryRsp := range rsp.Commit.Entryresponse {
-		suite.Assert().Equal(commitSuccess, *entryRsp.ResponseType)
-		suite.Assert().NotEqual(latestBookmarkMtime, *entryRsp.Mtime)
+		suite.Equal(commitSuccess, *entryRsp.ResponseType)
+		suite.NotEqual(latestBookmarkMtime, *entryRsp.Mtime)
 		latestBookmarkMtime = *entryRsp.Mtime
 	}
 	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
@@ -792,7 +792,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ch
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
-	suite.Require().Equal(2, len(rsp.GetUpdates.Entries))
+	suite.Require().Len(rsp.GetUpdates.Entries, 2)
 	suite.Require().Equal(int64(0), *rsp.GetUpdates.ChangesRemaining)
 	mtime := *rsp.GetUpdates.Entries[0].Mtime
 	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
@@ -809,7 +809,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Ch
 		command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, clientID),
 		"HandleClientToServerMessage should succeed")
 	assertCommonResponse(suite, rsp, false)
-	suite.Require().Equal(1, len(rsp.GetUpdates.Entries))
+	suite.Require().Len(rsp.GetUpdates.Entries, 1)
 	suite.Require().Equal(int64(0), *rsp.GetUpdates.ChangesRemaining)
 	assertTypeMtimeCacheValue(suite, clientID+"#"+strconv.Itoa(int(bookmarkType)),
 		latestBookmarkMtime,
