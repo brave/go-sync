@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -80,10 +81,8 @@ func authenticate(tkn string) (string, error) {
 	}
 
 	blockedIDs := strings.Split(os.Getenv("BLOCKED_CLIENT_IDS"), ",")
-	for _, id := range blockedIDs {
-		if token.PublicKeyHex == id {
-			return "", errors.New("This client ID is blocked")
-		}
+	if slices.Contains(blockedIDs, token.PublicKeyHex) {
+		return "", errors.New("This client ID is blocked")
 	}
 
 	return token.PublicKeyHex, nil
