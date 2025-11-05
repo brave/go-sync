@@ -460,7 +460,6 @@ func (dynamo *Dynamo) ClearServerData(clientID string) ([]SyncEntity, error) {
 
 				items = append(items, writeItem)
 			}
-
 		}
 
 		_, err = dynamo.TransactWriteItems(context.TODO(), &dynamodb.TransactWriteItemsInput{TransactItems: items})
