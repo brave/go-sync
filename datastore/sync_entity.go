@@ -405,10 +405,7 @@ func (dynamo *Dynamo) ClearServerData(clientID string) ([]SyncEntity, error) {
 
 	var i, j int32
 	for i = 0; i < count; i += maxTransactDeleteItemSize {
-		j = i + maxTransactDeleteItemSize
-		if j > count {
-			j = count
-		}
+		j = min(i+maxTransactDeleteItemSize, count)
 
 		items := make([]types.TransactWriteItem, 0, j-i)
 		for _, item := range syncEntities[i:j] {
@@ -689,10 +686,7 @@ func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFo
 	var outAv []map[string]types.AttributeValue
 	var i, j int32
 	for i = 0; i < count; i += maxBatchGetItemSize {
-		j = i + maxBatchGetItemSize
-		if j > count {
-			j = count
-		}
+		j = min(i+maxBatchGetItemSize, count)
 
 		batchInput := &dynamodb.BatchGetItemInput{
 			RequestItems: map[string]types.KeysAndAttributes{
