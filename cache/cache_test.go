@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/brave/go-sync/cache"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/brave/go-sync/cache"
 )
 
 type CacheTestSuite struct {
@@ -21,7 +22,7 @@ func (suite *CacheTestSuite) TestSetTypeMtime() {
 	suite.cache.SetTypeMtime(context.Background(), "id", 123, 12345678)
 	val, err := suite.cache.Get(context.Background(), "id#123", false)
 	suite.Require().NoError(err)
-	suite.Require().Equal(val, "12345678")
+	suite.Require().Equal("12345678", val)
 }
 
 func (suite *CacheTestSuite) TestIsTypeMtimeUpdated() {

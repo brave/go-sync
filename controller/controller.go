@@ -3,20 +3,20 @@ package controller
 import (
 	"compress/gzip"
 	"io"
-	"io/ioutil"
 	"net/http"
 
 	"github.com/brave-intl/bat-go/libs/closers"
 	"github.com/brave-intl/bat-go/libs/middleware"
+	"github.com/go-chi/chi/v5"
+	"github.com/rs/zerolog/log"
+	"google.golang.org/protobuf/proto"
+
 	"github.com/brave/go-sync/cache"
 	"github.com/brave/go-sync/command"
 	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/datastore"
 	syncMiddleware "github.com/brave/go-sync/middleware"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
-	"github.com/go-chi/chi/v5"
-	"github.com/rs/zerolog/log"
-	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -55,7 +55,7 @@ func Command(cache *cache.Cache, db datastore.Datastore) http.HandlerFunc {
 			reader = gr
 		}
 
-		msg, err := ioutil.ReadAll(io.LimitReader(reader, payloadLimit10MB))
+		msg, err := io.ReadAll(io.LimitReader(reader, payloadLimit10MB))
 		if err != nil {
 			log.Error().Err(err).Msg("Read request body failed")
 			http.Error(w, "Read request body error", http.StatusInternalServerError)

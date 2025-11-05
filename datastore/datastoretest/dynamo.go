@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"runtime"
 	"time"
@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+
 	"github.com/brave/go-sync/datastore"
 )
 
@@ -42,7 +43,7 @@ func DeleteTable(dynamo *datastore.Dynamo) error {
 func CreateTable(dynamo *datastore.Dynamo) error {
 	_, b, _, _ := runtime.Caller(0)
 	root := filepath.Join(filepath.Dir(b), "../../")
-	raw, err := ioutil.ReadFile(filepath.Join(root, "schema/dynamodb/table.json"))
+	raw, err := os.ReadFile(filepath.Join(root, "schema/dynamodb/table.json"))
 	if err != nil {
 		return fmt.Errorf("error reading table.json: %w", err)
 	}

@@ -5,10 +5,11 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/brave/go-sync/command"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
-	"github.com/stretchr/testify/suite"
 )
 
 type ServerDefinedUniqueEntityTestSuite struct {
@@ -107,9 +108,9 @@ func (suite *ServerDefinedUniqueEntityTestSuite) TestInsertServerDefinedUniqueEn
 
 	// Check that Ctime and Mtime have been set, reset to zero value for subsequent
 	// tests
-	for i := 0; i < len(tagItems); i++ {
-		suite.Assert().NotNil(tagItems[i].Ctime)
-		suite.Assert().NotNil(tagItems[i].Mtime)
+	for i := range tagItems {
+		suite.NotNil(tagItems[i].Ctime)
+		suite.NotNil(tagItems[i].Mtime)
 
 		tagItems[i].Ctime = nil
 		tagItems[i].Mtime = nil
@@ -117,7 +118,7 @@ func (suite *ServerDefinedUniqueEntityTestSuite) TestInsertServerDefinedUniqueEn
 
 	sort.Sort(datastore.TagItemByClientIDID(tagItems))
 	sort.Sort(datastore.TagItemByClientIDID(expectedTagItems))
-	suite.Assert().Equal(tagItems, expectedTagItems)
+	suite.Equal(expectedTagItems, tagItems)
 
 	syncItems, err := datastoretest.ScanSyncEntities(suite.dynamo)
 	suite.Require().NoError(err, "ScanSyncEntities should succeed")
@@ -133,7 +134,7 @@ func (suite *ServerDefinedUniqueEntityTestSuite) TestInsertServerDefinedUniqueEn
 			break
 		}
 	}
-	suite.Assert().NotEqual(bookmarksRootID, "", "Cannot find ID of bookmarks root folder")
+	suite.NotEmpty(bookmarksRootID, "Cannot find ID of bookmarks root folder")
 
 	// For each item returned by ScanSyncEntities, make sure it is in the map and
 	// its value is matched, then remove it from the map.
@@ -148,11 +149,11 @@ func (suite *ServerDefinedUniqueEntityTestSuite) TestInsertServerDefinedUniqueEn
 			Folder:   item.Folder,
 		}
 
-		suite.Assert().NotNil(item.ServerDefinedUniqueTag)
-		suite.Assert().Equal(syncAttrs, *expectedSyncAttrsMap[*item.ServerDefinedUniqueTag])
+		suite.NotNil(item.ServerDefinedUniqueTag)
+		suite.Equal(syncAttrs, *expectedSyncAttrsMap[*item.ServerDefinedUniqueTag])
 		delete(expectedSyncAttrsMap, *item.ServerDefinedUniqueTag)
 	}
-	suite.Assert().Equal(0, len(expectedSyncAttrsMap))
+	suite.Empty(expectedSyncAttrsMap)
 
 	suite.Require().NoError(
 		command.InsertServerDefinedUniqueEntities(suite.dynamo, "client2"),

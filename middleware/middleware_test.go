@@ -9,11 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/brave/go-sync/auth/authtest"
 	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/datastore/datastoretest"
 	"github.com/brave/go-sync/middleware"
-	"github.com/stretchr/testify/suite"
 )
 
 type MiddlewareTestSuite struct {
@@ -42,7 +43,7 @@ func (suite *MiddlewareTestSuite) TestDisabledChainMiddleware() {
 	ctx = context.WithValue(context.Background(), syncContext.ContextKeyClientID, clientID)
 	ctx = context.WithValue(ctx, syncContext.ContextKeyDatastore, datastore)
 	next = http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
-		suite.Require().Equal(false, true)
+		suite.Fail("Should not reach this point")
 	})
 	handler = middleware.DisabledChain(next)
 	req, err = http.NewRequestWithContext(ctx, "POST", "v2/command/", bytes.NewBuffer([]byte{}))
@@ -71,7 +72,7 @@ func (suite *MiddlewareTestSuite) TestAuthMiddleware() {
 	next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		clientID := ctx.Value(syncContext.ContextKeyClientID)
-		suite.Require().NotNil(clientID, "Client ID should be set by auth middleware")
+		suite.NotNil(clientID, "Client ID should be set by auth middleware")
 	})
 	handler := middleware.Auth(next)
 

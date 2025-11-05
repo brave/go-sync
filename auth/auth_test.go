@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/brave/go-sync/auth"
 	"github.com/brave/go-sync/auth/authtest"
-	"github.com/stretchr/testify/suite"
 )
 
 type AuthTestSuite struct {
@@ -20,14 +21,14 @@ func (suite *AuthTestSuite) TestAuthenticate() {
 	// invalid token format
 	id, err := auth.Authenticate(base64.URLEncoding.EncodeToString([]byte("||")))
 	suite.Require().Error(err, "invalid token format should fail")
-	suite.Require().Equal("", id, "empty clientID should be returned")
+	suite.Require().Empty(id, "empty clientID should be returned")
 
 	// invalid signature
 	_, tokenHex, _, err := authtest.GenerateToken(time.Now().UnixMilli())
 	suite.Require().NoError(err, "generate token should succeed")
 	id, err = auth.Authenticate(base64.URLEncoding.EncodeToString([]byte("12" + tokenHex)))
 	suite.Require().Error(err, "invalid signature should fail")
-	suite.Require().Equal("", id)
+	suite.Require().Empty(id)
 
 	// valid token
 	tkn, _, expectedID, err := authtest.GenerateToken(time.Now().UnixMilli())
@@ -41,13 +42,13 @@ func (suite *AuthTestSuite) TestAuthenticate() {
 	suite.Require().NoError(err, "generate token should succeed")
 	id, err = auth.Authenticate(tkn)
 	suite.Require().Error(err, "outdated token should failed")
-	suite.Require().Equal("", id)
+	suite.Require().Empty(id)
 
 	tkn, _, _, err = authtest.GenerateToken(time.Now().UnixMilli() + auth.TokenMaxDuration + 100)
 	suite.Require().NoError(err, "generate token should succeed")
 	id, err = auth.Authenticate(tkn)
 	suite.Require().Error(err, "outdated token should failed")
-	suite.Require().Equal("", id)
+	suite.Require().Empty(id)
 }
 
 func (suite *AuthTestSuite) TestAuthorize() {

@@ -16,17 +16,18 @@ import (
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
 	batware "github.com/brave-intl/bat-go/libs/middleware"
-	"github.com/brave/go-sync/cache"
-	syncContext "github.com/brave/go-sync/context"
-	"github.com/brave/go-sync/controller"
-	"github.com/brave/go-sync/datastore"
-	"github.com/brave/go-sync/middleware"
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi/v5"
 	chiware "github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
+
+	"github.com/brave/go-sync/cache"
+	syncContext "github.com/brave/go-sync/context"
+	"github.com/brave/go-sync/controller"
+	"github.com/brave/go-sync/datastore"
+	"github.com/brave/go-sync/middleware"
 )
 
 var (

@@ -1,8 +1,9 @@
 package datastoretest
 
 import (
-	"github.com/brave/go-sync/datastore"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/brave/go-sync/datastore"
 )
 
 // MockDatastore is used to mock datastorein tests

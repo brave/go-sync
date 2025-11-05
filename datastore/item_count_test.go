@@ -4,9 +4,10 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
-	"github.com/stretchr/testify/suite"
 )
 
 type ItemCountTestSuite struct {
@@ -46,13 +47,13 @@ func (suite *ItemCountTestSuite) TestGetClientItemCount() {
 	for _, item := range items {
 		count, err := suite.dynamo.GetClientItemCount(item.ClientID)
 		suite.Require().NoError(err, "GetClientItemCount should succeed")
-		suite.Assert().Equal(count.ItemCount, item.ItemCount, "ItemCount should match")
+		suite.Equal(count.ItemCount, item.ItemCount, "ItemCount should match")
 	}
 
 	// Non-exist client item count should succeed with count = 0.
 	count, err := suite.dynamo.GetClientItemCount("client3")
 	suite.Require().NoError(err, "Get non-exist ClientItemCount should succeed")
-	suite.Assert().Equal(count.ItemCount, 0)
+	suite.Equal(0, count.ItemCount)
 }
 
 func (suite *ItemCountTestSuite) TestUpdateClientItemCount() {
@@ -81,7 +82,7 @@ func (suite *ItemCountTestSuite) TestUpdateClientItemCount() {
 		clientCountItems[i].Version = 0
 		clientCountItems[i].LastPeriodChangeTime = 0
 	}
-	suite.Assert().Equal(expectedItems, clientCountItems)
+	suite.Equal(expectedItems, clientCountItems)
 }
 
 func TestItemCountTestSuite(t *testing.T) {
