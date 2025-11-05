@@ -25,10 +25,10 @@ formatters:
   enable:
     - goimports # checks if the code and import statements are formatted according to the 'goimports' command
     - golines # checks if code is formatted, and fixes long lines
+    - gofmt # checks if the code is formatted according to 'gofmt' command
 
     ## you may want to enable
     #- gci # checks if code and import statements are formatted, with additional rules
-    #- gofmt # checks if the code is formatted according to 'gofmt' command
     #- gofumpt # enforces a stricter format than 'gofmt', while being backwards compatible
     #- swaggo # formats swaggo comments
 
@@ -86,6 +86,7 @@ linters:
     - iotamixing # checks if iotas are being used in const blocks with other non-iota declarations
     - loggercheck # checks key value pairs for common logger libraries (kitlog,klog,logr,zap)
     - makezero # finds slice declarations with non-zero initial length
+    - modernize # suggests using modern Go features
     - mirror # reports wrong mirror patterns of bytes/strings usage
     - mnd # detects magic numbers
     - musttag # enforces field tags in (un)marshaled structs
@@ -477,3 +478,8 @@ linters:
           - gosec
           - noctx
           - wrapcheck
+      # Disable errcheck for testify mock args.Get() type assertions
+      - text: 'Error return value is not checked'
+        source: 'args\.Get\('
+        linters:
+          - errcheck
