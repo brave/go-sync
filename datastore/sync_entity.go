@@ -737,19 +737,19 @@ func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFo
 
 func validatePBEntity(entity *sync_pb.SyncEntity) error {
 	if entity == nil {
-		return fmt.Errorf("validate SyncEntity error: empty SyncEntity")
+		return errors.New("validate SyncEntity error: empty SyncEntity")
 	}
 
 	if entity.IdString == nil {
-		return fmt.Errorf("validate SyncEntity error: empty IdString")
+		return errors.New("validate SyncEntity error: empty IdString")
 	}
 
 	if entity.Version == nil {
-		return fmt.Errorf("validate SyncEntity error: empty Version")
+		return errors.New("validate SyncEntity error: empty Version")
 	}
 
 	if entity.Specifics == nil {
-		return fmt.Errorf("validate SyncEntity error: nil Specifics")
+		return errors.New("validate SyncEntity error: nil Specifics")
 	}
 
 	return nil

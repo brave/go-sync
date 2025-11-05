@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -58,7 +59,7 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 				// Error out when exceeds the limit.
 				if activeDevices >= maxActiveDevices {
 					errCode = sync_pb.SyncEnums_THROTTLED
-					return &errCode, fmt.Errorf("exceed limit of active devices in a chain")
+					return &errCode, errors.New("exceed limit of active devices in a chain")
 				}
 			}
 
@@ -151,7 +152,7 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 		if isNewClient && *fromProgressMarker.DataTypeId == nigoriTypeID &&
 			token == 0 && len(entities) == 0 {
 			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-			return &errCode, fmt.Errorf("nigori root folder entity is not ready yet")
+			return &errCode, errors.New("nigori root folder entity is not ready yet")
 		}
 
 		if hasChangesRemaining {
@@ -225,7 +226,7 @@ func getInterimItemCounts(cache *cache.Cache, clientID string, clearCache bool) 
 //   - existed sync entity will be updated if version is greater than 0.
 func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.CommitResponse, db datastore.Datastore, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
 	if commitMsg == nil {
-		return nil, fmt.Errorf("nil commitMsg is received")
+		return nil, errors.New("nil commitMsg is received")
 	}
 
 	errCode := sync_pb.SyncEnums_SUCCESS // default value, might be changed later
@@ -444,7 +445,7 @@ func HandleClientToServerMessage(cache *cache.Cache, pb *sync_pb.ClientToServerM
 
 	var err error
 	if pb.MessageContents == nil {
-		return fmt.Errorf("nil pb.MessageContents received")
+		return errors.New("nil pb.MessageContents received")
 	} else if *pb.MessageContents == sync_pb.ClientToServerMessage_GET_UPDATES {
 		guRsp := &sync_pb.GetUpdatesResponse{}
 		pbRsp.GetUpdates = guRsp
@@ -488,7 +489,7 @@ func HandleClientToServerMessage(cache *cache.Cache, pb *sync_pb.ClientToServerM
 			return fmt.Errorf("error handling ClearServerData request: %w", err)
 		}
 	} else {
-		return fmt.Errorf("unsupported message type of ClientToServerMessage")
+		return errors.New("unsupported message type of ClientToServerMessage")
 	}
 
 	return nil

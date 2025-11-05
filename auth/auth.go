@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -46,7 +47,7 @@ func authenticate(tkn string) (string, error) {
 	re := regexp.MustCompile(tokenRE)
 	m := re.FindStringSubmatch(string(base64DecodedBytes))
 	if m == nil {
-		return "", fmt.Errorf("invalid token format")
+		return "", errors.New("invalid token format")
 	}
 	token := Token{TimestampHex: m[1], SignedTimestampHex: m[2], PublicKeyHex: m[3]}
 
@@ -64,7 +65,7 @@ func authenticate(tkn string) (string, error) {
 		return "", fmt.Errorf("error decoding hex string: %w", err)
 	}
 	if !ed25519.Verify(publicKey, timestampBytes, signedTimestamp) {
-		return "", fmt.Errorf("signature verification failed")
+		return "", errors.New("signature verification failed")
 	}
 
 	var timestamp int64
@@ -75,13 +76,13 @@ func authenticate(tkn string) (string, error) {
 
 	// Verify that this token is within +/- 1 day.
 	if abs(time.Now().UnixMilli()-timestamp) > TokenMaxDuration {
-		return "", fmt.Errorf("token is expired")
+		return "", errors.New("token is expired")
 	}
 
 	blockedIDs := strings.Split(os.Getenv("BLOCKED_CLIENT_IDS"), ",")
 	for _, id := range blockedIDs {
 		if token.PublicKeyHex == id {
-			return "", fmt.Errorf("This client ID is blocked")
+			return "", errors.New("This client ID is blocked")
 		}
 	}
 
@@ -98,12 +99,12 @@ func Authorize(r *http.Request) (string, error) {
 	if ok && len(tokens) >= 1 {
 		token = tokens[0]
 		if !strings.HasPrefix(token, bearerPrefix) {
-			return "", fmt.Errorf("Not a valid token")
+			return "", errors.New("Not a valid token")
 		}
 		token = strings.TrimPrefix(token, bearerPrefix)
 	}
 	if token == "" {
-		return "", fmt.Errorf("Not a valid token")
+		return "", errors.New("Not a valid token")
 	}
 
 	// Verify token
