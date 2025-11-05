@@ -101,7 +101,6 @@ linters:
     - perfsprint # checks that fmt.Sprintf can be replaced with a faster alternative
     - predeclared # finds code that shadows one of Go's predeclared identifiers
     - promlinter # checks Prometheus metrics naming via promlint
-    - protogetter # reports direct reads from proto message fields when getters should be used
     - reassign # checks that package variables are not reassigned
     - recvcheck # checks for receiver type consistency
     - revive # fast, configurable, extensible, flexible, and beautiful linter for Go, drop-in replacement of golint
@@ -127,6 +126,7 @@ linters:
     #- exhaustruct # [highly recommend to enable] checks if all structure fields are initialized
     #- godot # checks if comments end in a period
     #- gochecknoglobals # checks that no global variables exist
+    #- protogetter # reports direct reads from proto message fields when getters should be used
 
 
     ## you may want to enable
@@ -435,6 +435,9 @@ linters:
         # Omit embedded fields from selector expression.
         # https://staticcheck.dev/docs/checks/#QF1008
         - -QF1008
+
+    usestdlibvars:
+      http-method: false # do not suggest using http.MethodGet, http.MethodPost, etc.
 
     usetesting:
       # Enable/disable `os.TempDir()` detections.
