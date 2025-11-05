@@ -483,3 +483,8 @@ linters:
         source: 'args\.Get\('
         linters:
           - errcheck
+      # Allow == comparison for known sentinel errors from external libraries
+      - text: 'comparing with == will fail on wrapped errors'
+        source: 'err == redis\.Nil'
+        linters:
+          - errorlint
