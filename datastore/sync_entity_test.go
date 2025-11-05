@@ -18,6 +18,7 @@ import (
 
 type SyncEntityTestSuite struct {
 	suite.Suite
+
 	dynamo *datastore.Dynamo
 }
 

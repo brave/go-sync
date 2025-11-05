@@ -28,6 +28,7 @@ const (
 
 type CommandTestSuite struct {
 	suite.Suite
+
 	dynamo *datastore.Dynamo
 	cache  *cache.Cache
 }
