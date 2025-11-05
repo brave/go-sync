@@ -2,14 +2,16 @@ package server_test
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/brave/go-sync/server"
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/brave/go-sync/server"
 )
 
 var (
@@ -24,21 +26,21 @@ func init() {
 
 func TestPing(t *testing.T) {
 	req, err := http.NewRequest("GET", "/", nil)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req.WithContext(serverCtx))
 	assert.Equal(t, http.StatusOK, rr.Code)
 
 	expected := "."
-	actual, err := ioutil.ReadAll(rr.Result().Body)
-	assert.Nil(t, err)
+	actual, err := io.ReadAll(rr.Result().Body)
+	require.NoError(t, err)
 	assert.Equal(t, expected, string(actual))
 }
 
 func TestCommand(t *testing.T) {
 	req, err := http.NewRequest("POST", "/v2/command/", nil)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req.WithContext(serverCtx))

@@ -11,10 +11,10 @@ require (
 	github.com/brave-intl/bat-go/libs v0.0.0-20250620104757-9e2f8ff87fd8
 	github.com/getsentry/sentry-go v0.34.0
 	github.com/go-chi/chi/v5 v5.2.3
+	github.com/google/uuid v1.6.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/redis/go-redis/v9 v9.14.0
 	github.com/rs/zerolog v1.34.0
-	github.com/satori/go.uuid v1.2.0
 	github.com/stretchr/testify v1.11.1
 	google.golang.org/protobuf v1.36.8
 )
@@ -52,6 +52,7 @@ require (
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/rs/xid v1.6.0 // indirect
+	github.com/satori/go.uuid v1.2.0 // indirect
 	github.com/shengdoushi/base58 v1.0.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/throttled/throttled/v2 v2.13.0 // indirect

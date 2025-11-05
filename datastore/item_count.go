@@ -113,7 +113,7 @@ func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(ctx context.Context, 
 		timeSinceLastChange := now - counts.LastPeriodChangeTime
 		if timeSinceLastChange >= periodDurationSecs {
 			changeCount := int(timeSinceLastChange / periodDurationSecs)
-			for i := 0; i < changeCount; i++ {
+			for range changeCount {
 				// The records from "period 1"/the earliest period
 				// will be purged from the count, since they will be deleted via DDB TTL
 				counts.HistoryItemCountPeriod1 = counts.HistoryItemCountPeriod2
