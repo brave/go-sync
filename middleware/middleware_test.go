@@ -59,7 +59,6 @@ func (suite *MiddlewareTestSuite) TestDisabledChainMiddleware() {
 	ctx = context.WithValue(ctx, syncContext.ContextKeyDatastore, datastore)
 	next = http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})
 	handler = middleware.DisabledChain(next)
-	rr = httptest.NewRecorder()
 	req, err = http.NewRequestWithContext(ctx, "POST", "v2/command/", bytes.NewBuffer([]byte{}))
 	suite.Require().NoError(err, "NewRequestWithContext should succeed")
 	rr = httptest.NewRecorder()

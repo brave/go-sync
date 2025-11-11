@@ -82,7 +82,7 @@ func authenticate(tkn string) (string, error) {
 
 	blockedIDs := strings.Split(os.Getenv("BLOCKED_CLIENT_IDS"), ",")
 	if slices.Contains(blockedIDs, token.PublicKeyHex) {
-		return "", errors.New("This client ID is blocked")
+		return "", errors.New("this client ID is blocked")
 	}
 
 	return token.PublicKeyHex, nil
@@ -98,12 +98,12 @@ func Authorize(r *http.Request) (string, error) {
 	if ok && len(tokens) >= 1 {
 		token = tokens[0]
 		if !strings.HasPrefix(token, bearerPrefix) {
-			return "", errors.New("Not a valid token")
+			return "", errors.New("not a valid token")
 		}
 		token = strings.TrimPrefix(token, bearerPrefix)
 	}
 	if token == "" {
-		return "", errors.New("Not a valid token")
+		return "", errors.New("not a valid token")
 	}
 
 	// Verify token

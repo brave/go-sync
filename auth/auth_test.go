@@ -61,7 +61,7 @@ func (suite *AuthTestSuite) TestAuthorize() {
 	outdatedToken, _, _, err := authtest.GenerateToken(time.Now().UnixMilli() - auth.TokenMaxDuration - 1)
 	suite.Require().NoError(err, "generate token should succeed")
 
-	invalidTokenErr := errors.New("Not a valid token")
+	invalidTokenErr := errors.New("not a valid token")
 	outdatedErr := fmt.Errorf("error authorizing: %w", errors.New("token is expired"))
 	tests := map[string]struct {
 		token    string

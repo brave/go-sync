@@ -33,7 +33,7 @@ func GetInterimCountKey(clientID string, countType string) string {
 	return clientID + "#interim_" + countType
 }
 
-// GetAndClearInterimCount returns the amount of entities inserted in
+// GetInterimCount returns the amount of entities inserted in
 // the DB that were not yet added to the item count
 func (c *Cache) GetInterimCount(ctx context.Context, clientID string, countType string, clearCache bool) (int, error) {
 	countStr, err := c.Get(ctx, GetInterimCountKey(clientID, countType), clearCache)

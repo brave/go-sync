@@ -672,10 +672,7 @@ func (dynamo *Dynamo) GetUpdatesForType(dataType int, clientToken int64, fetchFo
 		return false, syncEntities, fmt.Errorf("error doing query to get updates: %w", err)
 	}
 
-	hasChangesRemaining := false
-	if out.LastEvaluatedKey != nil && len(out.LastEvaluatedKey) > 0 {
-		hasChangesRemaining = true
-	}
+	hasChangesRemaining := len(out.LastEvaluatedKey) > 0
 
 	count := out.Count
 	if count == 0 { // No updates

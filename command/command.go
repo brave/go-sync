@@ -127,7 +127,7 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 
 		token, n := binary.Varint(guRsp.NewProgressMarker[i].Token)
 		if n <= 0 {
-			return nil, fmt.Errorf("Failed at decoding token value %v", token)
+			return nil, fmt.Errorf("failed at decoding token value %v", token)
 		}
 
 		// Check cache to short circuit with 0 updates for polling requests.
@@ -260,6 +260,7 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 	// Map to save commit data type ID & mtime
 	typeMtimeMap := make(map[int]int64)
 	for i, v := range commitMsg.Entries {
+		var conflict, deleted bool
 		entryRsp := &sync_pb.CommitResponse_EntryResponse{}
 		commitRsp.Entryresponse[i] = entryRsp
 
@@ -307,7 +308,7 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 				// Insert all non-history items. For history items, ignore any items above history quoto
 				// and lie to the client about the objects being synced instead of returning OVER_QUOTA
 				// so the client can continue to sync other entities.
-				conflict, err := db.InsertSyncEntity(entityToCommit)
+				conflict, err = db.InsertSyncEntity(entityToCommit)
 				if err != nil {
 					log.Error().Err(err).Msg("Insert sync entity failed")
 					rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
@@ -332,7 +333,7 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 				}
 			}
 		} else { // Update
-			conflict, deleted, err := db.UpdateSyncEntity(entityToCommit, oldVersion)
+			conflict, deleted, err = db.UpdateSyncEntity(entityToCommit, oldVersion)
 			if err != nil {
 				log.Error().Err(err).Msg("Update sync entity failed")
 				rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
@@ -356,7 +357,7 @@ func handleCommitRequest(cache *cache.Cache, commitMsg *sync_pb.CommitMessage, c
 		if err != nil {
 			log.Error().Err(err).Msg("Interim count update failed")
 			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-			return &errCode, fmt.Errorf("Interim count update failed: %w", err)
+			return &errCode, fmt.Errorf("interim count update failed: %w", err)
 		}
 
 		typeMtimeMap[*entityToCommit.DataType] = *entityToCommit.Mtime
