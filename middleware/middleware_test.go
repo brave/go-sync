@@ -3,7 +3,7 @@ package middleware_test
 import (
 	"bytes"
 	"context"
-	"fmt"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -54,12 +54,11 @@ func (suite *MiddlewareTestSuite) TestDisabledChainMiddleware() {
 
 	// DB error
 	datastore = new(datastoretest.MockDatastore)
-	datastore.On("IsSyncChainDisabled", clientID).Return(false, fmt.Errorf("unable to query db"))
+	datastore.On("IsSyncChainDisabled", clientID).Return(false, errors.New("unable to query db"))
 	ctx = context.WithValue(context.Background(), syncContext.ContextKeyClientID, clientID)
 	ctx = context.WithValue(ctx, syncContext.ContextKeyDatastore, datastore)
 	next = http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})
 	handler = middleware.DisabledChain(next)
-	rr = httptest.NewRecorder()
 	req, err = http.NewRequestWithContext(ctx, "POST", "v2/command/", bytes.NewBuffer([]byte{}))
 	suite.Require().NoError(err, "NewRequestWithContext should succeed")
 	rr = httptest.NewRecorder()

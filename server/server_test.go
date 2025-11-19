@@ -19,9 +19,10 @@ var (
 	serverCtx context.Context
 )
 
-func init() {
+func TestMain(m *testing.M) {
 	testCtx, logger := server.SetupLogger(context.Background())
 	serverCtx, mux = server.SetupRouter(testCtx, logger)
+	m.Run()
 }
 
 func TestPing(t *testing.T) {

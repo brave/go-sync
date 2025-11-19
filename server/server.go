@@ -142,6 +142,7 @@ func StartServer() {
 		healthCheckActive = false // disable health check
 
 		time.Sleep(60 * time.Second)
+		//nolint:errcheck // Error during shutdown in signal handler is acceptable
 		srv.Shutdown(serverCtx)
 	}()
 
@@ -157,6 +158,7 @@ func StartServer() {
 	}
 
 	err := srv.ListenAndServe()
+	//nolint:errorlint // Error during shutdown in signal handler is acceptable
 	if err == http.ErrServerClosed {
 		log.Info().Msg("HTTP server closed")
 	} else if err != nil {
