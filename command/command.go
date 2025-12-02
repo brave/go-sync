@@ -460,7 +460,7 @@ func HandleClientToServerMessage(ctx context.Context, cache *cache.Cache, pb *sy
 	} else if *pb.MessageContents == sync_pb.ClientToServerMessage_COMMIT {
 		commitRsp := &sync_pb.CommitResponse{}
 		pbRsp.Commit = commitRsp
-		pbRsp.ErrorCode, err = handleCommitRequest(ctx, cache, pb.Commit, commitRsp, db, clientID)
+		pbRsp.ErrorCode, err = handleCommitRequest(context.TODO(), cache, pb.Commit, commitRsp, db, clientID)
 		if err != nil {
 			if pbRsp.ErrorCode != nil {
 				pbRsp.ErrorMessage = aws.String(err.Error())
