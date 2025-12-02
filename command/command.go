@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -58,7 +59,7 @@ func handleGetUpdatesRequest(ctx context.Context, cache *cache.Cache, guMsg *syn
 				// Error out when exceeds the limit.
 				if activeDevices >= maxActiveDevices {
 					errCode = sync_pb.SyncEnums_THROTTLED
-					return &errCode, fmt.Errorf("exceed limit of active devices in a chain")
+					return &errCode, errors.New("exceed limit of active devices in a chain")
 				}
 			}
 
@@ -126,7 +127,7 @@ func handleGetUpdatesRequest(ctx context.Context, cache *cache.Cache, guMsg *syn
 
 		token, n := binary.Varint(guRsp.NewProgressMarker[i].Token)
 		if n <= 0 {
-			return nil, fmt.Errorf("Failed at decoding token value %v", token)
+			return nil, fmt.Errorf("failed at decoding token value %v", token)
 		}
 
 		// Check cache to short circuit with 0 updates for polling requests.
@@ -151,7 +152,7 @@ func handleGetUpdatesRequest(ctx context.Context, cache *cache.Cache, guMsg *syn
 		if isNewClient && *fromProgressMarker.DataTypeId == nigoriTypeID &&
 			token == 0 && len(entities) == 0 {
 			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-			return &errCode, fmt.Errorf("nigori root folder entity is not ready yet")
+			return &errCode, errors.New("nigori root folder entity is not ready yet")
 		}
 
 		if hasChangesRemaining {
@@ -225,7 +226,7 @@ func getInterimItemCounts(ctx context.Context, cache *cache.Cache, clientID stri
 //   - existed sync entity will be updated if version is greater than 0.
 func handleCommitRequest(ctx context.Context, cache *cache.Cache, commitMsg *sync_pb.CommitMessage, commitRsp *sync_pb.CommitResponse, db datastore.Datastore, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
 	if commitMsg == nil {
-		return nil, fmt.Errorf("nil commitMsg is received")
+		return nil, errors.New("nil commitMsg is received")
 	}
 
 	errCode := sync_pb.SyncEnums_SUCCESS // default value, might be changed later
@@ -358,7 +359,7 @@ func handleCommitRequest(ctx context.Context, cache *cache.Cache, commitMsg *syn
 		if interimErr != nil {
 			log.Error().Err(interimErr).Msg("Interim count update failed")
 			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-			return &errCode, fmt.Errorf("Interim count update failed: %w", interimErr)
+			return &errCode, fmt.Errorf("interim count update failed: %w", interimErr)
 		}
 
 		// Prepare success response
@@ -441,7 +442,7 @@ func HandleClientToServerMessage(ctx context.Context, cache *cache.Cache, pb *sy
 
 	var err error
 	if pb.MessageContents == nil {
-		return fmt.Errorf("nil pb.MessageContents received")
+		return errors.New("nil pb.MessageContents received")
 	} else if *pb.MessageContents == sync_pb.ClientToServerMessage_GET_UPDATES {
 		guRsp := &sync_pb.GetUpdatesResponse{}
 		pbRsp.GetUpdates = guRsp
@@ -485,7 +486,7 @@ func HandleClientToServerMessage(ctx context.Context, cache *cache.Cache, pb *sy
 			return fmt.Errorf("error handling ClearServerData request: %w", err)
 		}
 	} else {
-		return fmt.Errorf("unsupported message type of ClientToServerMessage")
+		return errors.New("unsupported message type of ClientToServerMessage")
 	}
 
 	return nil

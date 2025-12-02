@@ -24,6 +24,7 @@ import (
 
 type ControllerTestSuite struct {
 	suite.Suite
+
 	dynamo *datastore.Dynamo
 	cache  *cache.Cache
 }

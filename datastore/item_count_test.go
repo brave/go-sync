@@ -13,6 +13,7 @@ import (
 
 type ItemCountTestSuite struct {
 	suite.Suite
+
 	dynamo *datastore.Dynamo
 }
 

@@ -11,6 +11,7 @@ import (
 
 type CacheTestSuite struct {
 	suite.Suite
+
 	cache *cache.Cache
 }
 

@@ -405,10 +405,7 @@ func (dynamo *Dynamo) ClearServerData(ctx context.Context, clientID string) ([]S
 
 	var i, j int32
 	for i = 0; i < count; i += maxTransactDeleteItemSize {
-		j = i + maxTransactDeleteItemSize
-		if j > count {
-			j = count
-		}
+		j = min(i+maxTransactDeleteItemSize, count)
 
 		items := make([]types.TransactWriteItem, 0, j-i)
 		for _, item := range syncEntities[i:j] {
@@ -460,7 +457,6 @@ func (dynamo *Dynamo) ClearServerData(ctx context.Context, clientID string) ([]S
 
 				items = append(items, writeItem)
 			}
-
 		}
 
 		_, err = dynamo.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: items})
@@ -676,10 +672,7 @@ func (dynamo *Dynamo) GetUpdatesForType(ctx context.Context, dataType int, clien
 		return false, syncEntities, fmt.Errorf("error doing query to get updates: %w", err)
 	}
 
-	hasChangesRemaining := false
-	if out.LastEvaluatedKey != nil && len(out.LastEvaluatedKey) > 0 {
-		hasChangesRemaining = true
-	}
+	hasChangesRemaining := len(out.LastEvaluatedKey) > 0
 
 	count := out.Count
 	if count == 0 { // No updates
@@ -690,10 +683,7 @@ func (dynamo *Dynamo) GetUpdatesForType(ctx context.Context, dataType int, clien
 	var outAv []map[string]types.AttributeValue
 	var i, j int32
 	for i = 0; i < count; i += maxBatchGetItemSize {
-		j = i + maxBatchGetItemSize
-		if j > count {
-			j = count
-		}
+		j = min(i+maxBatchGetItemSize, count)
 
 		batchInput := &dynamodb.BatchGetItemInput{
 			RequestItems: map[string]types.KeysAndAttributes{
@@ -737,19 +727,19 @@ func (dynamo *Dynamo) GetUpdatesForType(ctx context.Context, dataType int, clien
 
 func validatePBEntity(entity *sync_pb.SyncEntity) error {
 	if entity == nil {
-		return fmt.Errorf("validate SyncEntity error: empty SyncEntity")
+		return errors.New("validate SyncEntity error: empty SyncEntity")
 	}
 
 	if entity.IdString == nil {
-		return fmt.Errorf("validate SyncEntity error: empty IdString")
+		return errors.New("validate SyncEntity error: empty IdString")
 	}
 
 	if entity.Version == nil {
-		return fmt.Errorf("validate SyncEntity error: empty Version")
+		return errors.New("validate SyncEntity error: empty Version")
 	}
 
 	if entity.Specifics == nil {
-		return fmt.Errorf("validate SyncEntity error: nil Specifics")
+		return errors.New("validate SyncEntity error: nil Specifics")
 	}
 
 	return nil

@@ -28,6 +28,7 @@ const (
 
 type CommandTestSuite struct {
 	suite.Suite
+
 	dynamo *datastore.Dynamo
 	cache  *cache.Cache
 }
@@ -176,7 +177,7 @@ func assertCommonResponse(suite *CommandTestSuite, rsp *sync_pb.ClientToServerRe
 
 func assertGetUpdatesResponse(suite *CommandTestSuite, rsp *sync_pb.GetUpdatesResponse,
 	newMarker *[]*sync_pb.DataTypeProgressMarker, expectedPBSyncAttrs []*PBSyncAttrs,
-	expectedChangesRemaining int64) {
+	expectedChangesRemaining int64) { //nolint:unparam
 	PBSyncAttrs := []*PBSyncAttrs{}
 	for _, entity := range rsp.Entries {
 		// Update tokens in the expected NewProgressMarker

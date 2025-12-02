@@ -15,6 +15,7 @@ import (
 
 type ServerDefinedUniqueEntityTestSuite struct {
 	suite.Suite
+
 	dynamo *datastore.Dynamo
 }
 

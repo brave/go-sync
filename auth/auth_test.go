@@ -2,6 +2,7 @@ package auth_test
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
 	"testing"
@@ -60,8 +61,8 @@ func (suite *AuthTestSuite) TestAuthorize() {
 	outdatedToken, _, _, err := authtest.GenerateToken(time.Now().UnixMilli() - auth.TokenMaxDuration - 1)
 	suite.Require().NoError(err, "generate token should succeed")
 
-	invalidTokenErr := fmt.Errorf("Not a valid token")
-	outdatedErr := fmt.Errorf("error authorizing: %w", fmt.Errorf("token is expired"))
+	invalidTokenErr := errors.New("not a valid token")
+	outdatedErr := fmt.Errorf("error authorizing: %w", errors.New("token is expired"))
 	tests := map[string]struct {
 		token    string
 		clientID string
