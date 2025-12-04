@@ -401,7 +401,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_DeviceLimitExceed
 	}
 
 	for _, testCase := range testCases {
-		// Simulate 50 devices calling GetUpdates with NEW_CLIENT origin
+		// Simulate devices calling GetUpdates with NEW_CLIENT origin up to the expected device limit.
 		marker := getMarker(suite, []int64{0, 0})
 		msg := getClientToServerGUMsg(
 			marker, sync_pb.SyncEnums_NEW_CLIENT, true, nil)

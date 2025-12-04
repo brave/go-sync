@@ -11,7 +11,7 @@ const (
 )
 
 var (
-	HighDeviceLimitClientIDs map[string]bool
+	highDeviceLimitClientIDs map[string]bool
 )
 
 func init() {
@@ -20,18 +20,18 @@ func init() {
 }
 
 func LoadHighDeviceLimitClientIDs(clientIDList string) {
-	HighDeviceLimitClientIDs = make(map[string]bool)
+	highDeviceLimitClientIDs = make(map[string]bool)
 	if clientIDList != "" {
 		ids := strings.Split(clientIDList, ",")
 		for _, id := range ids {
-			HighDeviceLimitClientIDs[strings.ToLower(strings.TrimSpace(id))] = true
+			highDeviceLimitClientIDs[strings.ToLower(strings.TrimSpace(id))] = true
 		}
 	}
 }
 
-func checkDeviceLimit(activeDevices int, clientID string) bool {
+func hasReachedDeviceLimit(activeDevices int, clientID string) bool {
 	limit := maxActiveDevices
-	if HighDeviceLimitClientIDs[strings.ToLower(clientID)] {
+	if highDeviceLimitClientIDs[strings.ToLower(clientID)] {
 		limit = highMaxActiveDevices
 	}
 	return activeDevices >= limit

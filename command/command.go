@@ -55,8 +55,8 @@ func handleGetUpdatesRequest(cache *cache.Cache, guMsg *sync_pb.GetUpdatesMessag
 					activeDevices++
 				}
 
-				// Error out when exceeds the limit.
-				if checkDeviceLimit(activeDevices, clientID) {
+				// Error out when device limit has been reached.
+				if hasReachedDeviceLimit(activeDevices, clientID) {
 					errCode = sync_pb.SyncEnums_THROTTLED
 					return &errCode, errors.New("exceed limit of active devices in a chain")
 				}
