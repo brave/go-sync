@@ -7,7 +7,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/brave/go-sync/auth"
-	syncContext "github.com/brave/go-sync/context"
+	syncContext "github.com/brave/go-sync/synccontext"
 )
 
 // Auth verifies the token provided is valid, and sets the client id in context
