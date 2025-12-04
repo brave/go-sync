@@ -1,4 +1,4 @@
-package context
+package synccontext
 
 type Key string
 

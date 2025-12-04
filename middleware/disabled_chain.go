@@ -6,9 +6,9 @@ import (
 	"github.com/rs/zerolog/log"
 	"google.golang.org/protobuf/proto"
 
-	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
+	syncContext "github.com/brave/go-sync/synccontext"
 )
 
 // DisabledChain is a middleware to check for disabled sync chains referenced in a request,

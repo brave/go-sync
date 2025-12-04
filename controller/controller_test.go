@@ -15,11 +15,11 @@ import (
 
 	"github.com/brave/go-sync/auth/authtest"
 	"github.com/brave/go-sync/cache"
-	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/controller"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
+	syncContext "github.com/brave/go-sync/synccontext"
 )
 
 type ControllerTestSuite struct {

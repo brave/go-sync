@@ -24,10 +24,10 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/brave/go-sync/cache"
-	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/controller"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/middleware"
+	syncContext "github.com/brave/go-sync/synccontext"
 )
 
 var (
