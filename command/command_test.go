@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -95,6 +96,15 @@ func getBookmarkSpecifics() *sync_pb.EntitySpecifics {
 	}
 	return &sync_pb.EntitySpecifics{
 		SpecificsVariant: bookmarkEntitySpecifics,
+	}
+}
+
+func getDeviceInfoSpecifics() *sync_pb.EntitySpecifics {
+	deviceInfoEntitySpecifics := &sync_pb.EntitySpecifics_DeviceInfo{
+		DeviceInfo: &sync_pb.DeviceInfoSpecifics{},
+	}
+	return &sync_pb.EntitySpecifics{
+		SpecificsVariant: deviceInfoEntitySpecifics,
 	}
 }
 
@@ -376,6 +386,53 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_NewClient() {
 	expectedEncryptionKeys := make([][]byte, 1)
 	expectedEncryptionKeys[0] = []byte("1234")
 	suite.Equal(expectedEncryptionKeys, rsp.GetUpdates.EncryptionKeys)
+}
+
+func (suite *CommandTestSuite) TestHandleClientToServerMessage_DeviceLimitExceeded() {
+	highDeviceLimitClientID := "high_device_limit_client_id"
+	command.LoadHighDeviceLimitClientIDs(fmt.Sprintf("randomid,%s,anotherrandomid", highDeviceLimitClientID))
+
+	testCases := []struct {
+		clientID            string
+		expectedDeviceLimit int
+	}{
+		{clientID: "client_id_1", expectedDeviceLimit: 50},
+		{clientID: highDeviceLimitClientID, expectedDeviceLimit: 100},
+	}
+
+	for _, testCase := range testCases {
+		// Simulate 50 devices calling GetUpdates with NEW_CLIENT origin
+		marker := getMarker(suite, []int64{0, 0})
+		msg := getClientToServerGUMsg(
+			marker, sync_pb.SyncEnums_NEW_CLIENT, true, nil)
+		for i := 1; i <= testCase.expectedDeviceLimit; i++ {
+			rsp := &sync_pb.ClientToServerResponse{}
+
+			suite.Require().NoError(
+				command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, testCase.clientID),
+				"HandleClientToServerMessage should succeed for device %d", i)
+			suite.Equal(sync_pb.SyncEnums_SUCCESS, *rsp.ErrorCode, "device %d should succeed", i)
+			suite.NotNil(rsp.GetUpdates, "device %d should have GetUpdates response", i)
+
+			// Commit a device info entity after GetUpdates
+			deviceEntry := getCommitEntity(fmt.Sprintf("device_%d", i), 0, false, getDeviceInfoSpecifics())
+			commitMsg := getClientToServerCommitMsg([]*sync_pb.SyncEntity{deviceEntry})
+			commitRsp := &sync_pb.ClientToServerResponse{}
+			suite.Require().NoError(
+				command.HandleClientToServerMessage(suite.cache, commitMsg, commitRsp, suite.dynamo, testCase.clientID),
+				"Commit device info should succeed for device %d", i)
+			suite.Equal(sync_pb.SyncEnums_SUCCESS, *commitRsp.ErrorCode, "Commit device info should succeed for device %d", i)
+		}
+
+		// should get THROTTLED error when device limit is exceeded
+		rsp := &sync_pb.ClientToServerResponse{}
+		suite.Require().NoError(
+			command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, testCase.clientID),
+			"HandleClientToServerMessage should succeed")
+		suite.Equal(sync_pb.SyncEnums_THROTTLED, *rsp.ErrorCode, "errorCode should be THROTTLED")
+		suite.Require().NotNil(rsp.ErrorMessage, "error message should be present")
+		suite.Contains(*rsp.ErrorMessage, "exceed limit of active devices")
+	}
 }
 
 func (suite *CommandTestSuite) TestHandleClientToServerMessage_GUBatchSize() {
