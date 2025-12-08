@@ -13,10 +13,10 @@ import (
 
 	"github.com/brave/go-sync/cache"
 	"github.com/brave/go-sync/command"
-	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/datastore"
 	syncMiddleware "github.com/brave/go-sync/middleware"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
+	syncContext "github.com/brave/go-sync/synccontext"
 )
 
 const (
