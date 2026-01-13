@@ -1,14 +1,15 @@
 package datastore
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 )
 
 const (
@@ -36,7 +37,7 @@ type PrimaryKey struct {
 
 // Dynamo is a Datastore wrapper around a dynamoDB.
 type Dynamo struct {
-	*dynamodb.DynamoDB
+	*dynamodb.Client
 }
 
 // NewDynamo returns a dynamoDB client to be used.
@@ -49,13 +50,24 @@ func NewDynamo() (*Dynamo, error) {
 		},
 	}
 
-	awsConfig := aws.NewConfig().WithRegion(os.Getenv("AWS_REGION")).WithEndpoint(os.Getenv("AWS_ENDPOINT")).WithHTTPClient(httpClient)
-	sess, err := session.NewSession(awsConfig)
+	ctx := context.Background()
 
+	// Load default AWS configuration
+	cfg, err := config.LoadDefaultConfig(ctx,
+		config.WithRegion(os.Getenv("AWS_REGION")),
+		config.WithHTTPClient(httpClient),
+	)
 	if err != nil {
-		return nil, fmt.Errorf("error creating new AWS session: %w", err)
+		return nil, fmt.Errorf("error loading AWS config: %w", err)
 	}
 
-	db := dynamodb.New(sess)
+	// Create DynamoDB client with optional endpoint override
+	endpoint := os.Getenv("AWS_ENDPOINT")
+	db := dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
+		if endpoint != "" {
+			o.BaseEndpoint = aws.String(endpoint)
+		}
+	})
+
 	return &Dynamo{db}, nil
 }

@@ -1,13 +1,15 @@
 package datastore
 
 import (
+	"context"
 	"fmt"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
-	"github.com/aws/aws-sdk-go/service/dynamodb/expression"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
 const (
@@ -65,23 +67,22 @@ func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(counts *ClientItemCou
 			if err != nil {
 				return fmt.Errorf("error building history item count query: %w", err)
 			}
-			selectCount := dynamodb.SelectCount
 			historyCountInput := &dynamodb.QueryInput{
 				ExpressionAttributeNames:  expr.Names(),
 				ExpressionAttributeValues: expr.Values(),
 				KeyConditionExpression:    expr.KeyCondition(),
 				FilterExpression:          expr.Filter(),
 				TableName:                 aws.String(Table),
-				Select:                    &selectCount,
+				Select:                    types.SelectCount,
 			}
-			out, err := dynamo.Query(historyCountInput)
+			out, err := dynamo.Query(context.TODO(), historyCountInput)
 			if err != nil {
 				return fmt.Errorf("error querying history item count: %w", err)
 			}
 			counts.HistoryItemCountPeriod1 = 0
 			counts.HistoryItemCountPeriod2 = 0
 			counts.HistoryItemCountPeriod3 = 0
-			counts.HistoryItemCountPeriod4 = int(*out.Count)
+			counts.HistoryItemCountPeriod4 = int(out.Count)
 			filterCond = expression.And(
 				expression.AttributeExists(expression.Name(dataTypeAttrName)),
 				expression.Name(dataTypeAttrName).NotEqual(expression.Value(HistoryTypeID)),
@@ -98,13 +99,13 @@ func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(counts *ClientItemCou
 				KeyConditionExpression:    expr.KeyCondition(),
 				FilterExpression:          expr.Filter(),
 				TableName:                 aws.String(Table),
-				Select:                    &selectCount,
+				Select:                    types.SelectCount,
 			}
-			out, err = dynamo.Query(normalCountInput)
+			out, err = dynamo.Query(context.TODO(), normalCountInput)
 			if err != nil {
 				return fmt.Errorf("error querying history item count: %w", err)
 			}
-			counts.ItemCount = int(*out.Count)
+			counts.ItemCount = int(out.Count)
 		}
 		counts.LastPeriodChangeTime = now
 		counts.Version = CurrentCountVersion
@@ -112,7 +113,7 @@ func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(counts *ClientItemCou
 		timeSinceLastChange := now - counts.LastPeriodChangeTime
 		if timeSinceLastChange >= periodDurationSecs {
 			changeCount := int(timeSinceLastChange / periodDurationSecs)
-			for i := 0; i < changeCount; i++ {
+			for range changeCount {
 				// The records from "period 1"/the earliest period
 				// will be purged from the count, since they will be deleted via DDB TTL
 				counts.HistoryItemCountPeriod1 = counts.HistoryItemCountPeriod2
@@ -130,7 +131,7 @@ func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(counts *ClientItemCou
 // a given client.
 func (dynamo *Dynamo) GetClientItemCount(clientID string) (*ClientItemCounts, error) {
 	primaryKey := PrimaryKey{ClientID: clientID, ID: clientID}
-	key, err := dynamodbattribute.MarshalMap(primaryKey)
+	key, err := attributevalue.MarshalMap(primaryKey)
 	if err != nil {
 		return nil, fmt.Errorf("error marshalling primary key to get item-count item: %w", err)
 	}
@@ -140,13 +141,13 @@ func (dynamo *Dynamo) GetClientItemCount(clientID string) (*ClientItemCounts, er
 		TableName: aws.String(Table),
 	}
 
-	out, err := dynamo.GetItem(input)
+	out, err := dynamo.GetItem(context.TODO(), input)
 	if err != nil {
 		return nil, fmt.Errorf("error getting an item-count item: %w", err)
 	}
 
 	clientItemCounts := &ClientItemCounts{}
-	err = dynamodbattribute.UnmarshalMap(out.Item, clientItemCounts)
+	err = attributevalue.UnmarshalMap(out.Item, clientItemCounts)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshalling item-count item: %w", err)
 	}
@@ -169,7 +170,7 @@ func (dynamo *Dynamo) UpdateClientItemCount(counts *ClientItemCounts, newNormalI
 	counts.HistoryItemCountPeriod4 += newHistoryItemCount
 	counts.ItemCount += newNormalItemCount
 
-	item, err := dynamodbattribute.MarshalMap(*counts)
+	item, err := attributevalue.MarshalMap(*counts)
 	if err != nil {
 		return fmt.Errorf("error marshalling item counts: %w", err)
 	}
@@ -179,7 +180,7 @@ func (dynamo *Dynamo) UpdateClientItemCount(counts *ClientItemCounts, newNormalI
 		TableName: aws.String(Table),
 	}
 
-	_, err = dynamo.PutItem(input)
+	_, err = dynamo.PutItem(context.TODO(), input)
 	if err != nil {
 		return fmt.Errorf("error updating item-count item in dynamoDB: %w", err)
 	}

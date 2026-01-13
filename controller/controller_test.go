@@ -9,20 +9,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/proto"
+
 	"github.com/brave/go-sync/auth/authtest"
 	"github.com/brave/go-sync/cache"
-	syncContext "github.com/brave/go-sync/context"
 	"github.com/brave/go-sync/controller"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
-	"github.com/stretchr/testify/suite"
-	"google.golang.org/protobuf/proto"
+	syncContext "github.com/brave/go-sync/synccontext"
 )
 
 type ControllerTestSuite struct {
 	suite.Suite
+
 	dynamo *datastore.Dynamo
 	cache  *cache.Cache
 }
