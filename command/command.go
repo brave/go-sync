@@ -27,7 +27,6 @@ const (
 	setSyncPollInterval int32  = 30
 	nigoriTypeID        int32  = 47745
 	deviceInfoTypeID    int    = 154522
-	maxActiveDevices    int    = 50
 	historyCountTypeStr string = "history"
 	normalCountTypeStr  string = "normal"
 )
@@ -56,8 +55,8 @@ func handleGetUpdatesRequest(ctx context.Context, cache *cache.Cache, guMsg *syn
 					activeDevices++
 				}
 
-				// Error out when exceeds the limit.
-				if activeDevices >= maxActiveDevices {
+				// Error out when device limit has been reached.
+				if hasReachedDeviceLimit(activeDevices, clientID) {
 					errCode = sync_pb.SyncEnums_THROTTLED
 					return &errCode, errors.New("exceed limit of active devices in a chain")
 				}
