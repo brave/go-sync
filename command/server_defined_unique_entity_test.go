@@ -1,6 +1,7 @@
 package command_test
 
 import (
+	"context"
 	"sort"
 	"testing"
 
@@ -47,10 +48,10 @@ func (suite *ServerDefinedUniqueEntityTestSuite) TearDownTest() {
 
 func (suite *ServerDefinedUniqueEntityTestSuite) TestInsertServerDefinedUniqueEntities() {
 	suite.Require().NoError(
-		command.InsertServerDefinedUniqueEntities(suite.dynamo, "client1"),
+		command.InsertServerDefinedUniqueEntities(context.Background(), suite.dynamo, "client1"),
 		"InsertServerDefinedUniqueEntities should succeed")
 	suite.Require().NoError(
-		command.InsertServerDefinedUniqueEntities(suite.dynamo, "client1"),
+		command.InsertServerDefinedUniqueEntities(context.Background(), suite.dynamo, "client1"),
 		"InsertServerDefinedUniqueEntities again for a same client should succeed")
 
 	expectedSyncAttrsMap := map[string]*SyncAttrs{
@@ -157,7 +158,7 @@ func (suite *ServerDefinedUniqueEntityTestSuite) TestInsertServerDefinedUniqueEn
 	suite.Empty(expectedSyncAttrsMap)
 
 	suite.Require().NoError(
-		command.InsertServerDefinedUniqueEntities(suite.dynamo, "client2"),
+		command.InsertServerDefinedUniqueEntities(context.Background(), suite.dynamo, "client2"),
 		"InsertServerDefinedUniqueEntities should succeed for another client")
 }
 

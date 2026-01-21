@@ -28,7 +28,7 @@ func DisabledChain(next http.Handler) http.Handler {
 			return
 		}
 
-		disabled, err := db.IsSyncChainDisabled(clientID)
+		disabled, err := db.IsSyncChainDisabled(ctx, clientID)
 
 		if err != nil {
 			http.Error(w, "unable to complete request", http.StatusInternalServerError)

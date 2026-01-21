@@ -1,6 +1,7 @@
 package datastore_test
 
 import (
+	"context"
 	"sort"
 	"testing"
 
@@ -42,17 +43,17 @@ func (suite *ItemCountTestSuite) TestGetClientItemCount() {
 	for _, item := range items {
 		existing := datastore.ClientItemCounts{ClientID: item.ClientID, ID: item.ID, Version: datastore.CurrentCountVersion}
 		suite.Require().NoError(
-			suite.dynamo.UpdateClientItemCount(&existing, item.ItemCount, 0))
+			suite.dynamo.UpdateClientItemCount(context.Background(), &existing, item.ItemCount, 0))
 	}
 
 	for _, item := range items {
-		count, err := suite.dynamo.GetClientItemCount(item.ClientID)
+		count, err := suite.dynamo.GetClientItemCount(context.Background(), item.ClientID)
 		suite.Require().NoError(err, "GetClientItemCount should succeed")
 		suite.Equal(count.ItemCount, item.ItemCount, "ItemCount should match")
 	}
 
 	// Non-exist client item count should succeed with count = 0.
-	count, err := suite.dynamo.GetClientItemCount("client3")
+	count, err := suite.dynamo.GetClientItemCount(context.Background(), "client3")
 	suite.Require().NoError(err, "Get non-exist ClientItemCount should succeed")
 	suite.Equal(0, count.ItemCount)
 }
@@ -69,10 +70,10 @@ func (suite *ItemCountTestSuite) TestUpdateClientItemCount() {
 	}
 
 	for _, item := range items {
-		count, err := suite.dynamo.GetClientItemCount(item.ClientID)
+		count, err := suite.dynamo.GetClientItemCount(context.Background(), item.ClientID)
 		suite.Require().NoError(err)
 		suite.Require().NoError(
-			suite.dynamo.UpdateClientItemCount(count, item.ItemCount, 0))
+			suite.dynamo.UpdateClientItemCount(context.Background(), count, item.ItemCount, 0))
 	}
 
 	clientCountItems, err := datastoretest.ScanClientItemCounts(suite.dynamo)

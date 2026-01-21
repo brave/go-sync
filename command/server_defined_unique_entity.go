@@ -1,6 +1,7 @@
 package command
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -42,11 +43,11 @@ func createServerDefinedUniqueEntity(name string, serverDefinedTag string, clien
 
 // InsertServerDefinedUniqueEntities inserts the server defined unique tag
 // entities if it is not in the DB yet for a specific client.
-func InsertServerDefinedUniqueEntities(db datastore.Datastore, clientID string) error {
+func InsertServerDefinedUniqueEntities(ctx context.Context, db datastore.Datastore, clientID string) error {
 	var entities []*datastore.SyncEntity
 	// Check if they're existed already for this client.
 	// If yes, just return directly.
-	ready, err := db.HasServerDefinedUniqueTag(clientID, nigoriTag)
+	ready, err := db.HasServerDefinedUniqueTag(ctx, clientID, nigoriTag)
 	if err != nil {
 		return fmt.Errorf("error checking if entity with a server tag existed: %w", err)
 	}
@@ -90,7 +91,7 @@ func InsertServerDefinedUniqueEntities(db datastore.Datastore, clientID string) 
 	}
 
 	// Start a transaction to insert all server defined unique entities
-	err = db.InsertSyncEntitiesWithServerTags(entities)
+	err = db.InsertSyncEntitiesWithServerTags(ctx, entities)
 	if err != nil {
 		return fmt.Errorf("error inserting entities with server tags: %w", err)
 	}
