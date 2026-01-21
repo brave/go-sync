@@ -409,7 +409,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_DeviceLimitExceed
 			rsp := &sync_pb.ClientToServerResponse{}
 
 			suite.Require().NoError(
-				command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, testCase.clientID),
+				command.HandleClientToServerMessage(context.Background(), suite.cache, msg, rsp, suite.dynamo, testCase.clientID),
 				"HandleClientToServerMessage should succeed for device %d", i)
 			suite.Equal(sync_pb.SyncEnums_SUCCESS, *rsp.ErrorCode, "device %d should succeed", i)
 			suite.NotNil(rsp.GetUpdates, "device %d should have GetUpdates response", i)
@@ -419,7 +419,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_DeviceLimitExceed
 			commitMsg := getClientToServerCommitMsg([]*sync_pb.SyncEntity{deviceEntry})
 			commitRsp := &sync_pb.ClientToServerResponse{}
 			suite.Require().NoError(
-				command.HandleClientToServerMessage(suite.cache, commitMsg, commitRsp, suite.dynamo, testCase.clientID),
+				command.HandleClientToServerMessage(context.Background(), suite.cache, commitMsg, commitRsp, suite.dynamo, testCase.clientID),
 				"Commit device info should succeed for device %d", i)
 			suite.Equal(sync_pb.SyncEnums_SUCCESS, *commitRsp.ErrorCode, "Commit device info should succeed for device %d", i)
 		}
@@ -427,7 +427,7 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_DeviceLimitExceed
 		// should get THROTTLED error when device limit is exceeded
 		rsp := &sync_pb.ClientToServerResponse{}
 		suite.Require().NoError(
-			command.HandleClientToServerMessage(suite.cache, msg, rsp, suite.dynamo, testCase.clientID),
+			command.HandleClientToServerMessage(context.Background(), suite.cache, msg, rsp, suite.dynamo, testCase.clientID),
 			"HandleClientToServerMessage should succeed")
 		suite.Equal(sync_pb.SyncEnums_THROTTLED, *rsp.ErrorCode, "errorCode should be THROTTLED")
 		suite.Require().NotNil(rsp.ErrorMessage, "error message should be present")
