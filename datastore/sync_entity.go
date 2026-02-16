@@ -216,7 +216,10 @@ func (dynamo *Dynamo) InsertSyncEntity(ctx context.Context, entity *SyncEntity) 
 					}
 				}
 			}
-			return false, fmt.Errorf("error writing tag item and sync item in a transaction to insert sync entity: %w", err)
+			return false, fmt.Errorf(
+				"error writing tag item and sync item in a transaction to insert sync entity: %w",
+				err,
+			)
 		}
 
 		return false, nil
@@ -538,7 +541,8 @@ func (dynamo *Dynamo) UpdateSyncEntity(ctx context.Context, entity *SyncEntity, 
 
 	// Soft-delete a sync item with a client tag, use a transaction to delete its
 	// tag item too.
-	if entity.Deleted != nil && entity.ClientDefinedUniqueTag != nil && *entity.Deleted && *entity.DataType != HistoryTypeID {
+	if entity.Deleted != nil && entity.ClientDefinedUniqueTag != nil && *entity.Deleted &&
+		*entity.DataType != HistoryTypeID {
 		pk := PrimaryKey{
 			ClientID: entity.ClientID, ID: clientTagItemPrefix + *entity.ClientDefinedUniqueTag}
 		tagItemKey, err := attributevalue.MarshalMap(pk)
@@ -631,7 +635,14 @@ func (dynamo *Dynamo) UpdateSyncEntity(ctx context.Context, entity *SyncEntity, 
 // To do this in dynamoDB, we use (ClientID, DataType#Mtime) as GSI to get a
 // list of (ClientID, ID) primary keys with the given condition, then read the
 // actual sync item using the list of primary keys.
-func (dynamo *Dynamo) GetUpdatesForType(ctx context.Context, dataType int, clientToken int64, fetchFolders bool, clientID string, maxSize int64) (bool, []SyncEntity, error) {
+func (dynamo *Dynamo) GetUpdatesForType(
+	ctx context.Context,
+	dataType int,
+	clientToken int64,
+	fetchFolders bool,
+	clientID string,
+	maxSize int64,
+) (bool, []SyncEntity, error) {
 	syncEntities := []SyncEntity{}
 
 	// Get (ClientID, ID) pairs which are updates after mtime for a data type,
