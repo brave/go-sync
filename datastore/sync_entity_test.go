@@ -554,51 +554,107 @@ func (suite *SyncEntityTestSuite) TestGetUpdatesForType() {
 	suite.Require().NoError(err, "InsertSyncEntity should succeed")
 
 	// Get all updates for type 123 and client1 using token = 0.
-	hasChangesRemaining, syncItems, err := suite.dynamo.GetUpdatesForType(context.Background(), 123, 0, true, "client1", 100)
+	hasChangesRemaining, syncItems, err := suite.dynamo.GetUpdatesForType(
+		context.Background(),
+		123,
+		0,
+		true,
+		"client1",
+		100,
+	)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	suite.Equal([]datastore.SyncEntity{entity1, entity2}, syncItems)
 	suite.False(hasChangesRemaining)
 
 	// Get all updates for type 124 and client1 using token = 0.
-	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(context.Background(), 124, 0, true, "client1", 100)
+	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(
+		context.Background(),
+		124,
+		0,
+		true,
+		"client1",
+		100,
+	)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	suite.Equal([]datastore.SyncEntity{entity3}, syncItems)
 	suite.False(hasChangesRemaining)
 
 	// Get all updates for type 123 and client2 using token = 0.
-	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(context.Background(), 123, 0, true, "client2", 100)
+	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(
+		context.Background(),
+		123,
+		0,
+		true,
+		"client2",
+		100,
+	)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	suite.Equal([]datastore.SyncEntity{entity4}, syncItems)
 	suite.False(hasChangesRemaining)
 
 	// Get all updates for type 124 and client2 using token = 0.
-	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(context.Background(), 124, 0, true, "client2", 100)
+	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(
+		context.Background(),
+		124,
+		0,
+		true,
+		"client2",
+		100,
+	)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	suite.Empty(syncItems)
 	suite.False(hasChangesRemaining)
 
 	// Test maxSize will limit the return entries size, and hasChangesRemaining
 	// should be true when there are more updates available in the DB.
-	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(context.Background(), 123, 0, true, "client1", 1)
+	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(
+		context.Background(),
+		123,
+		0,
+		true,
+		"client1",
+		1,
+	)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	suite.Equal([]datastore.SyncEntity{entity1}, syncItems)
 	suite.True(hasChangesRemaining)
 
 	// Test when num of query items equal to the limit, hasChangesRemaining should
 	// be true.
-	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(context.Background(), 123, 0, true, "client1", 2)
+	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(
+		context.Background(),
+		123,
+		0,
+		true,
+		"client1",
+		2,
+	)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	suite.Equal([]datastore.SyncEntity{entity1, entity2}, syncItems)
 	suite.True(hasChangesRemaining)
 
 	// Test fetchFolders will remove folder items if false
-	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(context.Background(), 123, 0, false, "client1", 100)
+	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(
+		context.Background(),
+		123,
+		0,
+		false,
+		"client1",
+		100,
+	)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	suite.Equal([]datastore.SyncEntity{entity2}, syncItems)
 	suite.False(hasChangesRemaining)
 
 	// Get all updates for a type for a client using mtime of one item as token.
-	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(context.Background(), 123, 12345678, true, "client1", 100)
+	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(
+		context.Background(),
+		123,
+		12345678,
+		true,
+		"client1",
+		100,
+	)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	suite.Equal([]datastore.SyncEntity{entity2}, syncItems)
 	suite.False(hasChangesRemaining)
@@ -631,7 +687,14 @@ func (suite *SyncEntityTestSuite) TestGetUpdatesForType() {
 	}
 
 	// All items should be returned and sorted by Mtime.
-	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(context.Background(), 123, 0, true, "client1", 300)
+	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(
+		context.Background(),
+		123,
+		0,
+		true,
+		"client1",
+		300,
+	)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	sort.Sort(datastore.SyncEntityByMtime(expectedSyncItems))
 	suite.Equal(expectedSyncItems, syncItems)
@@ -639,7 +702,14 @@ func (suite *SyncEntityTestSuite) TestGetUpdatesForType() {
 
 	// Test that when maxGUBatchSize is smaller than total updates, the first n
 	// items ordered by Mtime should be returned.
-	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(context.Background(), 123, 0, true, "client1", 200)
+	hasChangesRemaining, syncItems, err = suite.dynamo.GetUpdatesForType(
+		context.Background(),
+		123,
+		0,
+		true,
+		"client1",
+		200,
+	)
 	suite.Require().NoError(err, "GetUpdatesForType should succeed")
 	suite.Equal(syncItems, expectedSyncItems[0:200])
 	suite.True(hasChangesRemaining)
