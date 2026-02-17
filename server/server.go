@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	_ "net/http/pprof" // pprof magic
+	_ "net/http/pprof" //nolint:gosec // G108: pprof is served on a separate listener (:6061), gated by PPROF_ENABLED
 	"os"
 	"os/signal"
 	"strconv"
@@ -142,7 +142,7 @@ func StartServer() {
 		healthCheckActive = false // disable health check
 
 		time.Sleep(60 * time.Second)
-		//nolint:errcheck // Error during shutdown in signal handler is acceptable
+		//nolint:errcheck,gosec // Error during shutdown in signal handler is acceptable
 		srv.Shutdown(serverCtx)
 	}()
 
@@ -151,6 +151,7 @@ func StartServer() {
 		// pprof attaches routes to default serve mux
 		// host:6061/debug/pprof/
 		go func() {
+			//nolint:gosec // G114: pprof diagnostic server
 			if err := http.ListenAndServe(":6061", http.DefaultServeMux); err != nil {
 				log.Err(err).Msg("pprof service returned error")
 			}
