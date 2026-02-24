@@ -641,7 +641,7 @@ func (dynamo *Dynamo) GetUpdatesForType(
 	clientToken int64,
 	fetchFolders bool,
 	clientID string,
-	maxSize int64,
+	maxSize int,
 ) (bool, []SyncEntity, error) {
 	syncEntities := []SyncEntity{}
 
@@ -675,7 +675,7 @@ func (dynamo *Dynamo) GetUpdatesForType(
 		FilterExpression:          expr.Filter(),
 		ProjectionExpression:      aws.String(projPk),
 		TableName:                 aws.String(Table),
-		Limit:                     aws.Int32(int32(maxSize)),
+		Limit:                     aws.Int32(int32(maxSize)), //nolint:gosec // G115: bounded by maxGUBatchSize=500
 	}
 
 	out, err := dynamo.Query(ctx, input)

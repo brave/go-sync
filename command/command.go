@@ -55,7 +55,7 @@ func handleGetUpdatesRequest(
 				0,
 				false,
 				clientID,
-				int64(maxGUBatchSize),
+				maxGUBatchSize,
 			)
 			if err != nil {
 				log.Error().Err(err).Msgf("db.GetUpdatesForType failed for type %v", deviceInfoTypeID)
@@ -149,7 +149,7 @@ func handleGetUpdatesRequest(
 			continue
 		}
 
-		curMaxSize := int64(maxSize) - int64(len(guRsp.Entries))
+		curMaxSize := maxSize - len(guRsp.Entries)
 		hasChangesRemaining, entities, err := db.GetUpdatesForType(
 			ctx,
 			int(*fromProgressMarker.DataTypeId),
