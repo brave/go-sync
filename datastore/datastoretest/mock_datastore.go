@@ -42,7 +42,7 @@ func (m *MockDatastore) GetUpdatesForType(
 	clientToken int64,
 	fetchFolders bool,
 	clientID string,
-	maxSize int64,
+	maxSize int32,
 ) (bool, []datastore.SyncEntity, error) {
 	args := m.Called(ctx, dataType, clientToken, fetchFolders, clientID, maxSize)
 	return args.Bool(0), args.Get(1).([]datastore.SyncEntity), args.Error(2)

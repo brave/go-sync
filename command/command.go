@@ -16,9 +16,9 @@ import (
 
 var (
 	// Could be modified in tests.
-	maxGUBatchSize              = 500
-	maxClientObjectQuota        = 50000
-	maxClientHistoryObjectQuota = 30000
+	maxGUBatchSize              int32 = 500
+	maxClientObjectQuota              = 50000
+	maxClientHistoryObjectQuota       = 30000
 )
 
 const (
@@ -55,7 +55,7 @@ func handleGetUpdatesRequest(
 				0,
 				false,
 				clientID,
-				int64(maxGUBatchSize),
+				maxGUBatchSize,
 			)
 			if err != nil {
 				log.Error().Err(err).Msgf("db.GetUpdatesForType failed for type %v", deviceInfoTypeID)
@@ -134,7 +134,7 @@ func handleGetUpdatesRequest(
 		// of break because we need to prepare NewProgressMarker for all entries in
 		// FromProgressMarker, where the returned token stays the same as the one
 		// passed in FromProgressMarker.
-		if len(guRsp.Entries) >= maxSize {
+		if len(guRsp.Entries) >= int(maxSize) {
 			continue
 		}
 
@@ -149,7 +149,7 @@ func handleGetUpdatesRequest(
 			continue
 		}
 
-		curMaxSize := int64(maxSize) - int64(len(guRsp.Entries))
+		curMaxSize := int32(int(maxSize) - len(guRsp.Entries)) //nolint:gosec // maxSize is 500 and the >= check above ensures entries fits within it
 		hasChangesRemaining, entities, err := db.GetUpdatesForType(
 			ctx,
 			int(*fromProgressMarker.DataTypeId),

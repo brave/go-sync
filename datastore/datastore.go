@@ -20,7 +20,7 @@ type Datastore interface {
 		clientToken int64,
 		fetchFolders bool,
 		clientID string,
-		maxSize int64,
+		maxSize int32,
 	) (bool, []SyncEntity, error)
 	// Check if a server-defined unique tag is in the datastore.
 	HasServerDefinedUniqueTag(ctx context.Context, clientID string, tag string) (bool, error)
