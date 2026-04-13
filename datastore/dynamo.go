@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -40,13 +41,22 @@ type Dynamo struct {
 	*dynamodb.Client
 }
 
+func envInt(key string, defaultVal int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return defaultVal
+}
+
 // NewDynamo returns a dynamoDB client to be used.
 func NewDynamo() (*Dynamo, error) {
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
-			MaxIdleConns:        200,
-			MaxIdleConnsPerHost: 50,
+			MaxIdleConns:        envInt("DYNAMO_MAX_IDLE_CONNS", 600),
+			MaxIdleConnsPerHost: envInt("DYNAMO_MAX_IDLE_CONNS_PER_HOST", 400),
 		},
 	}
 
