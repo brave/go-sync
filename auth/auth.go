@@ -80,8 +80,8 @@ func authenticate(tkn string) (string, error) {
 		return "", errors.New("token is expired")
 	}
 
-	blockedIDs := strings.Split(os.Getenv("BLOCKED_CLIENT_IDS"), ",")
-	if slices.Contains(blockedIDs, token.PublicKeyHex) {
+	blockedIDs := strings.Split(strings.ToLower(os.Getenv("BLOCKED_CLIENT_IDS")), ",")
+	if slices.Contains(blockedIDs, strings.ToLower(token.PublicKeyHex)) {
 		return "", errors.New("this client ID is blocked")
 	}
 
