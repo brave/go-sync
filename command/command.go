@@ -258,6 +258,7 @@ func handleCommitRequest(ctx context.Context, cache *cache.Cache, commitMsg *syn
 	idMap := make(map[string]string)
 	// Map to save commit data type ID & mtime
 	typeMtimeMap := make(map[int]int64)
+	sizeMonitor := NewItemSizeMonitor()
 	for i, v := range commitMsg.Entries {
 		entryRsp := &sync_pb.CommitResponse_EntryResponse{}
 		commitRsp.Entryresponse[i] = entryRsp
@@ -269,6 +270,8 @@ func handleCommitRequest(ctx context.Context, cache *cache.Cache, commitMsg *syn
 			entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Cannot convert protobuf sync entity to DB format: %v", err.Error()))
 			continue
 		}
+
+		sizeMonitor.Observe(*entityToCommit.DataType, v)
 
 		// Check if ParentID is a client-generated ID which appears in previous
 		// commit entries, if so, replace with corresponding server-generated ID.
@@ -367,6 +370,8 @@ func handleCommitRequest(ctx context.Context, cache *cache.Cache, commitMsg *syn
 		entryRsp.Version = entityToCommit.Version
 		entryRsp.Mtime = entityToCommit.Mtime
 	}
+
+	sizeMonitor.LogWarnings()
 
 	newNormalCount, newHistoryCount, err = getInterimItemCounts(ctx, cache, clientID, true)
 	if err != nil {
