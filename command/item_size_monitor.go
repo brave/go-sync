@@ -48,6 +48,7 @@ func (m *ItemSizeMonitor) LogWarnings() {
 			Int("data_type", dataType).
 			Int("count", stats.Count).
 			Int("max_size", stats.MaxSize).
-			Msg("Commit entries exceeded 400KB size threshold")
+			Int("threshold_bytes", LargeSizeThreshold).
+			Msg("Commit entries exceeded size threshold")
 	}
 }
