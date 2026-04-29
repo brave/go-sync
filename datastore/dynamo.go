@@ -28,24 +28,28 @@ const (
 	clientIDDataTypeMtimeIdxPk string = "ClientID"
 	clientIDDataTypeMtimeIdxSk string = "DataTypeMtime"
 
-	// Retry configuration for DynamoDB API calls via the AWS SDK.
+	// Default retry configuration for DynamoDB API calls via the AWS SDK.
+	// Each value can be overridden at runtime via the corresponding env var.
 	//
-	// retryMaxAttempts: total attempts per operation (1 initial + 4 retries).
+	// defaultRetryMaxAttempts: total attempts per operation (1 initial + 4 retries).
 	// The SDK default is 3. We use 5 because DynamoDB throttles are common under
 	// bursty sync traffic and the extra attempts, combined with jittered backoff,
 	// let transient 5xx / throttle errors resolve without surfacing to callers.
-	retryMaxAttempts = 5
+	// Override: DYNAMO_RETRY_MAX_ATTEMPTS.
+	defaultRetryMaxAttempts = 5
 
-	// retryMaxBackoff: upper bound on the jittered exponential backoff between
-	// retries. The SDK default is 20s, which is too long for an interactive sync
-	// path. 5s keeps worst-case total retry time bounded while still giving
-	// DynamoDB enough breathing room to shed load.
-	retryMaxBackoff = 5 * time.Second
+	// defaultRetryMaxBackoff: upper bound on the jittered exponential backoff
+	// between retries. The SDK default is 20s, which is too long for an
+	// interactive sync path. 5s keeps worst-case total retry time bounded while
+	// still giving DynamoDB enough breathing room to shed load.
+	// Override: DYNAMO_RETRY_MAX_BACKOFF (Go duration string, e.g. "5s").
+	defaultRetryMaxBackoff = 5 * time.Second
 
-	// retryTokenBucketSize: capacity of the client-side token-bucket rate
+	// defaultRetryTokenBucketSize: capacity of the client-side token-bucket rate
 	// limiter. Each retry costs tokens; when the bucket is exhausted the SDK
 	// fails the operation with a QuotaExceededError.
-	retryTokenBucketSize = 1000
+	// Override: DYNAMO_RETRY_TOKEN_BUCKET_SIZE.
+	defaultRetryTokenBucketSize = 1000
 )
 
 var (
@@ -68,6 +72,15 @@ func envInt(key string, defaultVal int) int {
 	if v := os.Getenv(key); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			return n
+		}
+	}
+	return defaultVal
+}
+
+func envDuration(key string, defaultVal time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
 		}
 	}
 	return defaultVal
@@ -143,9 +156,11 @@ func NewDynamo() (*Dynamo, error) {
 		}
 
 		o.Retryer = retry.NewStandard(func(so *retry.StandardOptions) {
-			so.MaxAttempts = retryMaxAttempts
-			so.MaxBackoff = retryMaxBackoff
-			so.RateLimiter = ratelimit.NewTokenRateLimit(retryTokenBucketSize)
+			so.MaxAttempts = envInt("DYNAMO_RETRY_MAX_ATTEMPTS", defaultRetryMaxAttempts)
+			so.MaxBackoff = envDuration("DYNAMO_RETRY_MAX_BACKOFF", defaultRetryMaxBackoff)
+			so.RateLimiter = ratelimit.NewTokenRateLimit(
+				uint(envInt("DYNAMO_RETRY_TOKEN_BUCKET_SIZE", defaultRetryTokenBucketSize)),
+			)
 		})
 	})
 
