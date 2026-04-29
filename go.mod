@@ -1,6 +1,6 @@
 module github.com/brave/go-sync
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.5
@@ -9,7 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression v1.8.37
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.57.1
 	github.com/brave-intl/bat-go/libs v0.0.0-20250620104757-9e2f8ff87fd8
-	github.com/getsentry/sentry-go v0.39.0
+	github.com/getsentry/sentry-go v0.46.0
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/client_golang v1.23.2
