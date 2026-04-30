@@ -49,7 +49,14 @@ func (a PBSyncAttrsByName) Len() int           { return len(a) }
 func (a PBSyncAttrsByName) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a PBSyncAttrsByName) Less(i, j int) bool { return *a[i].Name < *a[j].Name }
 
-func NewPBSyncAttrs(name *string, version *int64, deleted *bool, folder *bool, serverTag *string, specifics *sync_pb.EntitySpecifics) *PBSyncAttrs {
+func NewPBSyncAttrs(
+	name *string,
+	version *int64,
+	deleted *bool,
+	folder *bool,
+	serverTag *string,
+	specifics *sync_pb.EntitySpecifics,
+) *PBSyncAttrs {
 	return &PBSyncAttrs{
 		Name:                   name,
 		Version:                version,
@@ -421,7 +428,12 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_DeviceLimitExceed
 			suite.Require().NoError(
 				command.HandleClientToServerMessage(context.Background(), suite.cache, commitMsg, commitRsp, suite.dynamo, testCase.clientID),
 				"Commit device info should succeed for device %d", i)
-			suite.Equal(sync_pb.SyncEnums_SUCCESS, *commitRsp.ErrorCode, "Commit device info should succeed for device %d", i)
+			suite.Equal(
+				sync_pb.SyncEnums_SUCCESS,
+				*commitRsp.ErrorCode,
+				"Commit device info should succeed for device %d",
+				i,
+			)
 		}
 
 		// should get THROTTLED error when device limit is exceeded
@@ -598,7 +610,12 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_ReplaceParentIDTo
 	child3 := getCommitEntity("id_child3", 0, false, getBookmarkSpecifics())
 	child3.ParentIdString = aws.String("id_parent2")
 
-	updateChild0 := getCommitEntity(*rsp.Commit.Entryresponse[0].IdString, *rsp.Commit.Entryresponse[0].Version, false, getBookmarkSpecifics())
+	updateChild0 := getCommitEntity(
+		*rsp.Commit.Entryresponse[0].IdString,
+		*rsp.Commit.Entryresponse[0].Version,
+		false,
+		getBookmarkSpecifics(),
+	)
 	updateChild0.ParentIdString = aws.String("id_parent")
 
 	entries := []*sync_pb.SyncEntity{parent1, child1, parent2, child2, child3, updateChild0}
