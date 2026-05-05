@@ -128,9 +128,10 @@ func StartServer() {
 
 	port := ":8295"
 	srv := http.Server{
-		Addr:        port,
-		Handler:     r,
-		BaseContext: setupBaseCtx(serverCtx),
+		Addr:              port,
+		Handler:           r,
+		BaseContext:       setupBaseCtx(serverCtx),
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	sig := make(chan os.Signal, 1)
