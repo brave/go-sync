@@ -143,8 +143,9 @@ func StartServer() {
 		healthCheckActive = false // disable health check
 
 		time.Sleep(60 * time.Second)
-		//nolint:errcheck,gosec // Error during shutdown in signal handler is acceptable
-		srv.Shutdown(serverCtx)
+		if err := srv.Shutdown(serverCtx); err != nil {
+			log.Err(err).Msg("HTTP server graceful shutdown failed")
+		}
 	}()
 
 	// Add profiling flag to enable profiling routes.
