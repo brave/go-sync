@@ -30,7 +30,7 @@ type redisClusterClient struct {
 
 // NewRedisClient create a client for standalone redis or redis cluster.
 func NewRedisClient() RedisClient {
-	addrs := strings.Split(os.Getenv("REDIS_URL"), ",")
+	redisURL := os.Getenv("REDIS_URL")
 	env := os.Getenv("ENV")
 	cluster := env != "local" && env != ""
 	poolSize, err := strconv.Atoi(os.Getenv("REDIS_POOL_SIZE"))
@@ -38,10 +38,13 @@ func NewRedisClient() RedisClient {
 		poolSize = 100
 	}
 
-	// Fallback to localhost:6397 and non-cluster client if redis env is not set.
-	if len(addrs) == 0 {
-		addrs = []string{"localhost:6397"}
+	// Fallback to localhost:6379 and non-cluster client if redis env is not set.
+	var addrs []string
+	if redisURL == "" {
+		addrs = []string{"localhost:6379"}
 		cluster = false
+	} else {
+		addrs = strings.Split(redisURL, ",")
 	}
 
 	var r RedisClient
