@@ -403,6 +403,8 @@ func (dynamo *Dynamo) ClearServerData(ctx context.Context, clientID string) ([]S
 		return syncEntities, fmt.Errorf("error unmarshalling updated sync entities: %w", err)
 	}
 
+	log.Info().Str("chainID", clientID).Int32("count", count).Msg("Queried sync entities for deletion")
+
 	var i, j int32
 	for i = 0; i < count; i += maxTransactDeleteItemSize {
 		j = min(i+maxTransactDeleteItemSize, count)
