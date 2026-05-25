@@ -392,77 +392,84 @@ func (dynamo *Dynamo) ClearServerData(ctx context.Context, clientID string) ([]S
 		TableName:                 aws.String(Table),
 	}
 
-	out, err := dynamo.Query(ctx, input)
-	if err != nil {
-		return syncEntities, fmt.Errorf("error doing query to get updates: %w", err)
-	}
-	count := out.Count
-
-	err = attributevalue.UnmarshalListOfMaps(out.Items, &syncEntities)
-	if err != nil {
-		return syncEntities, fmt.Errorf("error unmarshalling updated sync entities: %w", err)
-	}
-
-	var i, j int32
-	for i = 0; i < count; i += maxTransactDeleteItemSize {
-		j = min(i+maxTransactDeleteItemSize, count)
-
-		items := make([]types.TransactWriteItem, 0, j-i)
-		for _, item := range syncEntities[i:j] {
-			if item.ID == disabledChainID {
-				continue
-			}
-
-			// Fail delete if race condition detected (modified time has changed).
-			if item.Version != nil {
-				cond := expression.Name("Mtime").Equal(expression.Value(*item.Mtime))
-				expr, err := expression.NewBuilder().WithCondition(cond).Build()
-				if err != nil {
-					return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
-				}
-
-				writeItem := types.TransactWriteItem{
-					Delete: &types.Delete{
-						ConditionExpression:       expr.Condition(),
-						ExpressionAttributeNames:  expr.Names(),
-						ExpressionAttributeValues: expr.Values(),
-						TableName:                 aws.String(Table),
-						Key: map[string]types.AttributeValue{
-							pk: &types.AttributeValueMemberS{
-								Value: item.ClientID,
-							},
-							sk: &types.AttributeValueMemberS{
-								Value: item.ID,
-							},
-						},
-					},
-				}
-
-				items = append(items, writeItem)
-			} else {
-				// If row doesn't hold Mtime, delete as usual.
-				writeItem := types.TransactWriteItem{
-					Delete: &types.Delete{
-						TableName: aws.String(Table),
-						Key: map[string]types.AttributeValue{
-							pk: &types.AttributeValueMemberS{
-								Value: item.ClientID,
-							},
-							sk: &types.AttributeValueMemberS{
-								Value: item.ID,
-							},
-						},
-					},
-				}
-
-				items = append(items, writeItem)
-			}
-		}
-
-		_, err = dynamo.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: items})
+	for {
+		out, err := dynamo.Query(ctx, input)
 		if err != nil {
-			return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
+			return syncEntities, fmt.Errorf("error doing query to get updates: %w", err)
 		}
+
+		var page []SyncEntity
+		err = attributevalue.UnmarshalListOfMaps(out.Items, &page)
+		if err != nil {
+			return syncEntities, fmt.Errorf("error unmarshalling updated sync entities: %w", err)
+		}
+		syncEntities = append(syncEntities, page...)
+
+		var i, j int32
+		count := out.Count
+		for i = 0; i < count; i += maxTransactDeleteItemSize {
+			j = min(i+maxTransactDeleteItemSize, count)
+
+			items := make([]types.TransactWriteItem, 0, j-i)
+			for _, item := range page[i:j] {
+				if item.ID == disabledChainID {
+					continue
+				}
+
+				// Fail delete if race condition detected (modified time has changed).
+				if item.Version != nil {
+					cond := expression.Name("Mtime").Equal(expression.Value(*item.Mtime))
+					expr, err := expression.NewBuilder().WithCondition(cond).Build()
+					if err != nil {
+						return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
+					}
+
+					writeItem := types.TransactWriteItem{
+						Delete: &types.Delete{
+							ConditionExpression:       expr.Condition(),
+							ExpressionAttributeNames:  expr.Names(),
+							ExpressionAttributeValues: expr.Values(),
+							TableName:                 aws.String(Table),
+							Key: map[string]types.AttributeValue{
+								pk: &types.AttributeValueMemberS{
+									Value: item.ClientID,
+								},
+								sk: &types.AttributeValueMemberS{
+									Value: item.ID,
+								},
+							},
+						},
+					}
+					items = append(items, writeItem)
+				} else {
+					// If row doesn't hold Mtime, delete as usual.
+					writeItem := types.TransactWriteItem{
+						Delete: &types.Delete{
+							TableName: aws.String(Table),
+							Key: map[string]types.AttributeValue{
+								pk: &types.AttributeValueMemberS{
+									Value: item.ClientID,
+								},
+								sk: &types.AttributeValueMemberS{
+									Value: item.ID,
+								},
+							},
+						},
+					}
+					items = append(items, writeItem)
+				}
+			}
+
+			_, err = dynamo.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: items})
+			if err != nil {
+				return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
+			}
+		}
+
+		if len(out.LastEvaluatedKey) == 0 {
+			break
+		}
+		input.ExclusiveStartKey = out.LastEvaluatedKey
 	}
 
 	return syncEntities, nil
