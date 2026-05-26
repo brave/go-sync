@@ -405,19 +405,31 @@ func (dynamo *Dynamo) ClearServerData(ctx context.Context, clientID string) ([]S
 		}
 		syncEntities = append(syncEntities, page...)
 
-		var i, j int32
 		count := out.Count
-		for i = 0; i < count; i += maxTransactDeleteItemSize {
-			j = min(i+maxTransactDeleteItemSize, count)
+    log.Info().Str("chainID", clientID).Int32("count", count).Msg("Queried sync entities for deletion")
 
-			items := make([]types.TransactWriteItem, 0, j-i)
-			for _, item := range page[i:j] {
-				if item.ID == disabledChainID {
-					continue
+	log.Info().Str("chainID", clientID).Int32("count", count).Msg("Queried sync entities for deletion")
+
+	var i, j int32
+	for i = 0; i < count; i += maxTransactDeleteItemSize {
+		j = min(i+maxTransactDeleteItemSize, count)
+
+		items := make([]types.TransactWriteItem, 0, j-i)
+		for _, item := range syncEntities[i:j] {
+			if item.ID == disabledChainID {
+				continue
+			}
+
+			// Fail delete if race condition detected (modified time has changed).
+			if item.Version != nil && item.Mtime != nil {
+				cond := expression.Name("Mtime").Equal(expression.Value(*item.Mtime))
+				expr, err := expression.NewBuilder().WithCondition(cond).Build()
+				if err != nil {
+					return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
 				}
 
 				// Fail delete if race condition detected (modified time has changed).
-				if item.Version != nil {
+        if item.Version != nil && item.Mtime != nil {
 					cond := expression.Name("Mtime").Equal(expression.Value(*item.Mtime))
 					expr, err := expression.NewBuilder().WithCondition(cond).Build()
 					if err != nil {
