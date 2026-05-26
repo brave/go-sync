@@ -1,8 +1,10 @@
 package datastore_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strconv"
 	"testing"
@@ -941,6 +943,51 @@ func (suite *SyncEntityTestSuite) TestClearServerData() {
 	t, err = datastoretest.ScanTagItems(suite.dynamo)
 	suite.Require().NoError(err, "ScanTagItems should succeed")
 	suite.Empty(t, "No items should be written if fail")
+}
+
+// Inserts enough large items that the underlying Query response exceeds the
+// 1MB per-page limit, forcing pagination. Verifies ClearServerData walks every
+// page and deletes every item rather than stopping after the first page.
+//
+// 30 items × ~350KB Specifics ≈ 10MB of raw item data, which guarantees many
+// Query pages on both dynamodb-local and the real service (both enforce the
+// 1MB Query response limit per the AWS docs). 350KB also stays just under the
+// 400KB DynamoDB per-item size cap, exercising near-worst-case page packing.
+func (suite *SyncEntityTestSuite) TestClearServerDataPagination() {
+	const itemCount = 30
+	const specificsSize = 350 * 1024
+
+	// Deterministic, repeatable, no extra deps — only the size counts toward
+	// the 1MB query budget, not the content.
+	blob := bytes.Repeat([]byte("x"), specificsSize)
+	clientID := "client-pagination"
+
+	for i := 0; i < itemCount; i++ {
+		entity := datastore.SyncEntity{
+			ClientID:      clientID,
+			ID:            fmt.Sprintf("id-%04d", i),
+			Version:       aws.Int64(1),
+			Ctime:         aws.Int64(12345678),
+			Mtime:         aws.Int64(int64(12345678 + i)),
+			DataType:      aws.Int(123),
+			Folder:        aws.Bool(false),
+			Deleted:       aws.Bool(false),
+			DataTypeMtime: aws.String("123#12345678"),
+			Specifics:     blob,
+		}
+		_, err := suite.dynamo.InsertSyncEntity(context.Background(), &entity)
+		suite.Require().NoError(err, "InsertSyncEntity should succeed")
+	}
+
+	cleared, err := suite.dynamo.ClearServerData(context.Background(), clientID)
+	suite.Require().NoError(err, "ClearServerData should succeed")
+	// If pagination is broken (e.g. single Query call), only the first ~1MB
+	// page of items would be fetched and deleted, leaving the rest behind.
+	suite.Len(cleared, itemCount, "pagination must fetch every item, not stop after the first 1MB page")
+
+	remaining, err := datastoretest.ScanSyncEntities(suite.dynamo)
+	suite.Require().NoError(err, "ScanSyncEntities should succeed")
+	suite.Empty(remaining, "every fetched item must be deleted")
 }
 
 // Some entries have a nil Mtime; ClearServerData must handle them without panicking.
