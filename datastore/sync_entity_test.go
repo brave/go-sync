@@ -943,6 +943,31 @@ func (suite *SyncEntityTestSuite) TestClearServerData() {
 	suite.Empty(t, "No items should be written if fail")
 }
 
+// Some entries have a nil Mtime; ClearServerData must handle them without panicking.
+func (suite *SyncEntityTestSuite) TestClearServerDataLegacyMissingMtime() {
+	entity := datastore.SyncEntity{
+		ClientID:      "client1",
+		ID:            "id1",
+		Version:       aws.Int64(1),
+		Ctime:         aws.Int64(12345678),
+		Mtime:         nil,
+		DataType:      aws.Int(123),
+		Folder:        aws.Bool(false),
+		Deleted:       aws.Bool(false),
+		DataTypeMtime: aws.String("123#12345678"),
+	}
+	_, err := suite.dynamo.InsertSyncEntity(context.Background(), &entity)
+	suite.Require().NoError(err, "InsertSyncEntity should succeed")
+
+	e, err := suite.dynamo.ClearServerData(context.Background(), entity.ClientID)
+	suite.Require().NoError(err, "ClearServerData should not panic on missing Mtime")
+	suite.Len(e, 1)
+
+	remaining, err := datastoretest.ScanSyncEntities(suite.dynamo)
+	suite.Require().NoError(err, "ScanSyncEntities should succeed")
+	suite.Empty(remaining, "row should be deleted even without Mtime")
+}
+
 func TestSyncEntityTestSuite(t *testing.T) {
 	suite.Run(t, new(SyncEntityTestSuite))
 }

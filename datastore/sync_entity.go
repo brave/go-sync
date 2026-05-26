@@ -403,6 +403,8 @@ func (dynamo *Dynamo) ClearServerData(ctx context.Context, clientID string) ([]S
 		return syncEntities, fmt.Errorf("error unmarshalling updated sync entities: %w", err)
 	}
 
+	log.Info().Str("chainID", clientID).Int32("count", count).Msg("Queried sync entities for deletion")
+
 	var i, j int32
 	for i = 0; i < count; i += maxTransactDeleteItemSize {
 		j = min(i+maxTransactDeleteItemSize, count)
@@ -414,7 +416,7 @@ func (dynamo *Dynamo) ClearServerData(ctx context.Context, clientID string) ([]S
 			}
 
 			// Fail delete if race condition detected (modified time has changed).
-			if item.Version != nil {
+			if item.Version != nil && item.Mtime != nil {
 				cond := expression.Name("Mtime").Equal(expression.Value(*item.Mtime))
 				expr, err := expression.NewBuilder().WithCondition(cond).Build()
 				if err != nil {
