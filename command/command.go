@@ -413,6 +413,8 @@ func handleClearServerDataRequest(ctx context.Context, cache *cache.Cache, db da
 		return &errCode, err
 	}
 
+	log.Info().Str("chainID", clientID).Msg("Clearing server data")
+
 	syncEntities, err := db.ClearServerData(ctx, clientID)
 	if err != nil {
 		errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
@@ -434,6 +436,8 @@ func handleClearServerDataRequest(ctx context.Context, cache *cache.Cache, db da
 			return &errCode, err
 		}
 	}
+
+	log.Info().Str("chainID", clientID).Int("deletedCount", len(syncEntities)).Msg("Server data cleared")
 
 	return &errCode, nil
 }
