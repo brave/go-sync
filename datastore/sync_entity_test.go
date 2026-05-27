@@ -1,8 +1,10 @@
 package datastore_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strconv"
 	"testing"
@@ -941,6 +943,70 @@ func (suite *SyncEntityTestSuite) TestClearServerData() {
 	t, err = datastoretest.ScanTagItems(suite.dynamo)
 	suite.Require().NoError(err, "ScanTagItems should succeed")
 	suite.Empty(t, "No items should be written if fail")
+}
+
+// Inserts enough large items that the underlying Query response exceeds the
+// 1MB per-page limit, forcing pagination. Verifies ClearServerData walks every
+// page and deletes every item for the target chain, and that items belonging
+// to other chains are not touched.
+//
+// 30 items × ~350KB Specifics ≈ 10MB of raw item data, which guarantees many
+// Query pages on both dynamodb-local and the real service (both enforce the
+// 1MB Query response limit per the AWS docs). 350KB also stays just under the
+// 400KB DynamoDB per-item size cap, exercising near-worst-case page packing.
+func (suite *SyncEntityTestSuite) TestClearServerDataPagination() {
+	const itemCount = 30
+	const otherClientItemCount = 5
+	const specificsSize = 350 * 1024
+
+	// Deterministic, repeatable, no extra deps — only the size counts toward
+	// the 1MB query budget, not the content.
+	blob := bytes.Repeat([]byte("x"), specificsSize)
+	clientID := "client-pagination"
+	otherClientID := "client-other"
+
+	insert := func(cid string, count int, specifics []byte) {
+		for i := 0; i < count; i++ {
+			entity := datastore.SyncEntity{
+				ClientID:      cid,
+				ID:            fmt.Sprintf("id-%04d", i),
+				Version:       aws.Int64(1),
+				Ctime:         aws.Int64(12345678),
+				Mtime:         aws.Int64(int64(12345678 + i)),
+				DataType:      aws.Int(123),
+				Folder:        aws.Bool(false),
+				Deleted:       aws.Bool(false),
+				DataTypeMtime: aws.String("123#12345678"),
+				Specifics:     specifics,
+			}
+			_, err := suite.dynamo.InsertSyncEntity(context.Background(), &entity)
+			suite.Require().NoError(err, "InsertSyncEntity should succeed")
+		}
+	}
+
+	insert(clientID, itemCount, blob)
+	// Keep other-chain items small — ScanSyncEntities doesn't paginate, so a
+	// large blob here could push the post-clear scan past the 1MB page cap
+	// and cause flaky Len assertions.
+	insert(otherClientID, otherClientItemCount, nil)
+
+	cleared, err := suite.dynamo.ClearServerData(context.Background(), clientID)
+	suite.Require().NoError(err, "ClearServerData should succeed")
+	// If pagination is broken (e.g. single Query call), only the first ~1MB
+	// page of items would be fetched and deleted, leaving the rest behind.
+	suite.Len(cleared, itemCount, "pagination must fetch every item, not stop after the first 1MB page")
+	for _, item := range cleared {
+		suite.Equal(clientID, item.ClientID, "ClearServerData must only return items for the target chain")
+	}
+
+	remaining, err := datastoretest.ScanSyncEntities(suite.dynamo)
+	suite.Require().NoError(err, "ScanSyncEntities should succeed")
+	suite.Lenf(remaining, otherClientItemCount,
+		"items belonging to other chains must not be deleted: expected %d remaining, got %d",
+		otherClientItemCount, len(remaining))
+	for _, item := range remaining {
+		suite.Equal(otherClientID, item.ClientID, "only the other chain's items should remain")
+	}
 }
 
 // Some entries have a nil Mtime; ClearServerData must handle them without panicking.
