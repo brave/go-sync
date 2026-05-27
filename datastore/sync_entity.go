@@ -404,6 +404,7 @@ func (dynamo *Dynamo) ClearServerData(ctx context.Context, clientID string) ([]S
 
 	paginator := dynamodb.NewQueryPaginator(dynamo.Client, input)
 	var totalCount int32
+	var pageIndex int
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
@@ -417,7 +418,8 @@ func (dynamo *Dynamo) ClearServerData(ctx context.Context, clientID string) ([]S
 		syncEntities = append(syncEntities, pageEntities...)
 		totalCount += page.Count
 
-		log.Info().Str("chainID", clientID).Int32("count", page.Count).Msg("Queried sync entities for deletion")
+		log.Info().Str("chainID", clientID).Int("page", pageIndex).Int32("count", page.Count).Msg("Queried sync entities for deletion")
+		pageIndex++
 
 		for i := int32(0); i < page.Count; i += maxTransactDeleteItemSize {
 			j := min(i+maxTransactDeleteItemSize, page.Count)
