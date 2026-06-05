@@ -1104,6 +1104,53 @@ func (suite *SyncEntityTestSuite) TestClearServerDataLegacyMissingMtime() {
 	suite.Empty(remaining, "row should be deleted even without Mtime")
 }
 
+// TestBraveNewsCommitAndGetUpdates exercises the real datastore paths for the
+// new BRAVE_NEWS data type (oneof field 10000000): CreateDBSyncEntity (which
+// extracts the data type via reflection on the protobuf tag), InsertSyncEntity,
+// and GetUpdatesForType, then confirms the specifics blob round-trips.
+func (suite *SyncEntityTestSuite) TestBraveNewsCommitAndGetUpdates() {
+	braveNews := &sync_pb.BraveNewsSpecifics{
+		Name:  aws.String("brave.today.sources"),
+		Value: &sync_pb.BraveNewsSpecifics_DictValue{DictValue: `{"pub1":true}`},
+	}
+	specifics := &sync_pb.EntitySpecifics{
+		SpecificsVariant: &sync_pb.EntitySpecifics_BraveNews{BraveNews: braveNews},
+	}
+	pbEntity := sync_pb.SyncEntity{
+		IdString:      aws.String("brave_news_item_id"),
+		Version:       aws.Int64(0),
+		Name:          aws.String("brave.today.sources"),
+		NonUniqueName: aws.String("brave.today.sources"),
+		ClientTagHash: aws.String("brave.today.sources"),
+		Deleted:       aws.Bool(false),
+		Folder:        aws.Bool(false),
+		Specifics:     specifics,
+	}
+
+	// The data type must be extracted as 10000000 from the protobuf tag.
+	dbEntity, err := datastore.CreateDBSyncEntity(
+		&pbEntity, aws.String("guid"), "bn_client")
+	suite.Require().NoError(err, "CreateDBSyncEntity should succeed")
+	suite.Require().NotNil(dbEntity.DataType)
+	suite.Equal(10000000, *dbEntity.DataType, "BRAVE_NEWS data type ID")
+
+	_, err = suite.dynamo.InsertSyncEntity(context.Background(), dbEntity)
+	suite.Require().NoError(err, "InsertSyncEntity should succeed")
+
+	hasChangesRemaining, syncItems, err := suite.dynamo.GetUpdatesForType(
+		context.Background(), 10000000, 0, true, "bn_client", 100)
+	suite.Require().NoError(err, "GetUpdatesForType should succeed")
+	suite.False(hasChangesRemaining)
+	suite.Require().Len(syncItems, 1, "should return the one BRAVE_NEWS entity")
+
+	// The stored specifics blob must round-trip back to the original values.
+	var gotSpecifics sync_pb.EntitySpecifics
+	err = proto.Unmarshal(syncItems[0].Specifics, &gotSpecifics)
+	suite.Require().NoError(err, "Unmarshal specifics should succeed")
+	suite.Equal("brave.today.sources", gotSpecifics.GetBraveNews().GetName())
+	suite.Equal(`{"pub1":true}`, gotSpecifics.GetBraveNews().GetDictValue())
+}
+
 func TestSyncEntityTestSuite(t *testing.T) {
 	suite.Run(t, new(SyncEntityTestSuite))
 }

@@ -1,0 +1,28 @@
+// Copyright (c) 2026 The Brave Authors. All rights reserved.
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this file,
+// You can obtain one at http://mozilla.org/MPL/2.0/.
+
+syntax = "proto2";
+
+option go_package = "./sync_pb";
+
+option java_multiple_files = true;
+option java_package = "org.chromium.components.sync.protocol";
+
+option optimize_for = LITE_RUNTIME;
+
+package sync_pb;
+
+// One entity per synced Brave News preference. Mirrors the client definition in
+// brave-core (brave/components/sync/protocol/brave_news_specifics.proto). The
+// server stores the specifics opaquely; this definition only needs to exist so
+// the brave_news oneof field (10000000) is recognized and the data type can be
+// extracted.
+message BraveNewsSpecifics {
+  optional string name = 1;
+  oneof value {
+    bool bool_value = 2;
+    string dict_value = 3;
+  }
+}
