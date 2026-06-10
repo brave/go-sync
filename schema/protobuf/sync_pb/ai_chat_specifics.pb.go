@@ -140,6 +140,12 @@ func (*AIChatCompressibleString_Gzipped) isAIChatCompressibleString_Value() {}
 
 // One sync entity is either a Conversation metadata record or a single
 // conversation Entry record.
+//
+// This message is registered in EntitySpecifics (sync/protocol/
+// entity_specifics.proto) at field number 10000001. Brave reserves field
+// numbers in the 10000000+ range for its own sync types, far above the
+// numbers upstream Chromium currently assigns, so that future upstream
+// EntitySpecifics additions cannot collide with ours.
 type AIChatConversationSpecifics struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
