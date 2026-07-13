@@ -25,7 +25,13 @@ const (
 	bookmarkBarTag      string = "bookmark_bar"
 )
 
-func createServerDefinedUniqueEntity(name string, serverDefinedTag string, clientID string, parentID string, specifics *sync_pb.EntitySpecifics) (*datastore.SyncEntity, error) {
+func createServerDefinedUniqueEntity(
+	name string,
+	serverDefinedTag string,
+	clientID string,
+	parentID string,
+	specifics *sync_pb.EntitySpecifics,
+) (*datastore.SyncEntity, error) {
 	now := time.Now().UnixMilli()
 	deleted := false
 	folder := true

@@ -41,7 +41,11 @@ func (suite *ItemCountTestSuite) TestGetClientItemCount() {
 		{ClientID: "client2", ID: "client2", ItemCount: 10},
 	}
 	for _, item := range items {
-		existing := datastore.ClientItemCounts{ClientID: item.ClientID, ID: item.ID, Version: datastore.CurrentCountVersion}
+		existing := datastore.ClientItemCounts{
+			ClientID: item.ClientID,
+			ID:       item.ID,
+			Version:  datastore.CurrentCountVersion,
+		}
 		suite.Require().NoError(
 			suite.dynamo.UpdateClientItemCount(context.Background(), &existing, item.ItemCount, 0))
 	}

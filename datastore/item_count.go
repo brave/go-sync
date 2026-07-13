@@ -60,7 +60,8 @@ func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(ctx context.Context, 
 			// Query the DB to get updated counts
 			pkCond := expression.Key(clientIDDataTypeMtimeIdxPk).Equal(expression.Value(counts.ClientID))
 			filterCond := expression.And(
-				expression.Name(dataTypeAttrName).In(expression.Value(HistoryTypeID), expression.Value(HistoryDeleteDirectiveTypeID)),
+				expression.Name(dataTypeAttrName).
+					In(expression.Value(HistoryTypeID), expression.Value(HistoryDeleteDirectiveTypeID)),
 				expression.Name(deletedAttrName).Equal(expression.Value(false)),
 			)
 			expr, err := expression.NewBuilder().WithKeyCondition(pkCond).WithFilter(filterCond).Build()
@@ -166,7 +167,12 @@ func (dynamo *Dynamo) GetClientItemCount(ctx context.Context, clientID string) (
 
 // UpdateClientItemCount updates the count of non-deleted sync items for a
 // given client stored in the dynamoDB.
-func (dynamo *Dynamo) UpdateClientItemCount(ctx context.Context, counts *ClientItemCounts, newNormalItemCount int, newHistoryItemCount int) error {
+func (dynamo *Dynamo) UpdateClientItemCount(
+	ctx context.Context,
+	counts *ClientItemCounts,
+	newNormalItemCount int,
+	newHistoryItemCount int,
+) error {
 	counts.HistoryItemCountPeriod4 += newHistoryItemCount
 	counts.ItemCount += newNormalItemCount
 
