@@ -31,7 +31,11 @@ const (
 	normalCountTypeStr  string = "normal"
 )
 
-func setupNewClient(ctx context.Context, db datastore.Datastore, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
+func setupNewClient(
+	ctx context.Context,
+	db datastore.Datastore,
+	clientID string,
+) (*sync_pb.SyncEnums_ErrorType, error) {
 	// Reject the request if client has >= 50 devices in the chain.
 	activeDevices := 0
 	for {

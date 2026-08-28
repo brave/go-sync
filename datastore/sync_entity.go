@@ -430,7 +430,11 @@ func (dynamo *Dynamo) ClearServerData(ctx context.Context, clientID string) ([]S
 		syncEntities = append(syncEntities, pageEntities...)
 		totalCount += page.Count
 
-		log.Info().Str("chainID", clientID).Int("page", pageIndex).Int32("count", page.Count).Msg("Queried sync entities for deletion")
+		log.Info().
+			Str("chainID", clientID).
+			Int("page", pageIndex).
+			Int32("count", page.Count).
+			Msg("Queried sync entities for deletion")
 		pageIndex++
 
 		for i := int32(0); i < page.Count; i += maxTransactDeleteItemSize {
@@ -480,7 +484,10 @@ func (dynamo *Dynamo) ClearServerData(ctx context.Context, clientID string) ([]S
 				continue
 			}
 
-			if _, err := dynamo.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: items}); err != nil {
+			if _, err := dynamo.TransactWriteItems(
+				ctx,
+				&dynamodb.TransactWriteItemsInput{TransactItems: items},
+			); err != nil {
 				return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
 			}
 		}
