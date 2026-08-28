@@ -194,10 +194,10 @@ func handleGetUpdatesRequest(
 		// Fill the PB entry from above DB entries until maxSize is reached.
 		j := 0
 		for ; j < len(entities) && len(guRsp.Entries) < cap(guRsp.Entries); j++ {
-			entity, err := datastore.CreatePBSyncEntity(&entities[j])
-			if err != nil {
+			entity, createErr := datastore.CreatePBSyncEntity(&entities[j])
+			if createErr != nil {
 				errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-				return &errCode, fmt.Errorf("error creating protobuf sync entity from DB entity: %w", err)
+				return &errCode, fmt.Errorf("error creating protobuf sync entity from DB entity: %w", createErr)
 			}
 			guRsp.Entries = append(guRsp.Entries, entity)
 		}
@@ -311,12 +311,12 @@ func handleCommitRequest(
 		entryRsp := &sync_pb.CommitResponse_EntryResponse{}
 		commitRsp.Entryresponse[i] = entryRsp
 
-		entityToCommit, err := datastore.CreateDBSyncEntity(v, commitMsg.CacheGuid, clientID)
-		if err != nil { // Can't unmarshal & marshal the message from PB into DB format
+		entityToCommit, createErr := datastore.CreateDBSyncEntity(v, commitMsg.CacheGuid, clientID)
+		if createErr != nil { // Can't unmarshal & marshal the message from PB into DB format
 			rspType := sync_pb.CommitResponse_INVALID_MESSAGE
 			entryRsp.ResponseType = &rspType
 			entryRsp.ErrorMessage = aws.String(
-				fmt.Sprintf("Cannot convert protobuf sync entity to DB format: %v", err.Error()),
+				fmt.Sprintf("Cannot convert protobuf sync entity to DB format: %v", createErr.Error()),
 			)
 			continue
 		}
@@ -366,15 +366,15 @@ func handleCommitRequest(
 				// Insert all non-history items. For history items, ignore any items above history quoto
 				// and lie to the client about the objects being synced instead of returning OVER_QUOTA
 				// so the client can continue to sync other entities.
-				conflict, err := db.InsertSyncEntity(ctx, entityToCommit)
-				if err != nil {
-					log.Error().Err(err).Msg("Insert sync entity failed")
+				conflict, insertErr := db.InsertSyncEntity(ctx, entityToCommit)
+				if insertErr != nil {
+					log.Error().Err(insertErr).Msg("Insert sync entity failed")
 					rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
 					if conflict {
 						rspType = sync_pb.CommitResponse_CONFLICT
 					}
 					entryRsp.ResponseType = &rspType
-					entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Insert sync entity failed: %v", err.Error()))
+					entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Insert sync entity failed: %v", insertErr.Error()))
 					continue
 				}
 
@@ -391,12 +391,12 @@ func handleCommitRequest(
 				}
 			}
 		} else { // Update
-			conflict, deleted, err := db.UpdateSyncEntity(ctx, entityToCommit, oldVersion)
-			if err != nil {
-				log.Error().Err(err).Msg("Update sync entity failed")
+			conflict, deleted, updateErr := db.UpdateSyncEntity(ctx, entityToCommit, oldVersion)
+			if updateErr != nil {
+				log.Error().Err(updateErr).Msg("Update sync entity failed")
 				rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
 				entryRsp.ResponseType = &rspType
-				entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Update sync entity failed: %v", err.Error()))
+				entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Update sync entity failed: %v", updateErr.Error()))
 				continue
 			}
 			if conflict {

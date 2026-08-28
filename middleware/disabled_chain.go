@@ -40,9 +40,9 @@ func DisabledChain(next http.Handler) http.Handler {
 			csRsp := sync_pb.ClientToServerResponse{
 				ErrorCode: &errCode,
 			}
-			out, err := proto.Marshal(&csRsp)
-			if err != nil {
-				log.Error().Err(err).Msg("Marshall ClientToServerResponse failed")
+			out, marshalErr := proto.Marshal(&csRsp)
+			if marshalErr != nil {
+				log.Error().Err(marshalErr).Msg("Marshall ClientToServerResponse failed")
 				http.Error(w, "Marshal Error", http.StatusInternalServerError)
 				return
 			}

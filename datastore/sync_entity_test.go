@@ -683,8 +683,8 @@ func (suite *SyncEntityTestSuite) TestGetUpdatesForType() {
 		entity.ID = "id" + strconv.Itoa(i)
 		entity.Mtime = aws.Int64(mtime)
 		entity.DataTypeMtime = aws.String("123#" + strconv.FormatInt(*entity.Mtime, 10))
-		_, err := suite.dynamo.InsertSyncEntity(context.Background(), &entity)
-		suite.Require().NoError(err, "InsertSyncEntity should succeed")
+		_, insertErr := suite.dynamo.InsertSyncEntity(context.Background(), &entity)
+		suite.Require().NoError(insertErr, "InsertSyncEntity should succeed")
 		expectedSyncItems = append(expectedSyncItems, entity)
 	}
 

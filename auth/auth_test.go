@@ -112,8 +112,8 @@ func (suite *AuthTestSuite) TestAuthorize() {
 	}
 	for testName, test := range tests {
 		req.Header.Set("Authorization", test.token)
-		clientID, err := auth.Authorize(req)
-		suite.Require().Equal(test.err, err,
+		clientID, authErr := auth.Authorize(req)
+		suite.Require().Equal(test.err, authErr,
 			"error mismatched for %s test case", testName)
 		suite.Require().Equal(test.clientID, clientID,
 			"clientID mismatched for %s test case", testName)
