@@ -451,7 +451,11 @@ func (dynamo *Dynamo) ClearServerData(ctx context.Context, clientID string) ([]S
 					cond := expression.Name("Mtime").Equal(expression.Value(*item.Mtime))
 					condExpr, buildErr := expression.NewBuilder().WithCondition(cond).Build()
 					if buildErr != nil {
-						return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, buildErr)
+						return syncEntities, fmt.Errorf(
+							"error deleting sync entities for client %s: %w",
+							clientID,
+							buildErr,
+						)
 					}
 
 					items = append(items, types.TransactWriteItem{
