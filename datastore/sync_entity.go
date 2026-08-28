@@ -418,14 +418,14 @@ func (dynamo *Dynamo) ClearServerData(ctx context.Context, clientID string) ([]S
 	var totalCount int32
 	var pageIndex int
 	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(ctx)
-		if err != nil {
-			return syncEntities, fmt.Errorf("error querying sync entities to clear: %w", err)
+		page, pageErr := paginator.NextPage(ctx)
+		if pageErr != nil {
+			return syncEntities, fmt.Errorf("error querying sync entities to clear: %w", pageErr)
 		}
 
 		var pageEntities []SyncEntity
-		if err := attributevalue.UnmarshalListOfMaps(page.Items, &pageEntities); err != nil {
-			return syncEntities, fmt.Errorf("error unmarshalling sync entities to clear: %w", err)
+		if unmarshalErr := attributevalue.UnmarshalListOfMaps(page.Items, &pageEntities); unmarshalErr != nil {
+			return syncEntities, fmt.Errorf("error unmarshalling sync entities to clear: %w", unmarshalErr)
 		}
 		syncEntities = append(syncEntities, pageEntities...)
 		totalCount += page.Count
@@ -449,9 +449,9 @@ func (dynamo *Dynamo) ClearServerData(ctx context.Context, clientID string) ([]S
 				// Fail delete if race condition detected (modified time has changed).
 				if item.Version != nil && item.Mtime != nil {
 					cond := expression.Name("Mtime").Equal(expression.Value(*item.Mtime))
-					condExpr, err := expression.NewBuilder().WithCondition(cond).Build()
-					if err != nil {
-						return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
+					condExpr, buildErr := expression.NewBuilder().WithCondition(cond).Build()
+					if buildErr != nil {
+						return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, buildErr)
 					}
 
 					items = append(items, types.TransactWriteItem{
@@ -484,11 +484,11 @@ func (dynamo *Dynamo) ClearServerData(ctx context.Context, clientID string) ([]S
 				continue
 			}
 
-			if _, err := dynamo.TransactWriteItems(
+			if _, writeErr := dynamo.TransactWriteItems(
 				ctx,
 				&dynamodb.TransactWriteItemsInput{TransactItems: items},
-			); err != nil {
-				return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
+			); writeErr != nil {
+				return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, writeErr)
 			}
 		}
 	}
@@ -735,9 +735,9 @@ func (dynamo *Dynamo) GetUpdatesForType(
 		// Use paginator to automatically handle UnprocessedKeys
 		paginator := dynamodb.NewBatchGetItemPaginator(dynamo.Client, batchInput)
 		for paginator.HasMorePages() {
-			batchOut, err := paginator.NextPage(ctx)
-			if err != nil {
-				return false, syncEntities, fmt.Errorf("error getting update items in a batch: %w", err)
+			batchOut, batchErr := paginator.NextPage(ctx)
+			if batchErr != nil {
+				return false, syncEntities, fmt.Errorf("error getting update items in a batch: %w", batchErr)
 			}
 			outAv = append(outAv, batchOut.Responses[Table]...)
 		}
