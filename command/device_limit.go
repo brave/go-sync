@@ -22,8 +22,7 @@ func init() {
 func LoadHighDeviceLimitClientIDs(clientIDList string) {
 	highDeviceLimitClientIDs = make(map[string]bool)
 	if clientIDList != "" {
-		ids := strings.Split(clientIDList, ",")
-		for _, id := range ids {
+		for id := range strings.SplitSeq(clientIDList, ",") {
 			highDeviceLimitClientIDs[strings.ToLower(strings.TrimSpace(id))] = true
 		}
 	}
