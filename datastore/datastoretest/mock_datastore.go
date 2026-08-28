@@ -54,8 +54,8 @@ func (m *MockDatastore) HasServerDefinedUniqueTag(ctx context.Context, clientID 
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *MockDatastore) HasItem(ctx context.Context, clientID string, ID string) (bool, error) {
-	args := m.Called(ctx, clientID, ID)
+func (m *MockDatastore) HasItem(ctx context.Context, clientID string, id string) (bool, error) {
+	args := m.Called(ctx, clientID, id)
 	return args.Bool(0), args.Error(1)
 }
 

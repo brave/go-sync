@@ -276,8 +276,8 @@ func (dynamo *Dynamo) HasServerDefinedUniqueTag(ctx context.Context, clientID st
 	return out.Item != nil, nil
 }
 
-func (dynamo *Dynamo) HasItem(ctx context.Context, clientID string, ID string) (bool, error) {
-	primaryKey := PrimaryKey{ClientID: clientID, ID: ID}
+func (dynamo *Dynamo) HasItem(ctx context.Context, clientID string, id string) (bool, error) {
+	primaryKey := PrimaryKey{ClientID: clientID, ID: id}
 	key, err := attributevalue.MarshalMap(primaryKey)
 
 	if err != nil {

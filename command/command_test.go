@@ -195,7 +195,7 @@ func assertCommonResponse(suite *CommandTestSuite, rsp *sync_pb.ClientToServerRe
 func assertGetUpdatesResponse(suite *CommandTestSuite, rsp *sync_pb.GetUpdatesResponse,
 	newMarker *[]*sync_pb.DataTypeProgressMarker, expectedPBSyncAttrs []*PBSyncAttrs,
 	expectedChangesRemaining int64) { //nolint:unparam
-	PBSyncAttrs := []*PBSyncAttrs{}
+	pbSyncAttrs := []*PBSyncAttrs{}
 	for _, entity := range rsp.Entries {
 		// Update tokens in the expected NewProgressMarker
 		var tokenPtr *[]byte
@@ -210,18 +210,18 @@ func assertGetUpdatesResponse(suite *CommandTestSuite, rsp *sync_pb.GetUpdatesRe
 			binary.PutVarint(*tokenPtr, *entity.Mtime)
 		}
 
-		PBSyncAttrs = append(PBSyncAttrs,
+		pbSyncAttrs = append(pbSyncAttrs,
 			NewPBSyncAttrs(entity.Name, entity.Version, entity.Deleted,
 				entity.Folder, entity.ServerDefinedUniqueTag, entity.Specifics))
 	}
 
 	sort.Sort(PBSyncAttrsByName(expectedPBSyncAttrs))
-	sort.Sort(PBSyncAttrsByName(PBSyncAttrs))
+	sort.Sort(PBSyncAttrsByName(pbSyncAttrs))
 
 	// Marshal to json to ignore protobuf internal fields when checking equality.
 	s1, err := json.Marshal(expectedPBSyncAttrs)
 	suite.Require().NoError(err, "json.Marshal should succeed")
-	s2, err := json.Marshal(PBSyncAttrs)
+	s2, err := json.Marshal(pbSyncAttrs)
 	suite.Require().NoError(err, "json.Marshal should succeed")
 	suite.Equal(s1, s2)
 
