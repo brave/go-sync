@@ -31,6 +31,53 @@ const (
 	normalCountTypeStr  string = "normal"
 )
 
+func setupNewClient(ctx context.Context, db datastore.Datastore, clientID string) (*sync_pb.SyncEnums_ErrorType, error) {
+	// Reject the request if client has >= 50 devices in the chain.
+	activeDevices := 0
+	for {
+		hasChangesRemaining, syncEntities, err := db.GetUpdatesForType(
+			ctx,
+			deviceInfoTypeID,
+			0,
+			false,
+			clientID,
+			maxGUBatchSize,
+		)
+		if err != nil {
+			log.Error().Err(err).Msgf("db.GetUpdatesForType failed for type %v", deviceInfoTypeID)
+			errCode := sync_pb.SyncEnums_TRANSIENT_ERROR
+			return &errCode,
+				fmt.Errorf("error getting updates for type %v: %w", deviceInfoTypeID, err)
+		}
+
+		for _, entity := range syncEntities {
+			if !*entity.Deleted {
+				activeDevices++
+			}
+
+			// Error out when device limit has been reached.
+			if hasReachedDeviceLimit(activeDevices, clientID) {
+				errCode := sync_pb.SyncEnums_THROTTLED
+				return &errCode, errors.New("exceed limit of active devices in a chain")
+			}
+		}
+
+		// Run until all device records are checked.
+		if !hasChangesRemaining {
+			break
+		}
+	}
+
+	// Insert initial records if needed.
+	err := InsertServerDefinedUniqueEntities(ctx, db, clientID)
+	if err != nil {
+		log.Error().Err(err).Msg("Create server defined unique entities failed")
+		errCode := sync_pb.SyncEnums_TRANSIENT_ERROR
+		return &errCode, fmt.Errorf("error creating server defined unique entitiies: %w", err)
+	}
+	return nil, nil
+}
+
 // handleGetUpdatesRequest handles GetUpdatesMessage and fills
 // GetUpdatesResponse. Target sync entities in the database will be updated or
 // deleted based on the client's requests.
@@ -46,48 +93,8 @@ func handleGetUpdatesRequest(
 	isNewClient := guMsg.GetUpdatesOrigin != nil && *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_NEW_CLIENT
 	isPoll := guMsg.GetUpdatesOrigin != nil && *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_PERIODIC
 	if isNewClient {
-		// Reject the request if client has >= 50 devices in the chain.
-		activeDevices := 0
-		for {
-			hasChangesRemaining, syncEntities, err := db.GetUpdatesForType(
-				ctx,
-				deviceInfoTypeID,
-				0,
-				false,
-				clientID,
-				maxGUBatchSize,
-			)
-			if err != nil {
-				log.Error().Err(err).Msgf("db.GetUpdatesForType failed for type %v", deviceInfoTypeID)
-				errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-				return &errCode,
-					fmt.Errorf("error getting updates for type %v: %w", deviceInfoTypeID, err)
-			}
-
-			for _, entity := range syncEntities {
-				if !*entity.Deleted {
-					activeDevices++
-				}
-
-				// Error out when device limit has been reached.
-				if hasReachedDeviceLimit(activeDevices, clientID) {
-					errCode = sync_pb.SyncEnums_THROTTLED
-					return &errCode, errors.New("exceed limit of active devices in a chain")
-				}
-			}
-
-			// Run until all device records are checked.
-			if !hasChangesRemaining {
-				break
-			}
-		}
-
-		// Insert initial records if needed.
-		err := InsertServerDefinedUniqueEntities(ctx, db, clientID)
-		if err != nil {
-			log.Error().Err(err).Msg("Create server defined unique entities failed")
-			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-			return &errCode, fmt.Errorf("error creating server defined unique entitiies: %w", err)
+		if setupErrCode, err := setupNewClient(ctx, db, clientID); err != nil {
+			return setupErrCode, err
 		}
 	}
 
@@ -492,6 +499,20 @@ func handleClearServerDataRequest(
 	return &errCode, nil
 }
 
+func applyHandlerError(pbRsp *sync_pb.ClientToServerResponse, err error, wrapMsg string) error {
+	if err == nil {
+		return nil
+	}
+	if pbRsp.ErrorCode != nil {
+		pbRsp.ErrorMessage = aws.String(err.Error())
+		return nil
+	}
+	// In seldom error cases which are not temporary and will not go away
+	// when clients retry, we will not use defined sync error in the proto
+	// response, but use internal server error.
+	return fmt.Errorf("%s: %w", wrapMsg, err)
+}
+
 // HandleClientToServerMessage handles the protobuf ClientToServerMessage and
 // fills the protobuf ClientToServerResponse.
 func HandleClientToServerMessage(
@@ -509,40 +530,27 @@ func HandleClientToServerMessage(
 		SetSyncPollInterval: aws.Int32(setSyncPollInterval),
 		MaxCommitBatchSize:  aws.Int32(maxCommitBatchSize)}
 
-	var err error
 	if pb.MessageContents == nil {
 		return errors.New("nil pb.MessageContents received")
-	} else if *pb.MessageContents == sync_pb.ClientToServerMessage_GET_UPDATES {
+	}
+
+	switch *pb.MessageContents {
+	case sync_pb.ClientToServerMessage_GET_UPDATES:
 		guRsp := &sync_pb.GetUpdatesResponse{}
 		pbRsp.GetUpdates = guRsp
+		var err error
 		pbRsp.ErrorCode, err = handleGetUpdatesRequest(ctx, cache, pb.GetUpdates, guRsp, db, clientID)
-		if err != nil {
-			if pbRsp.ErrorCode != nil {
-				pbRsp.ErrorMessage = aws.String(err.Error())
-				return nil
-			}
-			// In seledom error cases which are not temporary and will not go away
-			// when clients retry, we will not use defined sync error in the proto
-			// response, but use internal server error.
-			return fmt.Errorf("error handling GetUpdates request: %w", err)
-		}
-	} else if *pb.MessageContents == sync_pb.ClientToServerMessage_COMMIT {
+		return applyHandlerError(pbRsp, err, "error handling GetUpdates request")
+	case sync_pb.ClientToServerMessage_COMMIT:
 		commitRsp := &sync_pb.CommitResponse{}
 		pbRsp.Commit = commitRsp
+		var err error
 		pbRsp.ErrorCode, err = handleCommitRequest(context.TODO(), cache, pb.Commit, commitRsp, db, clientID)
-		if err != nil {
-			if pbRsp.ErrorCode != nil {
-				pbRsp.ErrorMessage = aws.String(err.Error())
-				return nil
-			}
-			// In seledom error cases which are not temporary and will not go away
-			// when clients retry, we will not use defined sync error in the proto
-			// response, but use internal server error.
-			return fmt.Errorf("error handling Commit request: %w", err)
-		}
-	} else if *pb.MessageContents == sync_pb.ClientToServerMessage_CLEAR_SERVER_DATA {
+		return applyHandlerError(pbRsp, err, "error handling Commit request")
+	case sync_pb.ClientToServerMessage_CLEAR_SERVER_DATA:
 		csdRsp := &sync_pb.ClearServerDataResponse{}
 		pbRsp.ClearServerData = csdRsp
+		var err error
 		pbRsp.ErrorCode, err = handleClearServerDataRequest(
 			context.Background(),
 			cache,
@@ -550,19 +558,10 @@ func HandleClientToServerMessage(
 			pb.ClearServerData,
 			clientID,
 		)
-		if err != nil {
-			if pbRsp.ErrorCode != nil {
-				pbRsp.ErrorMessage = aws.String(err.Error())
-				return nil
-			}
-			// In seldom error cases which are not temporary and will not go away
-			// when clients retry, we will not use defined sync error in the proto
-			// response, but use internal server error.
-			return fmt.Errorf("error handling ClearServerData request: %w", err)
-		}
-	} else {
+		return applyHandlerError(pbRsp, err, "error handling ClearServerData request")
+	case sync_pb.ClientToServerMessage_DEPRECATED_3, sync_pb.ClientToServerMessage_DEPRECATED_4:
+		fallthrough
+	default:
 		return errors.New("unsupported message type of ClientToServerMessage")
 	}
-
-	return nil
 }

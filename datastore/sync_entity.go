@@ -170,59 +170,7 @@ func (dynamo *Dynamo) InsertSyncEntity(ctx context.Context, entity *SyncEntity) 
 	// Write tag item for all data types, except for
 	// the history type, which does not use tag items.
 	if entity.ClientDefinedUniqueTag != nil && *entity.DataType != HistoryTypeID {
-		items := make([]types.TransactWriteItem, 0, 2)
-		// Additional item for ensuring tag's uniqueness for a specific client.
-		item := NewServerClientUniqueTagItem(entity.ClientID, *entity.ClientDefinedUniqueTag, false)
-		av, err := attributevalue.MarshalMap(*item)
-		if err != nil {
-			return false, fmt.Errorf("error marshalling unique tag item to insert sync entity: %w", err)
-		}
-		tagItem := types.TransactWriteItem{
-			Put: &types.Put{
-				Item:                      av,
-				ExpressionAttributeNames:  expr.Names(),
-				ExpressionAttributeValues: expr.Values(),
-				ConditionExpression:       expr.Condition(),
-				TableName:                 aws.String(Table),
-			},
-		}
-
-		// Normal sync item
-		av, err = attributevalue.MarshalMap(*entity)
-		if err != nil {
-			return false, fmt.Errorf("error marshlling sync item to insert sync entity: %w", err)
-		}
-		syncItem := types.TransactWriteItem{
-			Put: &types.Put{
-				Item:                      av,
-				ExpressionAttributeNames:  expr.Names(),
-				ExpressionAttributeValues: expr.Values(),
-				ConditionExpression:       expr.Condition(),
-				TableName:                 aws.String(Table),
-			},
-		}
-		items = append(items, tagItem)
-		items = append(items, syncItem)
-
-		_, err = dynamo.TransactWriteItems(ctx,
-			&dynamodb.TransactWriteItemsInput{TransactItems: items})
-		if err != nil {
-			// Return conflict if insert condition failed.
-			var canceledException *types.TransactionCanceledException
-			if errors.As(err, &canceledException) {
-				for _, reason := range canceledException.CancellationReasons {
-					if reason.Code != nil && *reason.Code == conditionalCheckFailed {
-						return true, fmt.Errorf("error inserting sync item with client tag: %w", err)
-					}
-				}
-			}
-			return false, fmt.Errorf(
-				"error writing tag item and sync item in a transaction to insert sync entity: %w",
-				err,
-			)
-		}
-
-		return false, nil
+		return dynamo.insertSyncEntityWithClientTag(ctx, entity, expr)
 	}
 
 	// Normal sync item
@@ -242,6 +190,67 @@ func (dynamo *Dynamo) InsertSyncEntity(ctx context.Context, entity *SyncEntity) 
 		return false, fmt.Errorf("error calling PutItem to insert sync item: %w", err)
 	}
 	return false, nil
+}
+
+func (dynamo *Dynamo) insertSyncEntityWithClientTag(
+	ctx context.Context,
+	entity *SyncEntity,
+	expr expression.Expression,
+) (bool, error) {
+	item := NewServerClientUniqueTagItem(entity.ClientID, *entity.ClientDefinedUniqueTag, false)
+	av, err := attributevalue.MarshalMap(*item)
+	if err != nil {
+		return false, fmt.Errorf("error marshalling unique tag item to insert sync entity: %w", err)
+	}
+	tagItem := types.TransactWriteItem{
+		Put: &types.Put{
+			Item:                      av,
+			ExpressionAttributeNames:  expr.Names(),
+			ExpressionAttributeValues: expr.Values(),
+			ConditionExpression:       expr.Condition(),
+			TableName:                 aws.String(Table),
+		},
+	}
+
+	av, err = attributevalue.MarshalMap(*entity)
+	if err != nil {
+		return false, fmt.Errorf("error marshlling sync item to insert sync entity: %w", err)
+	}
+	syncItem := types.TransactWriteItem{
+		Put: &types.Put{
+			Item:                      av,
+			ExpressionAttributeNames:  expr.Names(),
+			ExpressionAttributeValues: expr.Values(),
+			ConditionExpression:       expr.Condition(),
+			TableName:                 aws.String(Table),
+		},
+	}
+
+	_, err = dynamo.TransactWriteItems(ctx,
+		&dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{tagItem, syncItem}})
+	if err != nil && isTransactConditionalCheckFailed(err) {
+		return true, fmt.Errorf("error inserting sync item with client tag: %w", err)
+	}
+	if err != nil {
+		return false, fmt.Errorf(
+			"error writing tag item and sync item in a transaction to insert sync entity: %w",
+			err,
+		)
+	}
+	return false, nil
+}
+
+func isTransactConditionalCheckFailed(err error) bool {
+	var canceledException *types.TransactionCanceledException
+	if !errors.As(err, &canceledException) {
+		return false
+	}
+	for _, reason := range canceledException.CancellationReasons {
+		if reason.Code != nil && *reason.Code == conditionalCheckFailed {
+			return true
+		}
+	}
+	return false
 }
 
 // HasServerDefinedUniqueTag check the tag item to see if there is already a
@@ -554,52 +563,7 @@ func (dynamo *Dynamo) UpdateSyncEntity(ctx context.Context, entity *SyncEntity, 
 	// tag item too.
 	if entity.Deleted != nil && entity.ClientDefinedUniqueTag != nil && *entity.Deleted &&
 		*entity.DataType != HistoryTypeID {
-		pk := PrimaryKey{
-			ClientID: entity.ClientID, ID: clientTagItemPrefix + *entity.ClientDefinedUniqueTag}
-		tagItemKey, err := attributevalue.MarshalMap(pk)
-		if err != nil {
-			return false, false, fmt.Errorf("error marshalling key to update sync entity: %w", err)
-		}
-
-		items := make([]types.TransactWriteItem, 0, 2)
-		updateSyncItem := types.TransactWriteItem{
-			Update: &types.Update{
-				Key:                                 key,
-				ExpressionAttributeNames:            expr.Names(),
-				ExpressionAttributeValues:           expr.Values(),
-				ConditionExpression:                 expr.Condition(),
-				UpdateExpression:                    expr.Update(),
-				ReturnValuesOnConditionCheckFailure: types.ReturnValuesOnConditionCheckFailureAllOld,
-				TableName:                           aws.String(Table),
-			},
-		}
-		deleteTagItem := types.TransactWriteItem{
-			Delete: &types.Delete{
-				Key:       tagItemKey,
-				TableName: aws.String(Table),
-			},
-		}
-		items = append(items, updateSyncItem)
-		items = append(items, deleteTagItem)
-
-		_, err = dynamo.TransactWriteItems(ctx,
-			&dynamodb.TransactWriteItemsInput{TransactItems: items})
-		if err != nil {
-			// Return conflict if the update condition fails.
-			var canceledException *types.TransactionCanceledException
-			if errors.As(err, &canceledException) {
-				for _, reason := range canceledException.CancellationReasons {
-					if reason.Code != nil && *reason.Code == conditionalCheckFailed {
-						return true, false, nil
-					}
-				}
-			}
-
-			return false, false, fmt.Errorf("error deleting sync item and tag item in a transaction: %w", err)
-		}
-
-		// Successfully soft-delete the sync item and delete the tag item.
-		return false, true, nil
+		return dynamo.softDeleteSyncEntityWithClientTag(ctx, entity, key, expr)
 	}
 
 	// Not deleting a sync item with a client tag, do a normal update on sync
@@ -639,6 +603,52 @@ func (dynamo *Dynamo) UpdateSyncEntity(ctx context.Context, entity *SyncEntity, 
 		deleted = !*oldEntity.Deleted && *entity.Deleted
 	}
 	return false, deleted, nil
+}
+
+func (dynamo *Dynamo) softDeleteSyncEntityWithClientTag(
+	ctx context.Context,
+	entity *SyncEntity,
+	key map[string]types.AttributeValue,
+	expr expression.Expression,
+) (bool, bool, error) {
+	pk := PrimaryKey{
+		ClientID: entity.ClientID, ID: clientTagItemPrefix + *entity.ClientDefinedUniqueTag}
+	tagItemKey, err := attributevalue.MarshalMap(pk)
+	if err != nil {
+		return false, false, fmt.Errorf("error marshalling key to update sync entity: %w", err)
+	}
+
+	updateSyncItem := types.TransactWriteItem{
+		Update: &types.Update{
+			Key:                                 key,
+			ExpressionAttributeNames:            expr.Names(),
+			ExpressionAttributeValues:           expr.Values(),
+			ConditionExpression:                 expr.Condition(),
+			UpdateExpression:                    expr.Update(),
+			ReturnValuesOnConditionCheckFailure: types.ReturnValuesOnConditionCheckFailureAllOld,
+			TableName:                           aws.String(Table),
+		},
+	}
+	deleteTagItem := types.TransactWriteItem{
+		Delete: &types.Delete{
+			Key:       tagItemKey,
+			TableName: aws.String(Table),
+		},
+	}
+
+	_, err = dynamo.TransactWriteItems(ctx,
+		&dynamodb.TransactWriteItemsInput{
+			TransactItems: []types.TransactWriteItem{updateSyncItem, deleteTagItem},
+		})
+	if err != nil && isTransactConditionalCheckFailed(err) {
+		return true, false, nil
+	}
+	if err != nil {
+		return false, false, fmt.Errorf("error deleting sync item and tag item in a transaction: %w", err)
+	}
+
+	// Successfully soft-delete the sync item and delete the tag item.
+	return false, true, nil
 }
 
 // GetUpdatesForType returns sync entities of a data type where it's mtime is
