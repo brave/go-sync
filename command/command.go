@@ -75,7 +75,8 @@ func setupNewClient(ctx context.Context, db datastore.Datastore, clientID string
 		errCode := sync_pb.SyncEnums_TRANSIENT_ERROR
 		return &errCode, fmt.Errorf("error creating server defined unique entitiies: %w", err)
 	}
-	return nil, nil
+	success := sync_pb.SyncEnums_SUCCESS
+	return &success, nil
 }
 
 // handleGetUpdatesRequest handles GetUpdatesMessage and fills
