@@ -77,7 +77,7 @@ func setupNewClient(
 	if err != nil {
 		log.Error().Err(err).Msg("Create server defined unique entities failed")
 		errCode := sync_pb.SyncEnums_TRANSIENT_ERROR
-		return &errCode, fmt.Errorf("error creating server defined unique entitiies: %w", err)
+		return &errCode, fmt.Errorf("error creating server defined unique entities: %w", err)
 	}
 	success := sync_pb.SyncEnums_SUCCESS
 	return &success, nil

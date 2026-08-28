@@ -214,7 +214,7 @@ func (dynamo *Dynamo) insertSyncEntityWithClientTag(
 
 	av, err = attributevalue.MarshalMap(*entity)
 	if err != nil {
-		return false, fmt.Errorf("error marshlling sync item to insert sync entity: %w", err)
+		return false, fmt.Errorf("error marshalling sync item to insert sync entity: %w", err)
 	}
 	syncItem := types.TransactWriteItem{
 		Put: &types.Put{
