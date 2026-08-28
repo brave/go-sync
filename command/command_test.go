@@ -3,7 +3,6 @@ package command_test
 import (
 	"context"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/brave/go-sync/cache"
 	"github.com/brave/go-sync/command"
@@ -218,12 +218,16 @@ func assertGetUpdatesResponse(suite *CommandTestSuite, rsp *sync_pb.GetUpdatesRe
 	sort.Sort(PBSyncAttrsByName(expectedPBSyncAttrs))
 	sort.Sort(PBSyncAttrsByName(pbSyncAttrs))
 
-	// Marshal to json to ignore protobuf internal fields when checking equality.
-	s1, err := json.Marshal(expectedPBSyncAttrs)
-	suite.Require().NoError(err, "json.Marshal should succeed")
-	s2, err := json.Marshal(pbSyncAttrs)
-	suite.Require().NoError(err, "json.Marshal should succeed")
-	suite.Equal(s1, s2)
+	suite.Require().Len(pbSyncAttrs, len(expectedPBSyncAttrs))
+	for i := range expectedPBSyncAttrs {
+		want, got := expectedPBSyncAttrs[i], pbSyncAttrs[i]
+		suite.Equal(want.Name, got.Name)
+		suite.Equal(want.Version, got.Version)
+		suite.Equal(want.Deleted, got.Deleted)
+		suite.Equal(want.Folder, got.Folder)
+		suite.Equal(want.ServerDefinedUniqueTag, got.ServerDefinedUniqueTag)
+		suite.True(proto.Equal(want.Specifics, got.Specifics), "Specifics mismatch at index %d", i)
+	}
 
 	suite.Equal(*newMarker, rsp.NewProgressMarker)
 	suite.Equal(expectedChangesRemaining, *rsp.ChangesRemaining)
