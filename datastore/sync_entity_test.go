@@ -1036,7 +1036,7 @@ func (suite *SyncEntityTestSuite) TestClearServerDataPagination() {
 	otherClientID := "client-other"
 
 	insert := func(cid string, count int, specifics []byte) {
-		for i := 0; i < count; i++ {
+		for i := range count {
 			entity := datastore.SyncEntity{
 				ClientID:      cid,
 				ID:            fmt.Sprintf("id-%04d", i),
