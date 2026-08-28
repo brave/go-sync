@@ -68,7 +68,7 @@ func NewPBSyncAttrs(
 }
 
 func (suite *CommandTestSuite) SetupSuite() {
-	datastore.Table = "client-entity-test-command"
+	datastore.Table = "client-entity-test-command" //nolint:reassign // acceptable for tests
 	var err error
 	suite.dynamo, err = datastore.NewDynamo()
 	suite.Require().NoError(err, "Failed to get dynamoDB session")

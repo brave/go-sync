@@ -18,7 +18,7 @@ type ItemCountTestSuite struct {
 }
 
 func (suite *ItemCountTestSuite) SetupSuite() {
-	datastore.Table = "client-entity-test-datastore"
+	datastore.Table = "client-entity-test-datastore" //nolint:reassign // acceptable for tests
 	var err error
 	suite.dynamo, err = datastore.NewDynamo()
 	suite.Require().NoError(err, "Failed to get dynamoDB session")
