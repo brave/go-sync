@@ -1,7 +1,6 @@
 package command
 
 import (
-	"os"
 	"strings"
 )
 
@@ -11,13 +10,8 @@ const (
 )
 
 var (
-	highDeviceLimitClientIDs map[string]bool
+	highDeviceLimitClientIDs = make(map[string]bool)
 )
-
-func init() {
-	clientIDsEnv := os.Getenv("HIGH_DEVICE_LIMIT_CLIENT_IDS")
-	LoadHighDeviceLimitClientIDs(clientIDsEnv)
-}
 
 func LoadHighDeviceLimitClientIDs(clientIDList string) {
 	highDeviceLimitClientIDs = make(map[string]bool)
