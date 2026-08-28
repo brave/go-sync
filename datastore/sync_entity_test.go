@@ -678,7 +678,7 @@ func (suite *SyncEntityTestSuite) TestGetUpdatesForType() {
 
 	mtime := time.Now().UnixMilli()
 	for i := 1; i <= 250; i++ {
-		mtime = mtime + 1
+		mtime++
 		entity := entity1
 		entity.ID = "id" + strconv.Itoa(i)
 		entity.Mtime = aws.Int64(mtime)

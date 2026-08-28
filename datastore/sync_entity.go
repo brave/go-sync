@@ -602,11 +602,12 @@ func (dynamo *Dynamo) UpdateSyncEntity(ctx context.Context, entity *SyncEntity, 
 		return false, false, fmt.Errorf("error unmarshalling old sync entity: %w", err)
 	}
 	var deleted bool
-	if entity.Deleted == nil { // No updates on Deleted this time.
+	switch {
+	case entity.Deleted == nil: // No updates on Deleted this time.
 		deleted = false
-	} else if oldEntity.Deleted == nil { // Consider it as Deleted = false.
+	case oldEntity.Deleted == nil: // Consider it as Deleted = false.
 		deleted = *entity.Deleted
-	} else {
+	default:
 		deleted = !*oldEntity.Deleted && *entity.Deleted
 	}
 	return false, deleted, nil
