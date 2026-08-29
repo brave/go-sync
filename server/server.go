@@ -24,6 +24,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/brave/go-sync/cache"
+	"github.com/brave/go-sync/command"
 	"github.com/brave/go-sync/controller"
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/middleware"
@@ -46,6 +47,8 @@ func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux) {
+	command.LoadHighDeviceLimitClientIDs(os.Getenv("HIGH_DEVICE_LIMIT_CLIENT_IDS"))
+
 	r := chi.NewRouter()
 
 	r.Use(chiware.RequestID)
