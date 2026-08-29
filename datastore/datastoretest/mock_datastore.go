@@ -30,7 +30,7 @@ func (m *MockDatastore) UpdateSyncEntity(
 	ctx context.Context,
 	entity *datastore.SyncEntity,
 	oldVersion int64,
-) (conflict bool, deleted bool, err error) {
+) (bool, bool, error) {
 	args := m.Called(ctx, entity, oldVersion)
 	return args.Bool(0), args.Bool(1), args.Error(2)
 }

@@ -668,7 +668,8 @@ func assertTypeMtimeCacheValue(suite *CommandTestSuite, key string, mtime int64,
 }
 
 func insertSyncEntitiesWithoutUpdateCache(
-	suite *CommandTestSuite, entries []*sync_pb.SyncEntity, clientID string) (ret []*datastore.SyncEntity) {
+	suite *CommandTestSuite, entries []*sync_pb.SyncEntity, clientID string) []*datastore.SyncEntity {
+	var ret []*datastore.SyncEntity
 	for _, entry := range entries {
 		dbEntry, err := datastore.CreateDBSyncEntity(entry, nil, clientID)
 		suite.Require().NoError(err, "Create db entity from pb entity should succeed")
@@ -681,7 +682,7 @@ func insertSyncEntitiesWithoutUpdateCache(
 			"Cache should not be updated")
 		ret = append(ret, dbEntry)
 	}
-	return
+	return ret
 }
 
 func (suite *CommandTestSuite) TestHandleClientToServerMessage_TypeMtimeCache_Basic() {
