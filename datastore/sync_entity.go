@@ -32,8 +32,8 @@ const (
 	reasonDeleted                    = "deleted"
 	HistoryTypeID                int = 963985
 	HistoryDeleteDirectiveTypeID int = 150251
-	// Expiration time for history and history delete directive
-	// entities in seconds
+	// HistoryExpirationIntervalSecs is the expiration time for history and
+	// history delete directive entities in seconds.
 	HistoryExpirationIntervalSecs = 14 * 24 * 60 * 60 // 14 days
 )
 
