@@ -194,7 +194,7 @@ func assertCommonResponse(suite *CommandTestSuite, rsp *sync_pb.ClientToServerRe
 
 func assertGetUpdatesResponse(suite *CommandTestSuite, rsp *sync_pb.GetUpdatesResponse,
 	newMarker *[]*sync_pb.DataTypeProgressMarker, expectedPBSyncAttrs []*PBSyncAttrs,
-	expectedChangesRemaining int64) { //nolint:unparam
+	expectedChangesRemaining int64) { //nolint:unparam // kept for tests that expect a non-zero remaining count
 	pbSyncAttrs := []*PBSyncAttrs{}
 	for _, entity := range rsp.Entries {
 		// Update tokens in the expected NewProgressMarker
