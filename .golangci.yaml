@@ -488,3 +488,9 @@ linters:
         source: 'err == redis\.Nil'
         linters:
           - errorlint
+      # Chromium still ships CommitResponse.mtime as deprecated in sync.proto;
+      # we keep populating it for clients that read the field.
+      - path: 'command/command(_test)?\.go'
+        text: 'Marked as deprecated in sync\.proto'
+        linters: [ staticcheck ]
+
