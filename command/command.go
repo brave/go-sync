@@ -257,6 +257,117 @@ func getInterimItemCounts(ctx context.Context, cache *cache.Cache, clientID stri
 	return newNormalCount, newHistoryCount, nil
 }
 
+type commitCountState struct {
+	currentNormal  int
+	currentHistory int
+	newNormal      int
+	newHistory     int
+	boostedQuota   int
+}
+
+func bumpInterimCount(
+	ctx context.Context,
+	cache *cache.Cache,
+	clientID string,
+	isHistoryRelatedItem bool,
+	subtract bool,
+	counts *commitCountState,
+) error {
+	countType := normalCountTypeStr
+	if isHistoryRelatedItem {
+		countType = historyCountTypeStr
+	}
+	newCount, err := cache.IncrementInterimCount(ctx, clientID, countType, subtract)
+	if isHistoryRelatedItem {
+		counts.newHistory = newCount
+	} else {
+		counts.newNormal = newCount
+	}
+	return err
+}
+
+func insertCommitEntity(
+	ctx context.Context,
+	db datastore.Datastore,
+	cache *cache.Cache,
+	clientID string,
+	entity *datastore.SyncEntity,
+	entryRsp *sync_pb.CommitResponse_EntryResponse,
+	idMap map[string]string,
+	counts *commitCountState,
+	isHistoryRelatedItem bool,
+) (bool, error) {
+	total := counts.currentNormal + counts.currentHistory + counts.newNormal + counts.newHistory
+	if total >= maxClientObjectQuota+counts.boostedQuota {
+		rspType := sync_pb.CommitResponse_OVER_QUOTA
+		entryRsp.ResponseType = &rspType
+		entryRsp.ErrorMessage = aws.String(
+			fmt.Sprintf(
+				"There are already %v non-deleted objects in store",
+				counts.currentNormal+counts.currentHistory,
+			),
+		)
+		return true, nil
+	}
+
+	// Insert all non-history items. For history items, ignore any items above history quota
+	// and lie to the client about the objects being synced instead of returning OVER_QUOTA
+	// so the client can continue to sync other entities.
+	if isHistoryRelatedItem && counts.currentHistory+counts.newHistory >= maxClientHistoryObjectQuota {
+		return false, nil
+	}
+
+	conflict, insertErr := db.InsertSyncEntity(ctx, entity)
+	if insertErr != nil {
+		log.Error().Err(insertErr).Msg("Insert sync entity failed")
+		rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
+		if conflict {
+			rspType = sync_pb.CommitResponse_CONFLICT
+		}
+		entryRsp.ResponseType = &rspType
+		entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Insert sync entity failed: %v", insertErr.Error()))
+		return true, nil
+	}
+
+	// Save client-generated to server-generated ID mapping when committing
+	// a new entry with OriginatorClientItemID (client-generated ID).
+	if entity.OriginatorClientItemID != nil {
+		idMap[*entity.OriginatorClientItemID] = entity.ID
+	}
+
+	return false, bumpInterimCount(ctx, cache, clientID, isHistoryRelatedItem, false, counts)
+}
+
+func updateCommitEntity(
+	ctx context.Context,
+	db datastore.Datastore,
+	cache *cache.Cache,
+	clientID string,
+	entity *datastore.SyncEntity,
+	oldVersion int64,
+	entryRsp *sync_pb.CommitResponse_EntryResponse,
+	counts *commitCountState,
+	isHistoryRelatedItem bool,
+) (bool, error) {
+	conflict, deleted, updateErr := db.UpdateSyncEntity(ctx, entity, oldVersion)
+	if updateErr != nil {
+		log.Error().Err(updateErr).Msg("Update sync entity failed")
+		rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
+		entryRsp.ResponseType = &rspType
+		entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Update sync entity failed: %v", updateErr.Error()))
+		return true, nil
+	}
+	if conflict {
+		rspType := sync_pb.CommitResponse_CONFLICT
+		entryRsp.ResponseType = &rspType
+		return true, nil
+	}
+	if !deleted {
+		return false, nil
+	}
+	return false, bumpInterimCount(ctx, cache, clientID, isHistoryRelatedItem, true, counts)
+}
+
 // handleCommitRequest handles the commit message and fills the commit response.
 // For each commit entry:
 //   - new sync entity is created and inserted into the database if version is 0.
@@ -284,19 +395,21 @@ func handleCommitRequest(
 		errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
 		return &errCode, fmt.Errorf("error getting client's item count: %w", err)
 	}
-	currentNormalItemCount := itemCounts.ItemCount
-	currentHistoryItemCount := itemCounts.SumHistoryCounts()
-
-	boostedQuotaAddition := 0
-	if currentHistoryItemCount > maxClientHistoryObjectQuota {
+	counts := commitCountState{
+		currentNormal:  itemCounts.ItemCount,
+		currentHistory: itemCounts.SumHistoryCounts(),
+		newNormal:      newNormalCount,
+		newHistory:     newHistoryCount,
+	}
+	if counts.currentHistory > maxClientHistoryObjectQuota {
 		// Sync chains with history entities stored before the history count fix
 		// may have history counts greater than the new history item quota.
 		// "Boost" the quota with the difference between the history quota and count,
 		// so users can start syncing other entities immediately, instead of waiting for the
 		// history TTL to get rid of the excess items.
-		boostedQuotaAddition = min(
+		counts.boostedQuota = min(
 			maxClientObjectQuota-maxClientHistoryObjectQuota,
-			currentHistoryItemCount-maxClientHistoryObjectQuota,
+			counts.currentHistory-maxClientHistoryObjectQuota,
 		)
 	}
 
@@ -348,74 +461,23 @@ func handleCommitRequest(
 			}
 		}
 
-		var interimErr error
-		if !isUpdateOp { // Create
-			if currentNormalItemCount+currentHistoryItemCount+newNormalCount+newHistoryCount >= maxClientObjectQuota+boostedQuotaAddition {
-				rspType := sync_pb.CommitResponse_OVER_QUOTA
-				entryRsp.ResponseType = &rspType
-				entryRsp.ErrorMessage = aws.String(
-					fmt.Sprintf(
-						"There are already %v non-deleted objects in store",
-						currentNormalItemCount+currentHistoryItemCount,
-					),
-				)
-				continue
-			}
-
-			if !isHistoryRelatedItem || currentHistoryItemCount+newHistoryCount < maxClientHistoryObjectQuota {
-				// Insert all non-history items. For history items, ignore any items above history quoto
-				// and lie to the client about the objects being synced instead of returning OVER_QUOTA
-				// so the client can continue to sync other entities.
-				conflict, insertErr := db.InsertSyncEntity(ctx, entityToCommit)
-				if insertErr != nil {
-					log.Error().Err(insertErr).Msg("Insert sync entity failed")
-					rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
-					if conflict {
-						rspType = sync_pb.CommitResponse_CONFLICT
-					}
-					entryRsp.ResponseType = &rspType
-					entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Insert sync entity failed: %v", insertErr.Error()))
-					continue
-				}
-
-				// Save client-generated to server-generated ID mapping when committing
-				// a new entry with OriginatorClientItemID (client-generated ID).
-				if entityToCommit.OriginatorClientItemID != nil {
-					idMap[*entityToCommit.OriginatorClientItemID] = entityToCommit.ID
-				}
-
-				if isHistoryRelatedItem {
-					newHistoryCount, interimErr = cache.IncrementInterimCount(ctx, clientID, historyCountTypeStr, false)
-				} else {
-					newNormalCount, interimErr = cache.IncrementInterimCount(ctx, clientID, normalCountTypeStr, false)
-				}
-			}
-		} else { // Update
-			conflict, deleted, updateErr := db.UpdateSyncEntity(ctx, entityToCommit, oldVersion)
-			if updateErr != nil {
-				log.Error().Err(updateErr).Msg("Update sync entity failed")
-				rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
-				entryRsp.ResponseType = &rspType
-				entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Update sync entity failed: %v", updateErr.Error()))
-				continue
-			}
-			if conflict {
-				rspType := sync_pb.CommitResponse_CONFLICT
-				entryRsp.ResponseType = &rspType
-				continue
-			}
-			if deleted {
-				if isHistoryRelatedItem {
-					newHistoryCount, interimErr = cache.IncrementInterimCount(ctx, clientID, historyCountTypeStr, true)
-				} else {
-					newNormalCount, interimErr = cache.IncrementInterimCount(ctx, clientID, normalCountTypeStr, true)
-				}
-			}
+		var skipEntry bool
+		if isUpdateOp {
+			skipEntry, err = updateCommitEntity(
+				ctx, db, cache, clientID, entityToCommit, oldVersion, entryRsp, &counts, isHistoryRelatedItem,
+			)
+		} else {
+			skipEntry, err = insertCommitEntity(
+				ctx, db, cache, clientID, entityToCommit, entryRsp, idMap, &counts, isHistoryRelatedItem,
+			)
 		}
-		if interimErr != nil {
-			log.Error().Err(interimErr).Msg("Interim count update failed")
+		if err != nil {
+			log.Error().Err(err).Msg("Interim count update failed")
 			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-			return &errCode, fmt.Errorf("interim count update failed: %w", interimErr)
+			return &errCode, fmt.Errorf("interim count update failed: %w", err)
+		}
+		if skipEntry {
+			continue
 		}
 
 		typeMtimeMap[*entityToCommit.DataType] = *entityToCommit.Mtime
