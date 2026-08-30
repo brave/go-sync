@@ -1073,6 +1073,40 @@ func (suite *SyncEntityTestSuite) TestClearServerDataPagination() {
 	}
 }
 
+// Production clear-data always DisableSyncChain first, leaving a disabled_chain
+// marker that ClearServerData must skip so IsSyncChainDisabled stays true.
+func (suite *SyncEntityTestSuite) TestClearServerDataSkipsDisabledChainMarker() {
+	entity := datastore.SyncEntity{
+		ClientID:      "client1",
+		ID:            "id1",
+		Version:       aws.Int64(1),
+		Ctime:         aws.Int64(12345678),
+		Mtime:         aws.Int64(12345678),
+		DataType:      aws.Int(123),
+		Folder:        aws.Bool(false),
+		Deleted:       aws.Bool(false),
+		DataTypeMtime: aws.String("123#12345678"),
+	}
+	_, err := suite.dynamo.InsertSyncEntity(context.Background(), &entity)
+	suite.Require().NoError(err, "InsertSyncEntity should succeed")
+
+	suite.Require().NoError(
+		suite.dynamo.DisableSyncChain(context.Background(), entity.ClientID),
+		"DisableSyncChain should succeed")
+
+	cleared, err := suite.dynamo.ClearServerData(context.Background(), entity.ClientID)
+	suite.Require().NoError(err, "ClearServerData should succeed")
+	suite.GreaterOrEqual(len(cleared), 1)
+
+	remaining, err := datastoretest.ScanSyncEntities(suite.dynamo)
+	suite.Require().NoError(err, "ScanSyncEntities should succeed")
+	suite.Empty(remaining, "sync entities should be deleted")
+
+	disabled, err := suite.dynamo.IsSyncChainDisabled(context.Background(), entity.ClientID)
+	suite.Require().NoError(err, "IsSyncChainDisabled should succeed")
+	suite.True(disabled, "disabled_chain marker must not be deleted")
+}
+
 // Some entries have a nil Mtime; ClearServerData must handle them without panicking.
 func (suite *SyncEntityTestSuite) TestClearServerDataLegacyMissingMtime() {
 	entity := datastore.SyncEntity{
