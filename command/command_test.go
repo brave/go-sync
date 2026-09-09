@@ -10,8 +10,9 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/suite"
-	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/testing/protocmp"
 
 	"github.com/brave/go-sync/cache"
 	"github.com/brave/go-sync/command"
@@ -218,16 +219,7 @@ func assertGetUpdatesResponse(suite *CommandTestSuite, rsp *sync_pb.GetUpdatesRe
 	sort.Sort(PBSyncAttrsByName(expectedPBSyncAttrs))
 	sort.Sort(PBSyncAttrsByName(pbSyncAttrs))
 
-	suite.Require().Len(pbSyncAttrs, len(expectedPBSyncAttrs))
-	for i := range expectedPBSyncAttrs {
-		want, got := expectedPBSyncAttrs[i], pbSyncAttrs[i]
-		suite.Equal(want.Name, got.Name)
-		suite.Equal(want.Version, got.Version)
-		suite.Equal(want.Deleted, got.Deleted)
-		suite.Equal(want.Folder, got.Folder)
-		suite.Equal(want.ServerDefinedUniqueTag, got.ServerDefinedUniqueTag)
-		suite.True(proto.Equal(want.Specifics, got.Specifics), "Specifics mismatch at index %d", i)
-	}
+	suite.Empty(cmp.Diff(expectedPBSyncAttrs, pbSyncAttrs, protocmp.Transform()))
 
 	suite.Equal(*newMarker, rsp.NewProgressMarker)
 	suite.Equal(expectedChangesRemaining, *rsp.ChangesRemaining)
