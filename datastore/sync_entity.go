@@ -32,8 +32,8 @@ const (
 	reasonDeleted                    = "deleted"
 	HistoryTypeID                int = 963985
 	HistoryDeleteDirectiveTypeID int = 150251
-	// Expiration time for history and history delete directive
-	// entities in seconds
+	// HistoryExpirationIntervalSecs is the expiration time for history and
+	// history delete directive entities in seconds.
 	HistoryExpirationIntervalSecs = 14 * 24 * 60 * 60 // 14 days
 )
 
@@ -276,8 +276,8 @@ func (dynamo *Dynamo) HasServerDefinedUniqueTag(ctx context.Context, clientID st
 	return out.Item != nil, nil
 }
 
-func (dynamo *Dynamo) HasItem(ctx context.Context, clientID string, ID string) (bool, error) {
-	primaryKey := PrimaryKey{ClientID: clientID, ID: ID}
+func (dynamo *Dynamo) HasItem(ctx context.Context, clientID string, id string) (bool, error) {
+	primaryKey := PrimaryKey{ClientID: clientID, ID: id}
 	key, err := attributevalue.MarshalMap(primaryKey)
 
 	if err != nil {
@@ -451,7 +451,11 @@ func (dynamo *Dynamo) ClearServerData(ctx context.Context, clientID string) ([]S
 					cond := expression.Name("Mtime").Equal(expression.Value(*item.Mtime))
 					condExpr, buildErr := expression.NewBuilder().WithCondition(cond).Build()
 					if buildErr != nil {
-						return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, buildErr)
+						return syncEntities, fmt.Errorf(
+							"error deleting sync entities for client %s: %w",
+							clientID,
+							buildErr,
+						)
 					}
 
 					items = append(items, types.TransactWriteItem{
@@ -602,11 +606,12 @@ func (dynamo *Dynamo) UpdateSyncEntity(ctx context.Context, entity *SyncEntity, 
 		return false, false, fmt.Errorf("error unmarshalling old sync entity: %w", err)
 	}
 	var deleted bool
-	if entity.Deleted == nil { // No updates on Deleted this time.
+	switch {
+	case entity.Deleted == nil: // No updates on Deleted this time.
 		deleted = false
-	} else if oldEntity.Deleted == nil { // Consider it as Deleted = false.
+	case oldEntity.Deleted == nil: // Consider it as Deleted = false.
 		deleted = *entity.Deleted
-	} else {
+	default:
 		deleted = !*oldEntity.Deleted && *entity.Deleted
 	}
 	return false, deleted, nil

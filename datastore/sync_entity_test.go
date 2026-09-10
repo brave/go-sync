@@ -3,7 +3,6 @@ package datastore_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -11,8 +10,10 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/testing/protocmp"
 
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
@@ -678,7 +679,7 @@ func (suite *SyncEntityTestSuite) TestGetUpdatesForType() {
 
 	mtime := time.Now().UnixMilli()
 	for i := 1; i <= 250; i++ {
-		mtime = mtime + 1
+		mtime++
 		entity := entity1
 		entity.ID = "id" + strconv.Itoa(i)
 		entity.Mtime = aws.Int64(mtime)
@@ -899,12 +900,7 @@ func (suite *SyncEntityTestSuite) TestCreatePBSyncEntity() {
 	pbEntity, err := datastore.CreatePBSyncEntity(&dbEntity)
 	suite.Require().NoError(err, "CreatePBSyncEntity should succeed")
 
-	// Marshal to json to ignore protobuf internal fields when checking equality.
-	s1, err := json.Marshal(pbEntity)
-	suite.Require().NoError(err, "json.Marshal should succeed")
-	s2, err := json.Marshal(&expectedPBEntity)
-	suite.Require().NoError(err, "json.Marshal should succeed")
-	suite.Equal(s1, s2)
+	suite.Empty(cmp.Diff(&expectedPBEntity, pbEntity, protocmp.Transform()))
 
 	// Nil UniquePosition should be unmarshalled as nil without error.
 	dbEntity.UniquePosition = nil

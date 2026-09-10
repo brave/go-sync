@@ -40,5 +40,5 @@ type Datastore interface {
 	// IsSyncChainDisabled checks whether a given sync chain is deleted
 	IsSyncChainDisabled(ctx context.Context, clientID string) (bool, error)
 	// Checks if sync item exists for a client
-	HasItem(ctx context.Context, clientID string, ID string) (bool, error)
+	HasItem(ctx context.Context, clientID string, id string) (bool, error)
 }
