@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/testing/protocmp"
 
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
@@ -898,7 +900,7 @@ func (suite *SyncEntityTestSuite) TestCreatePBSyncEntity() {
 	pbEntity, err := datastore.CreatePBSyncEntity(&dbEntity)
 	suite.Require().NoError(err, "CreatePBSyncEntity should succeed")
 
-	suite.True(proto.Equal(pbEntity, &expectedPBEntity), "protobuf entities should be equal")
+	suite.Empty(cmp.Diff(&expectedPBEntity, pbEntity, protocmp.Transform()))
 
 	// Nil UniquePosition should be unmarshalled as nil without error.
 	dbEntity.UniquePosition = nil
