@@ -1,17 +1,24 @@
 package command
 
 import (
+	"os"
 	"strings"
 )
 
 const (
 	maxActiveDevices     int = 50
 	highMaxActiveDevices int = 100
+
+	highDeviceLimitClientIDsEnv = "HIGH_DEVICE_LIMIT_CLIENT_IDS"
 )
 
 var (
 	highDeviceLimitClientIDs = make(map[string]bool)
 )
+
+func LoadHighDeviceLimitClientIDsFromEnv() {
+	LoadHighDeviceLimitClientIDs(os.Getenv(highDeviceLimitClientIDsEnv))
+}
 
 func LoadHighDeviceLimitClientIDs(clientIDList string) {
 	highDeviceLimitClientIDs = make(map[string]bool)

@@ -47,7 +47,7 @@ func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux) {
-	command.LoadHighDeviceLimitClientIDs(os.Getenv("HIGH_DEVICE_LIMIT_CLIENT_IDS"))
+	command.LoadHighDeviceLimitClientIDsFromEnv()
 
 	r := chi.NewRouter()
 
