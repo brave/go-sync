@@ -54,78 +54,94 @@ func (counts *ClientItemCounts) SumHistoryCounts() int {
 func (dynamo *Dynamo) initRealCountsAndUpdateHistoryCounts(ctx context.Context, counts *ClientItemCounts) error {
 	now := time.Now().Unix()
 	if counts.Version < CurrentCountVersion {
-		if counts.ItemCount > 0 {
-			// If last period change tiem is 0, assume that the old count
-			// exists in ItemCount, which may include history items that have expired
-			// Query the DB to get updated counts
-			pkCond := expression.Key(clientIDDataTypeMtimeIdxPk).Equal(expression.Value(counts.ClientID))
-			filterCond := expression.And(
-				expression.Name(dataTypeAttrName).
-					In(expression.Value(HistoryTypeID), expression.Value(HistoryDeleteDirectiveTypeID)),
-				expression.Name(deletedAttrName).Equal(expression.Value(false)),
-			)
-			expr, err := expression.NewBuilder().WithKeyCondition(pkCond).WithFilter(filterCond).Build()
-			if err != nil {
-				return fmt.Errorf("error building history item count query: %w", err)
-			}
-			historyCountInput := &dynamodb.QueryInput{
-				ExpressionAttributeNames:  expr.Names(),
-				ExpressionAttributeValues: expr.Values(),
-				KeyConditionExpression:    expr.KeyCondition(),
-				FilterExpression:          expr.Filter(),
-				TableName:                 aws.String(Table),
-				Select:                    types.SelectCount,
-			}
-			out, err := dynamo.Query(ctx, historyCountInput)
-			if err != nil {
-				return fmt.Errorf("error querying history item count: %w", err)
-			}
-			counts.HistoryItemCountPeriod1 = 0
-			counts.HistoryItemCountPeriod2 = 0
-			counts.HistoryItemCountPeriod3 = 0
-			counts.HistoryItemCountPeriod4 = int(out.Count)
-			filterCond = expression.And(
-				expression.AttributeExists(expression.Name(dataTypeAttrName)),
-				expression.Name(dataTypeAttrName).NotEqual(expression.Value(HistoryTypeID)),
-				expression.Name(dataTypeAttrName).NotEqual(expression.Value(HistoryDeleteDirectiveTypeID)),
-				expression.Name(deletedAttrName).Equal(expression.Value(false)),
-			)
-			expr, err = expression.NewBuilder().WithKeyCondition(pkCond).WithFilter(filterCond).Build()
-			if err != nil {
-				return fmt.Errorf("error building normal item count query: %w", err)
-			}
-			normalCountInput := &dynamodb.QueryInput{
-				ExpressionAttributeNames:  expr.Names(),
-				ExpressionAttributeValues: expr.Values(),
-				KeyConditionExpression:    expr.KeyCondition(),
-				FilterExpression:          expr.Filter(),
-				TableName:                 aws.String(Table),
-				Select:                    types.SelectCount,
-			}
-			out, err = dynamo.Query(ctx, normalCountInput)
-			if err != nil {
-				return fmt.Errorf("error querying history item count: %w", err)
-			}
-			counts.ItemCount = int(out.Count)
-		}
-		counts.LastPeriodChangeTime = now
-		counts.Version = CurrentCountVersion
-	} else {
-		timeSinceLastChange := now - counts.LastPeriodChangeTime
-		if timeSinceLastChange >= periodDurationSecs {
-			changeCount := int(timeSinceLastChange / periodDurationSecs)
-			for range changeCount {
-				// The records from "period 1"/the earliest period
-				// will be purged from the count, since they will be deleted via DDB TTL
-				counts.HistoryItemCountPeriod1 = counts.HistoryItemCountPeriod2
-				counts.HistoryItemCountPeriod2 = counts.HistoryItemCountPeriod3
-				counts.HistoryItemCountPeriod3 = counts.HistoryItemCountPeriod4
-				counts.HistoryItemCountPeriod4 = 0
-			}
-			counts.LastPeriodChangeTime += periodDurationSecs * int64(changeCount)
+		return dynamo.migrateLegacyItemCounts(ctx, counts, now)
+	}
+	rotateHistoryCountPeriods(counts, now)
+	return nil
+}
+
+func (dynamo *Dynamo) migrateLegacyItemCounts(ctx context.Context, counts *ClientItemCounts, now int64) error {
+	if counts.ItemCount > 0 {
+		if err := dynamo.refreshItemCountsFromTable(ctx, counts); err != nil {
+			return err
 		}
 	}
+	counts.LastPeriodChangeTime = now
+	counts.Version = CurrentCountVersion
 	return nil
+}
+
+func (dynamo *Dynamo) countMatchingItems(
+	ctx context.Context,
+	pkCond expression.KeyConditionBuilder,
+	filterCond expression.ConditionBuilder,
+	kind string,
+) (int, error) {
+	expr, err := expression.NewBuilder().WithKeyCondition(pkCond).WithFilter(filterCond).Build()
+	if err != nil {
+		return 0, fmt.Errorf("error building %s item count query: %w", kind, err)
+	}
+	out, err := dynamo.Query(ctx, &dynamodb.QueryInput{
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		KeyConditionExpression:    expr.KeyCondition(),
+		FilterExpression:          expr.Filter(),
+		TableName:                 aws.String(Table),
+		Select:                    types.SelectCount,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("error querying %s item count: %w", kind, err)
+	}
+	return int(out.Count), nil
+}
+
+func (dynamo *Dynamo) refreshItemCountsFromTable(ctx context.Context, counts *ClientItemCounts) error {
+	// If last period change time is 0, assume that the old count exists in
+	// ItemCount, which may include history items that have expired.
+	pkCond := expression.Key(clientIDDataTypeMtimeIdxPk).Equal(expression.Value(counts.ClientID))
+	historyFilter := expression.And(
+		expression.Name(dataTypeAttrName).
+			In(expression.Value(HistoryTypeID), expression.Value(HistoryDeleteDirectiveTypeID)),
+		expression.Name(deletedAttrName).Equal(expression.Value(false)),
+	)
+	historyCount, err := dynamo.countMatchingItems(ctx, pkCond, historyFilter, "history")
+	if err != nil {
+		return err
+	}
+	counts.HistoryItemCountPeriod1 = 0
+	counts.HistoryItemCountPeriod2 = 0
+	counts.HistoryItemCountPeriod3 = 0
+	counts.HistoryItemCountPeriod4 = historyCount
+
+	normalFilter := expression.And(
+		expression.AttributeExists(expression.Name(dataTypeAttrName)),
+		expression.Name(dataTypeAttrName).NotEqual(expression.Value(HistoryTypeID)),
+		expression.Name(dataTypeAttrName).NotEqual(expression.Value(HistoryDeleteDirectiveTypeID)),
+		expression.Name(deletedAttrName).Equal(expression.Value(false)),
+	)
+	normalCount, err := dynamo.countMatchingItems(ctx, pkCond, normalFilter, "normal")
+	if err != nil {
+		return err
+	}
+	counts.ItemCount = normalCount
+	return nil
+}
+
+func rotateHistoryCountPeriods(counts *ClientItemCounts, now int64) {
+	timeSinceLastChange := now - counts.LastPeriodChangeTime
+	if timeSinceLastChange < periodDurationSecs {
+		return
+	}
+	changeCount := int(timeSinceLastChange / periodDurationSecs)
+	for range changeCount {
+		// The records from "period 1"/the earliest period
+		// will be purged from the count, since they will be deleted via DDB TTL
+		counts.HistoryItemCountPeriod1 = counts.HistoryItemCountPeriod2
+		counts.HistoryItemCountPeriod2 = counts.HistoryItemCountPeriod3
+		counts.HistoryItemCountPeriod3 = counts.HistoryItemCountPeriod4
+		counts.HistoryItemCountPeriod4 = 0
+	}
+	counts.LastPeriodChangeTime += periodDurationSecs * int64(changeCount)
 }
 
 // GetClientItemCount returns the count of non-deleted sync items stored for
