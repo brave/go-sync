@@ -265,7 +265,7 @@ type commitCountState struct {
 	boostedQuota   int
 }
 
-func bumpInterimCount(
+func adjustInterimCount(
 	ctx context.Context,
 	cache *cache.Cache,
 	clientID string,
@@ -277,7 +277,7 @@ func bumpInterimCount(
 	if isHistoryRelatedItem {
 		countType = historyCountTypeStr
 	}
-	newCount, err := cache.IncrementInterimCount(ctx, clientID, countType, subtract)
+	newCount, err := cache.AdjustInterimCount(ctx, clientID, countType, subtract)
 	if isHistoryRelatedItem {
 		counts.newHistory = newCount
 	} else {
@@ -335,7 +335,7 @@ func insertCommitEntity(
 		idMap[*entity.OriginatorClientItemID] = entity.ID
 	}
 
-	return false, bumpInterimCount(ctx, cache, clientID, isHistoryRelatedItem, false, counts)
+	return false, adjustInterimCount(ctx, cache, clientID, isHistoryRelatedItem, false, counts)
 }
 
 func updateCommitEntity(
@@ -362,10 +362,10 @@ func updateCommitEntity(
 		entryRsp.ResponseType = &rspType
 		return true, nil
 	}
-	if !deleted {
-		return false, nil
+	if deleted {
+		return false, adjustInterimCount(ctx, cache, clientID, isHistoryRelatedItem, true, counts)
 	}
-	return false, bumpInterimCount(ctx, cache, clientID, isHistoryRelatedItem, true, counts)
+	return false, nil
 }
 
 // handleCommitRequest handles the commit message and fills the commit response.
