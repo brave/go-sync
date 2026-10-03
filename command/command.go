@@ -317,15 +317,15 @@ func insertCommitEntity(
 		return false, nil
 	}
 
-	conflict, insertErr := db.InsertSyncEntity(ctx, entity)
-	if insertErr != nil {
-		log.Error().Err(insertErr).Msg("Insert sync entity failed")
+	conflict, err := db.InsertSyncEntity(ctx, entity)
+	if err != nil {
+		log.Error().Err(err).Msg("Insert sync entity failed")
 		rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
 		if conflict {
 			rspType = sync_pb.CommitResponse_CONFLICT
 		}
 		entryRsp.ResponseType = &rspType
-		entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Insert sync entity failed: %v", insertErr.Error()))
+		entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Insert sync entity failed: %v", err.Error()))
 		return true, nil
 	}
 
@@ -349,12 +349,12 @@ func updateCommitEntity(
 	counts *commitCountState,
 	isHistoryRelatedItem bool,
 ) (bool, error) {
-	conflict, deleted, updateErr := db.UpdateSyncEntity(ctx, entity, oldVersion)
-	if updateErr != nil {
-		log.Error().Err(updateErr).Msg("Update sync entity failed")
+	conflict, deleted, err := db.UpdateSyncEntity(ctx, entity, oldVersion)
+	if err != nil {
+		log.Error().Err(err).Msg("Update sync entity failed")
 		rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
 		entryRsp.ResponseType = &rspType
-		entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Update sync entity failed: %v", updateErr.Error()))
+		entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Update sync entity failed: %v", err.Error()))
 		return true, nil
 	}
 	if conflict {
