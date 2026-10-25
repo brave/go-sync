@@ -26,6 +26,10 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-latest
+    env:
+      # Pull Redis from Docker Hub on GHA; compose defaults to public ECR locally
+      # to avoid Docker Hub rate limits on developer machines.
+      REDIS_REGISTRY: docker.io/library
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
