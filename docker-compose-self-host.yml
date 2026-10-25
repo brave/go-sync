@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+
+  brave-sync:
+    image: brave-sync:latest
+    container_name: brave-sync
+    environment:
+      - PPROF_ENABLED=true
+      - SENTRY_DSN
+      - ENV=local
+      - DEBUG=1
+      - AWS_ACCESS_KEY_ID=SET_TO_SOMETHING_SECURE
+      - AWS_SECRET_ACCESS_KEY=SET_TO_SOMETHING_SECURE
+      - AWS_REGION=us-west-2
+      - AWS_ENDPOINT=http://brave-dynamo:8000
+      - TABLE_NAME=client-entity-dev
+      - REDIS_URL=brave-redis:6379
+    depends_on:
+      - brave-dynamo
+      - brave-redis
+    restart: unless-stopped
+    networks:
+      - brave
+    # Uncomment these if you are not using an HTTPS proxy
+    # in the same `brave` network.
+    # ports:
+    #   - "8295:8295"
+
+  brave-dynamo:
+    image: brave-dynamo:latest
+    environment:
+      - AWS_ACCESS_KEY_ID=SET_TO_SOMETHING_SECURE
+      - AWS_SECRET_ACCESS_KEY=SET_TO_SOMETHING_SECURE
+    volumes:
+      # If desired, change this path
+      - /data/containers/brave/dynamo:/db
+    restart: unless-stopped
+    networks:
+      - brave
+
+  brave-redis:
+    image: public.ecr.aws/ubuntu/redis:latest
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+    networks:
+      - brave
+
+networks:
+  brave:
+    name: brave
