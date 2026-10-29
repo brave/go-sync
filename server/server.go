@@ -52,7 +52,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r := chi.NewRouter()
 
 	r.Use(chiware.RequestID)
-	r.Use(chiware.RealIP)
 	r.Use(chiware.Heartbeat("/"))
 
 	if logger != nil {
