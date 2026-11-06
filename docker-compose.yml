@@ -61,7 +61,8 @@ services:
     networks:
       - sync
   redis:
-    image: public.ecr.aws/docker/library/redis:6.2
+    # REDIS_REGISTRY defaults to ECR; set to docker.io/library (e.g. in CI) to pull from Docker Hub.
+    image: ${REDIS_REGISTRY:-public.ecr.aws/docker/library}/redis:7.2-alpine
     ports:
       - "6379:6379"
     environment:
