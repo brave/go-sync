@@ -1,6 +1,6 @@
 module github.com/brave/go-sync
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.47.5
@@ -8,16 +8,16 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.21.17
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression v1.10.5
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.72.3
-	github.com/brave-intl/bat-go/libs v0.0.0-20250620104757-9e2f8ff87fd8
+	github.com/brave-intl/bat-go/libs v0.0.0-20261030134255-afc8d84b751e
 	github.com/getsentry/sentry-go v0.39.0
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/redis/go-redis/v9 v9.17.0
-	github.com/rs/zerolog v1.34.0
+	github.com/rs/zerolog v1.35.1
 	github.com/stretchr/testify v1.12.1
-	google.golang.org/protobuf v1.36.8
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
@@ -57,7 +57,7 @@ require (
 	github.com/throttled/throttled/v2 v2.13.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/crypto v0.54.0 // indirect
+	golang.org/x/crypto v0.55.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 )
