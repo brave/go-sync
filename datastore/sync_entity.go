@@ -822,6 +822,10 @@ func CreateDBSyncEntity(entity *sync_pb.SyncEntity, cacheGUID *string, clientID 
 	s := strings.Split(tag, ",")
 	dataType, _ := strconv.Atoi(s[1])
 
+	if err = maybeRejectUnencryptedEntity(entity, dataType); err != nil {
+		return nil, err
+	}
+
 	var uniquePosition []byte
 	if entity.UniquePosition != nil {
 		uniquePosition, err = proto.Marshal(entity.UniquePosition)

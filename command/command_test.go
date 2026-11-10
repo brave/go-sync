@@ -98,7 +98,17 @@ func getNigoriSpecifics() *sync_pb.EntitySpecifics {
 	}
 }
 
+func getEncryptedData() *sync_pb.EncryptedData {
+	return &sync_pb.EncryptedData{KeyName: aws.String("key"), Blob: aws.String("rubbish")}
+}
+
 func getBookmarkSpecifics() *sync_pb.EntitySpecifics {
+	specifics := getServerDefinedBookmarkSpecifics()
+	specifics.Encrypted = getEncryptedData()
+	return specifics
+}
+
+func getServerDefinedBookmarkSpecifics() *sync_pb.EntitySpecifics {
 	bookmarkEntitySpecifics := &sync_pb.EntitySpecifics_Bookmark{
 		Bookmark: &sync_pb.BookmarkSpecifics{},
 	}
@@ -112,6 +122,7 @@ func getDeviceInfoSpecifics() *sync_pb.EntitySpecifics {
 		DeviceInfo: &sync_pb.DeviceInfoSpecifics{},
 	}
 	return &sync_pb.EntitySpecifics{
+		Encrypted:        getEncryptedData(),
 		SpecificsVariant: deviceInfoEntitySpecifics,
 	}
 }
@@ -223,6 +234,36 @@ func assertGetUpdatesResponse(suite *CommandTestSuite, rsp *sync_pb.GetUpdatesRe
 
 	suite.Equal(*newMarker, rsp.NewProgressMarker)
 	suite.Equal(expectedChangesRemaining, *rsp.ChangesRemaining)
+}
+
+func (suite *CommandTestSuite) TestHandleClientToServerMessage_RejectsPlaintextSpecifics() {
+	entries := []*sync_pb.SyncEntity{
+		getCommitEntity("id1_bookmark", 0, false, getBookmarkSpecifics()),
+		getCommitEntity("id2_bookmark", 0, false, &sync_pb.EntitySpecifics{
+			SpecificsVariant: &sync_pb.EntitySpecifics_Bookmark{
+				Bookmark: &sync_pb.BookmarkSpecifics{Url: aws.String("https://example.com")},
+			},
+		}),
+		getCommitEntity("id3_device_info", 0, false, &sync_pb.EntitySpecifics{
+			SpecificsVariant: &sync_pb.EntitySpecifics_DeviceInfo{
+				DeviceInfo: &sync_pb.DeviceInfoSpecifics{CacheGuid: aws.String("guid")},
+			},
+		}),
+	}
+	msg := getClientToServerCommitMsg(entries)
+	rsp := &sync_pb.ClientToServerResponse{}
+
+	suite.Require().NoError(
+		command.HandleClientToServerMessage(context.Background(), suite.cache, msg, rsp, suite.dynamo, clientID),
+		"HandleClientToServerMessage should succeed")
+	assertCommonResponse(suite, rsp, true)
+	suite.Require().Len(rsp.Commit.Entryresponse, 3)
+
+	suite.Equal(sync_pb.CommitResponse_SUCCESS, rsp.Commit.Entryresponse[0].GetResponseType())
+	for _, entryRsp := range rsp.Commit.Entryresponse[1:] {
+		suite.Equal(sync_pb.CommitResponse_INVALID_MESSAGE, entryRsp.GetResponseType())
+		suite.Contains(entryRsp.GetErrorMessage(), "entity must not contain plaintext specifics")
+	}
 }
 
 func (suite *CommandTestSuite) TestHandleClientToServerMessage_Basic() {
@@ -371,16 +412,16 @@ func (suite *CommandTestSuite) TestHandleClientToServerMessage_NewClient() {
 			getNigoriSpecifics()),
 		NewPBSyncAttrs(aws.String(command.BookmarksName), aws.Int64(1),
 			aws.Bool(false), aws.Bool(true), aws.String(command.BookmarksTag),
-			getBookmarkSpecifics()),
+			getServerDefinedBookmarkSpecifics()),
 		NewPBSyncAttrs(aws.String(command.OtherBookmarksName), aws.Int64(1),
 			aws.Bool(false), aws.Bool(true), aws.String(command.OtherBookmarksTag),
-			getBookmarkSpecifics()),
+			getServerDefinedBookmarkSpecifics()),
 		NewPBSyncAttrs(aws.String(command.SyncedBookmarksName), aws.Int64(1),
 			aws.Bool(false), aws.Bool(true), aws.String(command.SyncedBookmarksTag),
-			getBookmarkSpecifics()),
+			getServerDefinedBookmarkSpecifics()),
 		NewPBSyncAttrs(aws.String(command.BookmarkBarName), aws.Int64(1),
 			aws.Bool(false), aws.Bool(true), aws.String(command.BookmarkBarTag),
-			getBookmarkSpecifics()),
+			getServerDefinedBookmarkSpecifics()),
 	}
 	newMarker := marker // Initialize expected NewProgressMarker with tokens = 0.
 	assertGetUpdatesResponse(suite, rsp.GetUpdates, &newMarker, expectedPBSyncAttrs, 0)
