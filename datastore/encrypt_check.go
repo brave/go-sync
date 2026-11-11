@@ -10,39 +10,47 @@ import (
 	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 )
 
-const nigoriTypeID int = 47745
+// Data type IDs are EntitySpecifics field numbers from entity_specifics.proto.
+const (
+	nigoriTypeID   int = 47745
+	passwordTypeID int = 45873
+)
 
 var ErrEntityHasPlaintextSpecifics = errors.New("entity must not contain plaintext specifics")
 
-// Data types exempt from the specifics.encrypted requirement, keyed by
-// EntitySpecifics field number from entity_specifics.proto.
-var encryptionExemptTypes = map[int]struct{}{
-	// Carries the key bag that protects every other type.
-	nigoriTypeID: {},
-	// The server has to read these to purge its own stored entities, and it
-	// must not hold the user's passphrase. The payload is visit ids only.
-	HistoryDeleteDirectiveTypeID: {},
-	// Encrypted by its own scheme into its own specifics fields, so
-	// `specifics.encrypted` stays unset. See
-	// DataTypeWorker::EncryptPasswordSpecificsData(). 45873 is the
-	// PasswordSpecifics field number.
-	45873: {},
+// checkEntityEncrypted returns an error if the entity carries plaintext
+// specifics, reporting it to Sentry.
+func checkEntityEncrypted(entity *sync_pb.SyncEntity, dataType int) error {
+	if isEncryptionExempt(entity.GetSpecifics(), dataType) {
+		return nil
+	}
+	if !hasPlaintextSpecifics(entity.GetSpecifics()) {
+		return nil
+	}
+	sentry.WithScope(func(scope *sentry.Scope) {
+		scope.SetTag("data_type", strconv.Itoa(dataType))
+		sentry.CaptureException(ErrEntityHasPlaintextSpecifics)
+	})
+	return ErrEntityHasPlaintextSpecifics
 }
 
-// checkEntityEncrypted returns an error if the entity carries plaintext specifics.
-// Exempt types and server-defined entities are skipped since the server
-// creates the latter itself.
-func checkEntityEncrypted(entity *sync_pb.SyncEntity, dataType int) error {
-	if _, ok := encryptionExemptTypes[dataType]; ok {
-		return nil
+func isEncryptionExempt(specifics *sync_pb.EntitySpecifics, dataType int) bool {
+	switch dataType {
+	case nigoriTypeID:
+		// Carries the key bag that protects every other type.
+		return true
+	case HistoryDeleteDirectiveTypeID:
+		// The server may read these in the future to delete its own stored
+		// entities. URL directives would expose browsing history, so they are
+		// not exempt.
+		return specifics.GetHistoryDeleteDirective().GetUrlDirective().GetUrl() == ""
+	case passwordTypeID:
+		// Encrypted by its own scheme into its own specifics fields, so
+		// `specifics.encrypted` stays unset. See
+		// DataTypeWorker::EncryptPasswordSpecificsData().
+		return specifics.GetPassword().GetUnencryptedMetadata() == nil
 	}
-	if entity.GetServerDefinedUniqueTag() != "" {
-		return nil
-	}
-	if hasPlaintextSpecifics(entity.GetSpecifics()) {
-		return ErrEntityHasPlaintextSpecifics
-	}
-	return nil
+	return false
 }
 
 func hasPlaintextSpecifics(specifics *sync_pb.EntitySpecifics) bool {
@@ -52,18 +60,4 @@ func hasPlaintextSpecifics(specifics *sync_pb.EntitySpecifics) bool {
 		return false
 	}
 	return proto.Size(m.Get(field).Message().Interface()) > 0
-}
-
-// maybeRejectUnencryptedEntity checks the entity's encryption and reports
-// failures to Sentry.
-func maybeRejectUnencryptedEntity(entity *sync_pb.SyncEntity, dataType int) error {
-	err := checkEntityEncrypted(entity, dataType)
-	if err == nil {
-		return nil
-	}
-	sentry.WithScope(func(scope *sentry.Scope) {
-		scope.SetTag("data_type", strconv.Itoa(dataType))
-		sentry.CaptureException(err)
-	})
-	return err
 }

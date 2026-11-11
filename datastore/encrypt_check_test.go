@@ -69,13 +69,31 @@ func TestCreateDBSyncEntity_EncryptionExemptTypes(t *testing.T) {
 		"nigori": {SpecificsVariant: &sync_pb.EntitySpecifics_Nigori{
 			Nigori: &sync_pb.NigoriSpecifics{KeystoreMigrationTime: aws.Int64(1)},
 		}},
-		"history_delete_directive": {SpecificsVariant: &sync_pb.EntitySpecifics_HistoryDeleteDirective{
+		"history_delete_directive_global_id": {SpecificsVariant: &sync_pb.EntitySpecifics_HistoryDeleteDirective{
 			HistoryDeleteDirective: &sync_pb.HistoryDeleteDirectiveSpecifics{
-				UrlDirective: &sync_pb.UrlDirective{Url: aws.String("https://example.com")},
+				GlobalIdDirective: &sync_pb.GlobalIdDirective{GlobalId: []int64{1, 2}},
 			},
 		}},
-		"password": {SpecificsVariant: &sync_pb.EntitySpecifics_Password{
-			Password: &sync_pb.PasswordSpecifics{Encrypted: &sync_pb.EncryptedData{}},
+		"history_delete_directive_time_range": {SpecificsVariant: &sync_pb.EntitySpecifics_HistoryDeleteDirective{
+			HistoryDeleteDirective: &sync_pb.HistoryDeleteDirectiveSpecifics{
+				TimeRangeDirective: &sync_pb.TimeRangeDirective{StartTimeUsec: aws.Int64(1)},
+			},
+		}},
+		"history_delete_directive_url_directive_without_url": {SpecificsVariant: &sync_pb.EntitySpecifics_HistoryDeleteDirective{
+			HistoryDeleteDirective: &sync_pb.HistoryDeleteDirectiveSpecifics{
+				UrlDirective: &sync_pb.UrlDirective{EndTimeUsec: aws.Int64(1)},
+			},
+		}},
+		"password_encrypted": {SpecificsVariant: &sync_pb.EntitySpecifics_Password{
+			Password: &sync_pb.PasswordSpecifics{
+				Encrypted: &sync_pb.EncryptedData{KeyName: aws.String("key"), Blob: aws.String("blob")},
+			},
+		}},
+		"password_encrypted_with_notes_backup": {SpecificsVariant: &sync_pb.EntitySpecifics_Password{
+			Password: &sync_pb.PasswordSpecifics{
+				Encrypted:            &sync_pb.EncryptedData{KeyName: aws.String("key"), Blob: aws.String("blob")},
+				EncryptedNotesBackup: &sync_pb.EncryptedData{KeyName: aws.String("key"), Blob: aws.String("notes")},
+			},
 		}},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -85,9 +103,42 @@ func TestCreateDBSyncEntity_EncryptionExemptTypes(t *testing.T) {
 	}
 }
 
-func TestCreateDBSyncEntity_ServerDefinedSkipsEncryptionCheck(t *testing.T) {
-	entity := newPBEntity(plaintextBookmarkSpecifics())
+func TestCreateDBSyncEntity_EncryptionExemptTypesWithPlaintext(t *testing.T) {
+	for name, specifics := range map[string]*sync_pb.EntitySpecifics{
+		"history_delete_directive_url": {SpecificsVariant: &sync_pb.EntitySpecifics_HistoryDeleteDirective{
+			HistoryDeleteDirective: &sync_pb.HistoryDeleteDirectiveSpecifics{
+				UrlDirective: &sync_pb.UrlDirective{Url: aws.String("https://example.com")},
+			},
+		}},
+		"password_unencrypted_metadata": {SpecificsVariant: &sync_pb.EntitySpecifics_Password{
+			Password: &sync_pb.PasswordSpecifics{
+				UnencryptedMetadata: &sync_pb.PasswordSpecificsMetadata{Url: aws.String("https://example.com")},
+			},
+		}},
+		"password_encrypted_with_unencrypted_metadata": {SpecificsVariant: &sync_pb.EntitySpecifics_Password{
+			Password: &sync_pb.PasswordSpecifics{
+				Encrypted:           &sync_pb.EncryptedData{KeyName: aws.String("key"), Blob: aws.String("blob")},
+				UnencryptedMetadata: &sync_pb.PasswordSpecificsMetadata{Url: aws.String("https://example.com")},
+			},
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := datastore.CreateDBSyncEntity(newPBEntity(specifics), nil, "client1")
+			assert.ErrorIs(t, err, datastore.ErrEntityHasPlaintextSpecifics)
+		})
+	}
+}
+
+func TestCreateDBSyncEntity_ServerDefinedEmptySpecifics(t *testing.T) {
+	entity := newPBEntity(emptyBookmarkSpecifics())
 	entity.ServerDefinedUniqueTag = aws.String("bookmark_bar")
 	_, err := datastore.CreateDBSyncEntity(entity, nil, "client1")
 	assert.NoError(t, err)
+}
+
+func TestCreateDBSyncEntity_ServerDefinedWithPlaintextSpecifics(t *testing.T) {
+	entity := newPBEntity(plaintextBookmarkSpecifics())
+	entity.ServerDefinedUniqueTag = aws.String("bookmark_bar")
+	_, err := datastore.CreateDBSyncEntity(entity, nil, "client1")
+	assert.ErrorIs(t, err, datastore.ErrEntityHasPlaintextSpecifics)
 }
