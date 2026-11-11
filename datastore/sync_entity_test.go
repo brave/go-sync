@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/proto"
@@ -505,6 +507,133 @@ func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_ReuseClientTag() {
 	tagItems, err = datastoretest.ScanTagItems(suite.dynamo)
 	suite.Require().NoError(err, "ScanTagItems should succeed")
 	suite.Len(tagItems, 1, "Tag item should be inserted")
+}
+
+func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_NonExistentItem() {
+	entity := datastore.SyncEntity{
+		ClientID:      "client1",
+		ID:            "id1",
+		Version:       aws.Int64(2),
+		Ctime:         aws.Int64(12345678),
+		Mtime:         aws.Int64(23456789),
+		DataType:      aws.Int(123),
+		Folder:        aws.Bool(false),
+		Deleted:       aws.Bool(false),
+		DataTypeMtime: aws.String("123#23456789"),
+		Specifics:     []byte{1, 2},
+	}
+	conflict, deleted, err := suite.dynamo.UpdateSyncEntity(context.Background(), &entity, 1)
+	suite.Require().NoError(err, "UpdateSyncEntity should not return an error")
+	suite.True(conflict, "Update of non-existent item should return conflict")
+	suite.False(deleted, "Conflict operation should return false for delete")
+
+	// History items skip the version check but still require the item to exist.
+	historyEntity := entity
+	historyEntity.ID = "id2"
+	historyEntity.DataType = aws.Int(963985)
+	historyEntity.DataTypeMtime = aws.String("963985#23456789")
+	conflict, deleted, err = suite.dynamo.UpdateSyncEntity(context.Background(), &historyEntity, 1)
+	suite.Require().NoError(err, "UpdateSyncEntity should not return an error")
+	suite.True(conflict, "Update of non-existent history item should return conflict")
+	suite.False(deleted, "Conflict operation should return false for delete")
+
+	syncItems, err := datastoretest.ScanSyncEntities(suite.dynamo)
+	suite.Require().NoError(err, "ScanSyncEntities should succeed")
+	suite.Empty(syncItems, "Failed updates should not create items")
+}
+
+func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_ContactInfoUpsertAfterPurge() {
+	entity := datastore.SyncEntity{
+		ClientID:               "client1",
+		ID:                     "id1",
+		ParentID:               aws.String("parentID"),
+		Version:                aws.Int64(1),
+		Ctime:                  aws.Int64(12345678),
+		Mtime:                  aws.Int64(12345678),
+		Name:                   aws.String("name"),
+		NonUniqueName:          aws.String("non_unique_name"),
+		Deleted:                aws.Bool(false),
+		OriginatorCacheGUID:    aws.String("cache_guid"),
+		OriginatorClientItemID: aws.String("client_item_id"),
+		ClientDefinedUniqueTag: aws.String("client_tag"),
+		Specifics:              []byte{1, 2},
+		Folder:                 aws.Bool(false),
+		UniquePosition:         []byte{3, 4},
+		DataType:               aws.Int(datastore.ContactInfoTypeID),
+		DataTypeMtime:          aws.String(strconv.Itoa(datastore.ContactInfoTypeID) + "#12345678"),
+	}
+	conflict, err := suite.dynamo.InsertSyncEntity(context.Background(), &entity)
+	suite.Require().NoError(err, "InsertSyncEntity should succeed")
+	suite.False(conflict, "Successful insert should not have conflict")
+
+	key, err := attributevalue.MarshalMap(datastore.PrimaryKey{ClientID: entity.ClientID, ID: entity.ID})
+	suite.Require().NoError(err, "MarshalMap should succeed")
+	_, err = suite.dynamo.DeleteItem(context.Background(), &dynamodb.DeleteItemInput{
+		Key:       key,
+		TableName: aws.String(datastore.Table),
+	})
+	suite.Require().NoError(err, "DeleteItem should succeed")
+	syncItems, err := datastoretest.ScanSyncEntities(suite.dynamo)
+	suite.Require().NoError(err, "ScanSyncEntities should succeed")
+	suite.Empty(syncItems, "Sync item should be purged")
+
+	conflict, deleted, err := suite.dynamo.UpdateSyncEntity(context.Background(), &entity, *entity.Version)
+	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
+	suite.False(conflict, "Contact info upsert should not have conflict")
+	suite.False(deleted, "Non-delete operation should return false")
+
+	syncItems, err = datastoretest.ScanSyncEntities(suite.dynamo)
+	suite.Require().NoError(err, "ScanSyncEntities should succeed")
+	suite.Equal([]datastore.SyncEntity{entity}, syncItems)
+
+	tagItems, err := datastoretest.ScanTagItems(suite.dynamo)
+	suite.Require().NoError(err, "ScanTagItems should succeed")
+	suite.Len(tagItems, 1, "Tag item from the original insert should remain")
+}
+
+func (suite *SyncEntityTestSuite) TestUpdateSyncEntity_ContactInfoPreservesExistingAttributes() {
+	entity := datastore.SyncEntity{
+		ClientID:               "client1",
+		ID:                     "id1",
+		Version:                aws.Int64(1),
+		Ctime:                  aws.Int64(12345678),
+		Mtime:                  aws.Int64(12345678),
+		Deleted:                aws.Bool(false),
+		OriginatorCacheGUID:    aws.String("cache_guid"),
+		OriginatorClientItemID: aws.String("client_item_id"),
+		ClientDefinedUniqueTag: aws.String("client_tag"),
+		Specifics:              []byte{1, 2},
+		Folder:                 aws.Bool(false),
+		DataType:               aws.Int(datastore.ContactInfoTypeID),
+		DataTypeMtime:          aws.String(strconv.Itoa(datastore.ContactInfoTypeID) + "#12345678"),
+	}
+	conflict, err := suite.dynamo.InsertSyncEntity(context.Background(), &entity)
+	suite.Require().NoError(err, "InsertSyncEntity should succeed")
+	suite.False(conflict, "Successful insert should not have conflict")
+
+	updateEntity := entity
+	updateEntity.Version = aws.Int64(23456789)
+	updateEntity.Mtime = aws.Int64(23456789)
+	updateEntity.Ctime = aws.Int64(99999999)
+	updateEntity.ClientDefinedUniqueTag = aws.String("other_client_tag")
+	updateEntity.OriginatorCacheGUID = aws.String("other_cache_guid")
+	updateEntity.OriginatorClientItemID = aws.String("other_client_item_id")
+	updateEntity.DataTypeMtime = aws.String(strconv.Itoa(datastore.ContactInfoTypeID) + "#23456789")
+	updateEntity.Specifics = []byte{3, 4}
+	conflict, deleted, err := suite.dynamo.UpdateSyncEntity(context.Background(), &updateEntity, *entity.Version)
+	suite.Require().NoError(err, "UpdateSyncEntity should succeed")
+	suite.False(conflict, "Successful update should not have conflict")
+	suite.False(deleted, "Non-delete operation should return false")
+
+	expected := updateEntity
+	expected.Ctime = entity.Ctime
+	expected.DataType = entity.DataType
+	expected.ClientDefinedUniqueTag = entity.ClientDefinedUniqueTag
+	expected.OriginatorCacheGUID = entity.OriginatorCacheGUID
+	expected.OriginatorClientItemID = entity.OriginatorClientItemID
+	syncItems, err := datastoretest.ScanSyncEntities(suite.dynamo)
+	suite.Require().NoError(err, "ScanSyncEntities should succeed")
+	suite.Equal([]datastore.SyncEntity{expected}, syncItems)
 }
 
 func (suite *SyncEntityTestSuite) TestGetUpdatesForType() {
