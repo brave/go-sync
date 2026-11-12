@@ -32,6 +32,7 @@ const (
 	reasonDeleted                    = "deleted"
 	HistoryTypeID                int = 963985
 	HistoryDeleteDirectiveTypeID int = 150251
+	ContactInfoTypeID            int = 1034378
 	// HistoryExpirationIntervalSecs is the expiration time for history and
 	// history delete directive entities in seconds.
 	HistoryExpirationIntervalSecs = 14 * 24 * 60 * 60 // 14 days
@@ -544,39 +545,7 @@ func (dynamo *Dynamo) UpdateSyncEntity(ctx context.Context, entity *SyncEntity, 
 		return false, false, fmt.Errorf("error marshalling key to update sync entity: %w", err)
 	}
 
-	// condition to ensure the request is update only...
-	cond := expression.AttributeExists(expression.Name(pk))
-	// ...and the version matches, if applicable
-	if *entity.DataType != HistoryTypeID {
-		cond = expression.And(cond, expression.Name("Version").Equal(expression.Value(oldVersion)))
-	}
-
-	update := expression.Set(expression.Name("Version"), expression.Value(entity.Version))
-	update = update.Set(expression.Name("Mtime"), expression.Value(entity.Mtime))
-	update = update.Set(expression.Name("Specifics"), expression.Value(entity.Specifics))
-	update = update.Set(expression.Name("DataTypeMtime"), expression.Value(entity.DataTypeMtime))
-
-	// Update optional fields only if the value is not null.
-	if entity.UniquePosition != nil {
-		update = update.Set(expression.Name("UniquePosition"), expression.Value(entity.UniquePosition))
-	}
-	if entity.ParentID != nil {
-		update = update.Set(expression.Name("ParentID"), expression.Value(entity.ParentID))
-	}
-	if entity.Name != nil {
-		update = update.Set(expression.Name("Name"), expression.Value(entity.Name))
-	}
-	if entity.NonUniqueName != nil {
-		update = update.Set(expression.Name("NonUniqueName"), expression.Value(entity.NonUniqueName))
-	}
-	if entity.Deleted != nil {
-		update = update.Set(expression.Name("Deleted"), expression.Value(entity.Deleted))
-	}
-	if entity.Folder != nil {
-		update = update.Set(expression.Name("Folder"), expression.Value(entity.Folder))
-	}
-
-	expr, err := expression.NewBuilder().WithCondition(cond).WithUpdate(update).Build()
+	expr, err := buildUpdateSyncEntityExpression(entity, oldVersion)
 	if err != nil {
 		return false, false, fmt.Errorf("error building expression to update sync entity: %w", err)
 	}
@@ -626,6 +595,65 @@ func (dynamo *Dynamo) UpdateSyncEntity(ctx context.Context, entity *SyncEntity, 
 		deleted = !*oldEntity.Deleted && *entity.Deleted
 	}
 	return false, deleted, nil
+}
+
+func buildUpdateSyncEntityExpression(entity *SyncEntity, oldVersion int64) (expression.Expression, error) {
+	// Previous contact info stored in plaintext may have been purged, so upsert
+	// encrypted data to avoid conflict.
+	isUpsert := *entity.DataType == ContactInfoTypeID
+
+	update := expression.Set(expression.Name("Version"), expression.Value(entity.Version))
+	update = update.Set(expression.Name("Mtime"), expression.Value(entity.Mtime))
+	update = update.Set(expression.Name("Specifics"), expression.Value(entity.Specifics))
+	update = update.Set(expression.Name("DataTypeMtime"), expression.Value(entity.DataTypeMtime))
+
+	// Update optional fields only if the value is not null.
+	if entity.UniquePosition != nil {
+		update = update.Set(expression.Name("UniquePosition"), expression.Value(entity.UniquePosition))
+	}
+	if entity.ParentID != nil {
+		update = update.Set(expression.Name("ParentID"), expression.Value(entity.ParentID))
+	}
+	if entity.Name != nil {
+		update = update.Set(expression.Name("Name"), expression.Value(entity.Name))
+	}
+	if entity.NonUniqueName != nil {
+		update = update.Set(expression.Name("NonUniqueName"), expression.Value(entity.NonUniqueName))
+	}
+	if entity.Deleted != nil {
+		update = update.Set(expression.Name("Deleted"), expression.Value(entity.Deleted))
+	}
+	if entity.Folder != nil {
+		update = update.Set(expression.Name("Folder"), expression.Value(entity.Folder))
+	}
+
+	builder := expression.NewBuilder()
+	if isUpsert {
+		// Populate attributes that would otherwise be missing if the upsert
+		// creates a new item.
+		update = setIfNotExists(update, "DataType", entity.DataType)
+		update = setIfNotExists(update, "Ctime", entity.Ctime)
+		update = setIfNotExists(update, "ClientDefinedUniqueTag", entity.ClientDefinedUniqueTag)
+		update = setIfNotExists(update, "OriginatorCacheGUID", entity.OriginatorCacheGUID)
+		update = setIfNotExists(update, "OriginatorClientItemID", entity.OriginatorClientItemID)
+	} else {
+		// condition to ensure the request is update only...
+		cond := expression.AttributeExists(expression.Name(pk))
+		// ...and the version matches, if applicable
+		if *entity.DataType != HistoryTypeID {
+			cond = expression.And(cond, expression.Name("Version").Equal(expression.Value(oldVersion)))
+		}
+		builder = builder.WithCondition(cond)
+	}
+
+	return builder.WithUpdate(update).Build()
+}
+
+func setIfNotExists[T any](update expression.UpdateBuilder, name string, value *T) expression.UpdateBuilder {
+	if value == nil {
+		return update
+	}
+	return update.Set(expression.Name(name), expression.IfNotExists(expression.Name(name), expression.Value(value)))
 }
 
 func (dynamo *Dynamo) softDeleteSyncEntityWithClientTag(
