@@ -48,7 +48,8 @@ func isEncryptionExempt(specifics *sync_pb.EntitySpecifics, dataType int) bool {
 		// Encrypted by its own scheme into its own specifics fields, so
 		// `specifics.encrypted` stays unset. See
 		// DataTypeWorker::EncryptPasswordSpecificsData().
-		return specifics.GetPassword().GetUnencryptedMetadata() == nil
+		return specifics.GetPassword().GetUnencryptedMetadata() == nil &&
+			specifics.GetPassword().GetClientOnlyEncryptedData() == nil
 	}
 	return false
 }
