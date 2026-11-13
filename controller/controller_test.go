@@ -30,7 +30,7 @@ type ControllerTestSuite struct {
 }
 
 func (suite *ControllerTestSuite) SetupSuite() {
-	datastore.Table = "client-entity-test-controllor"
+	datastore.Table = "client-entity-test-controllor" //nolint:reassign // acceptable for tests
 	var err error
 	suite.dynamo, err = datastore.NewDynamo()
 	suite.Require().NoError(err, "Failed to get dynamoDB session")

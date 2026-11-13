@@ -75,12 +75,10 @@ func ResetTable(dynamo *datastore.Dynamo) error {
 	return CreateTable(dynamo)
 }
 
-// ScanSyncEntities scans the dynamoDB table and returns all sync items.
-func ScanSyncEntities(dynamo *datastore.Dynamo) ([]datastore.SyncEntity, error) {
-	filter := expression.AttributeExists(expression.Name("Version"))
+func scanItems[T any](dynamo *datastore.Dynamo, filter expression.ConditionBuilder, kind string) ([]T, error) {
 	expr, err := expression.NewBuilder().WithFilter(filter).Build()
 	if err != nil {
-		return nil, fmt.Errorf("error building expression to scan sync entitites: %w", err)
+		return nil, fmt.Errorf("error building expression to scan %s: %w", kind, err)
 	}
 
 	input := &dynamodb.ScanInput{
@@ -91,15 +89,21 @@ func ScanSyncEntities(dynamo *datastore.Dynamo) ([]datastore.SyncEntity, error) 
 	}
 	out, err := dynamo.Scan(context.Background(), input)
 	if err != nil {
-		return nil, fmt.Errorf("error doing scan for sync entities: %w", err)
+		return nil, fmt.Errorf("error doing scan for %s: %w", kind, err)
 	}
-	syncItems := []datastore.SyncEntity{}
-	err = attributevalue.UnmarshalListOfMaps(out.Items, &syncItems)
+	var items []T
+	err = attributevalue.UnmarshalListOfMaps(out.Items, &items)
 	if err != nil {
-		return nil, fmt.Errorf("error unmarshalling sync entitites: %w", err)
+		return nil, fmt.Errorf("error unmarshalling %s: %w", kind, err)
 	}
 
-	return syncItems, nil
+	return items, nil
+}
+
+// ScanSyncEntities scans the dynamoDB table and returns all sync items.
+func ScanSyncEntities(dynamo *datastore.Dynamo) ([]datastore.SyncEntity, error) {
+	return scanItems[datastore.SyncEntity](
+		dynamo, expression.AttributeExists(expression.Name("Version")), "sync entities")
 }
 
 // ScanTagItems scans the dynamoDB table and returns all tag items.
@@ -107,54 +111,12 @@ func ScanTagItems(dynamo *datastore.Dynamo) ([]datastore.ServerClientUniqueTagIt
 	filter := expression.And(
 		expression.AttributeNotExists(expression.Name("ExpireAt")),
 		expression.AttributeNotExists(expression.Name("Version")))
-	expr, err := expression.NewBuilder().WithFilter(filter).Build()
-	if err != nil {
-		return nil, fmt.Errorf("error building expression to scan tag items: %w", err)
-	}
-
-	input := &dynamodb.ScanInput{
-		ExpressionAttributeNames:  expr.Names(),
-		ExpressionAttributeValues: expr.Values(),
-		FilterExpression:          expr.Filter(),
-		TableName:                 aws.String(datastore.Table),
-	}
-	out, err := dynamo.Scan(context.Background(), input)
-	if err != nil {
-		return nil, fmt.Errorf("error doing scan for tag items: %w", err)
-	}
-	tagItems := []datastore.ServerClientUniqueTagItem{}
-	err = attributevalue.UnmarshalListOfMaps(out.Items, &tagItems)
-	if err != nil {
-		return nil, fmt.Errorf("error unmarshalling tag items: %w", err)
-	}
-
-	return tagItems, nil
+	return scanItems[datastore.ServerClientUniqueTagItem](dynamo, filter, "tag items")
 }
 
 // ScanClientItemCounts scans the dynamoDB table and returns all client item
 // counts.
 func ScanClientItemCounts(dynamo *datastore.Dynamo) ([]datastore.ClientItemCounts, error) {
-	filter := expression.AttributeExists(expression.Name("ItemCount"))
-	expr, err := expression.NewBuilder().WithFilter(filter).Build()
-	if err != nil {
-		return nil, fmt.Errorf("error building expression to scan item counts: %w", err)
-	}
-
-	input := &dynamodb.ScanInput{
-		ExpressionAttributeNames:  expr.Names(),
-		ExpressionAttributeValues: expr.Values(),
-		FilterExpression:          expr.Filter(),
-		TableName:                 aws.String(datastore.Table),
-	}
-	out, err := dynamo.Scan(context.Background(), input)
-	if err != nil {
-		return nil, fmt.Errorf("error doing scan for item counts: %w", err)
-	}
-	clientItemCounts := []datastore.ClientItemCounts{}
-	err = attributevalue.UnmarshalListOfMaps(out.Items, &clientItemCounts)
-	if err != nil {
-		return nil, fmt.Errorf("error unmarshalling item counts: %w", err)
-	}
-
-	return clientItemCounts, nil
+	return scanItems[datastore.ClientItemCounts](
+		dynamo, expression.AttributeExists(expression.Name("ItemCount")), "item counts")
 }

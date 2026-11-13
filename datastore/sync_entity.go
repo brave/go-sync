@@ -32,8 +32,8 @@ const (
 	reasonDeleted                    = "deleted"
 	HistoryTypeID                int = 963985
 	HistoryDeleteDirectiveTypeID int = 150251
-	// Expiration time for history and history delete directive
-	// entities in seconds
+	// HistoryExpirationIntervalSecs is the expiration time for history and
+	// history delete directive entities in seconds.
 	HistoryExpirationIntervalSecs = 14 * 24 * 60 * 60 // 14 days
 )
 
@@ -170,59 +170,7 @@ func (dynamo *Dynamo) InsertSyncEntity(ctx context.Context, entity *SyncEntity) 
 	// Write tag item for all data types, except for
 	// the history type, which does not use tag items.
 	if entity.ClientDefinedUniqueTag != nil && *entity.DataType != HistoryTypeID {
-		items := make([]types.TransactWriteItem, 0, 2)
-		// Additional item for ensuring tag's uniqueness for a specific client.
-		item := NewServerClientUniqueTagItem(entity.ClientID, *entity.ClientDefinedUniqueTag, false)
-		av, err := attributevalue.MarshalMap(*item)
-		if err != nil {
-			return false, fmt.Errorf("error marshalling unique tag item to insert sync entity: %w", err)
-		}
-		tagItem := types.TransactWriteItem{
-			Put: &types.Put{
-				Item:                      av,
-				ExpressionAttributeNames:  expr.Names(),
-				ExpressionAttributeValues: expr.Values(),
-				ConditionExpression:       expr.Condition(),
-				TableName:                 aws.String(Table),
-			},
-		}
-
-		// Normal sync item
-		av, err = attributevalue.MarshalMap(*entity)
-		if err != nil {
-			return false, fmt.Errorf("error marshlling sync item to insert sync entity: %w", err)
-		}
-		syncItem := types.TransactWriteItem{
-			Put: &types.Put{
-				Item:                      av,
-				ExpressionAttributeNames:  expr.Names(),
-				ExpressionAttributeValues: expr.Values(),
-				ConditionExpression:       expr.Condition(),
-				TableName:                 aws.String(Table),
-			},
-		}
-		items = append(items, tagItem)
-		items = append(items, syncItem)
-
-		_, err = dynamo.TransactWriteItems(ctx,
-			&dynamodb.TransactWriteItemsInput{TransactItems: items})
-		if err != nil {
-			// Return conflict if insert condition failed.
-			var canceledException *types.TransactionCanceledException
-			if errors.As(err, &canceledException) {
-				for _, reason := range canceledException.CancellationReasons {
-					if reason.Code != nil && *reason.Code == conditionalCheckFailed {
-						return true, fmt.Errorf("error inserting sync item with client tag: %w", err)
-					}
-				}
-			}
-			return false, fmt.Errorf(
-				"error writing tag item and sync item in a transaction to insert sync entity: %w",
-				err,
-			)
-		}
-
-		return false, nil
+		return dynamo.insertSyncEntityWithClientTag(ctx, entity, expr)
 	}
 
 	// Normal sync item
@@ -242,6 +190,67 @@ func (dynamo *Dynamo) InsertSyncEntity(ctx context.Context, entity *SyncEntity) 
 		return false, fmt.Errorf("error calling PutItem to insert sync item: %w", err)
 	}
 	return false, nil
+}
+
+func (dynamo *Dynamo) insertSyncEntityWithClientTag(
+	ctx context.Context,
+	entity *SyncEntity,
+	expr expression.Expression,
+) (bool, error) {
+	item := NewServerClientUniqueTagItem(entity.ClientID, *entity.ClientDefinedUniqueTag, false)
+	av, err := attributevalue.MarshalMap(*item)
+	if err != nil {
+		return false, fmt.Errorf("error marshalling unique tag item to insert sync entity: %w", err)
+	}
+	tagItem := types.TransactWriteItem{
+		Put: &types.Put{
+			Item:                      av,
+			ExpressionAttributeNames:  expr.Names(),
+			ExpressionAttributeValues: expr.Values(),
+			ConditionExpression:       expr.Condition(),
+			TableName:                 aws.String(Table),
+		},
+	}
+
+	av, err = attributevalue.MarshalMap(*entity)
+	if err != nil {
+		return false, fmt.Errorf("error marshalling sync item to insert sync entity: %w", err)
+	}
+	syncItem := types.TransactWriteItem{
+		Put: &types.Put{
+			Item:                      av,
+			ExpressionAttributeNames:  expr.Names(),
+			ExpressionAttributeValues: expr.Values(),
+			ConditionExpression:       expr.Condition(),
+			TableName:                 aws.String(Table),
+		},
+	}
+
+	_, err = dynamo.TransactWriteItems(ctx,
+		&dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{tagItem, syncItem}})
+	if err != nil && isTransactConditionalCheckFailed(err) {
+		return true, fmt.Errorf("error inserting sync item with client tag: %w", err)
+	}
+	if err != nil {
+		return false, fmt.Errorf(
+			"error writing tag item and sync item in a transaction to insert sync entity: %w",
+			err,
+		)
+	}
+	return false, nil
+}
+
+func isTransactConditionalCheckFailed(err error) bool {
+	var canceledException *types.TransactionCanceledException
+	if !errors.As(err, &canceledException) {
+		return false
+	}
+	for _, reason := range canceledException.CancellationReasons {
+		if reason.Code != nil && *reason.Code == conditionalCheckFailed {
+			return true
+		}
+	}
+	return false
 }
 
 // HasServerDefinedUniqueTag check the tag item to see if there is already a
@@ -267,8 +276,8 @@ func (dynamo *Dynamo) HasServerDefinedUniqueTag(ctx context.Context, clientID st
 	return out.Item != nil, nil
 }
 
-func (dynamo *Dynamo) HasItem(ctx context.Context, clientID string, ID string) (bool, error) {
-	primaryKey := PrimaryKey{ClientID: clientID, ID: ID}
+func (dynamo *Dynamo) HasItem(ctx context.Context, clientID string, id string) (bool, error) {
+	primaryKey := PrimaryKey{ClientID: clientID, ID: id}
 	key, err := attributevalue.MarshalMap(primaryKey)
 
 	if err != nil {
@@ -375,15 +384,7 @@ func (dynamo *Dynamo) DisableSyncChain(ctx context.Context, clientID string) err
 	return nil
 }
 
-// ClearServerData deletes all items for a given clientID. It uses a paginated
-// Query (capped at 1MB per page by DynamoDB) and processes each page in
-// transactional delete batches before fetching the next page, keeping each
-// transaction comfortably under the 4MB TransactWriteItems limit. The Query
-// uses a projection so the heavy Specifics blob is never fetched; only the
-// attributes required to build the delete (primary key, Mtime, Version) and
-// to invalidate downstream caches (DataType) are returned.
-func (dynamo *Dynamo) ClearServerData(ctx context.Context, clientID string) ([]SyncEntity, error) {
-	syncEntities := []SyncEntity{}
+func clearServerDataQueryInput(clientID string) (*dynamodb.QueryInput, error) {
 	keyCond := expression.KeyEqual(expression.Key(pk), expression.Value(clientID))
 	proj := expression.NamesList(
 		expression.Name(pk),
@@ -394,86 +395,116 @@ func (dynamo *Dynamo) ClearServerData(ctx context.Context, clientID string) ([]S
 	)
 	expr, err := expression.NewBuilder().WithKeyCondition(keyCond).WithProjection(proj).Build()
 	if err != nil {
-		return syncEntities, fmt.Errorf("error building expression to clear server data: %w", err)
+		return nil, fmt.Errorf("error building expression to clear server data: %w", err)
 	}
 
-	input := &dynamodb.QueryInput{
+	return &dynamodb.QueryInput{
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
 		KeyConditionExpression:    expr.KeyCondition(),
 		ProjectionExpression:      expr.Projection(),
 		TableName:                 aws.String(Table),
+	}, nil
+}
+
+func transactDeleteForSyncEntity(item SyncEntity) (*types.TransactWriteItem, error) {
+	if item.ID == disabledChainID {
+		return nil, nil //nolint:nilnil // skip the disabled-chain marker; no delete item
+	}
+
+	del := &types.Delete{
+		TableName: aws.String(Table),
+		Key: map[string]types.AttributeValue{
+			pk: &types.AttributeValueMemberS{Value: item.ClientID},
+			sk: &types.AttributeValueMemberS{Value: item.ID},
+		},
+	}
+
+	// Fail delete if race condition detected (modified time has changed).
+	if item.Version != nil && item.Mtime != nil {
+		cond := expression.Name("Mtime").Equal(expression.Value(*item.Mtime))
+		condExpr, err := expression.NewBuilder().WithCondition(cond).Build()
+		if err != nil {
+			return nil, err
+		}
+		del.ConditionExpression = condExpr.Condition()
+		del.ExpressionAttributeNames = condExpr.Names()
+		del.ExpressionAttributeValues = condExpr.Values()
+	}
+
+	return &types.TransactWriteItem{Delete: del}, nil
+}
+
+func (dynamo *Dynamo) transactDeleteSyncEntities(
+	ctx context.Context,
+	clientID string,
+	pageEntities []SyncEntity,
+) error {
+	for i := 0; i < len(pageEntities); i += maxTransactDeleteItemSize {
+		j := min(i+maxTransactDeleteItemSize, len(pageEntities))
+		items := make([]types.TransactWriteItem, 0, j-i)
+		for _, item := range pageEntities[i:j] {
+			writeItem, err := transactDeleteForSyncEntity(item)
+			if err != nil {
+				return fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
+			}
+			if writeItem == nil {
+				continue
+			}
+			items = append(items, *writeItem)
+		}
+		if len(items) == 0 {
+			continue
+		}
+		if _, err := dynamo.TransactWriteItems(
+			ctx,
+			&dynamodb.TransactWriteItemsInput{TransactItems: items},
+		); err != nil {
+			return fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
+		}
+	}
+	return nil
+}
+
+// ClearServerData deletes all items for a given clientID. It uses a paginated
+// Query (capped at 1MB per page by DynamoDB) and processes each page in
+// transactional delete batches before fetching the next page, keeping each
+// transaction comfortably under the 4MB TransactWriteItems limit. The Query
+// uses a projection so the heavy Specifics blob is never fetched; only the
+// attributes required to build the delete (primary key, Mtime, Version) and
+// to invalidate downstream caches (DataType) are returned.
+func (dynamo *Dynamo) ClearServerData(ctx context.Context, clientID string) ([]SyncEntity, error) {
+	syncEntities := []SyncEntity{}
+	input, err := clearServerDataQueryInput(clientID)
+	if err != nil {
+		return syncEntities, err
 	}
 
 	paginator := dynamodb.NewQueryPaginator(dynamo.Client, input)
 	var totalCount int32
 	var pageIndex int
 	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(ctx)
-		if err != nil {
-			return syncEntities, fmt.Errorf("error querying sync entities to clear: %w", err)
+		page, pageErr := paginator.NextPage(ctx)
+		if pageErr != nil {
+			return syncEntities, fmt.Errorf("error querying sync entities to clear: %w", pageErr)
 		}
 
 		var pageEntities []SyncEntity
-		if err := attributevalue.UnmarshalListOfMaps(page.Items, &pageEntities); err != nil {
-			return syncEntities, fmt.Errorf("error unmarshalling sync entities to clear: %w", err)
+		if unmarshalErr := attributevalue.UnmarshalListOfMaps(page.Items, &pageEntities); unmarshalErr != nil {
+			return syncEntities, fmt.Errorf("error unmarshalling sync entities to clear: %w", unmarshalErr)
 		}
 		syncEntities = append(syncEntities, pageEntities...)
 		totalCount += page.Count
 
-		log.Info().Str("chainID", clientID).Int("page", pageIndex).Int32("count", page.Count).Msg("Queried sync entities for deletion")
+		log.Info().
+			Str("chainID", clientID).
+			Int("page", pageIndex).
+			Int32("count", page.Count).
+			Msg("Queried sync entities for deletion")
 		pageIndex++
 
-		for i := int32(0); i < page.Count; i += maxTransactDeleteItemSize {
-			j := min(i+maxTransactDeleteItemSize, page.Count)
-
-			items := make([]types.TransactWriteItem, 0, j-i)
-			for _, item := range pageEntities[i:j] {
-				if item.ID == disabledChainID {
-					continue
-				}
-
-				// Fail delete if race condition detected (modified time has changed).
-				if item.Version != nil && item.Mtime != nil {
-					cond := expression.Name("Mtime").Equal(expression.Value(*item.Mtime))
-					condExpr, err := expression.NewBuilder().WithCondition(cond).Build()
-					if err != nil {
-						return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
-					}
-
-					items = append(items, types.TransactWriteItem{
-						Delete: &types.Delete{
-							ConditionExpression:       condExpr.Condition(),
-							ExpressionAttributeNames:  condExpr.Names(),
-							ExpressionAttributeValues: condExpr.Values(),
-							TableName:                 aws.String(Table),
-							Key: map[string]types.AttributeValue{
-								pk: &types.AttributeValueMemberS{Value: item.ClientID},
-								sk: &types.AttributeValueMemberS{Value: item.ID},
-							},
-						},
-					})
-				} else {
-					// If row doesn't hold Mtime, delete as usual.
-					items = append(items, types.TransactWriteItem{
-						Delete: &types.Delete{
-							TableName: aws.String(Table),
-							Key: map[string]types.AttributeValue{
-								pk: &types.AttributeValueMemberS{Value: item.ClientID},
-								sk: &types.AttributeValueMemberS{Value: item.ID},
-							},
-						},
-					})
-				}
-			}
-
-			if len(items) == 0 {
-				continue
-			}
-
-			if _, err := dynamo.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: items}); err != nil {
-				return syncEntities, fmt.Errorf("error deleting sync entities for client %s: %w", clientID, err)
-			}
+		if deleteErr := dynamo.transactDeleteSyncEntities(ctx, clientID, pageEntities); deleteErr != nil {
+			return syncEntities, deleteErr
 		}
 	}
 
@@ -554,52 +585,7 @@ func (dynamo *Dynamo) UpdateSyncEntity(ctx context.Context, entity *SyncEntity, 
 	// tag item too.
 	if entity.Deleted != nil && entity.ClientDefinedUniqueTag != nil && *entity.Deleted &&
 		*entity.DataType != HistoryTypeID {
-		pk := PrimaryKey{
-			ClientID: entity.ClientID, ID: clientTagItemPrefix + *entity.ClientDefinedUniqueTag}
-		tagItemKey, err := attributevalue.MarshalMap(pk)
-		if err != nil {
-			return false, false, fmt.Errorf("error marshalling key to update sync entity: %w", err)
-		}
-
-		items := make([]types.TransactWriteItem, 0, 2)
-		updateSyncItem := types.TransactWriteItem{
-			Update: &types.Update{
-				Key:                                 key,
-				ExpressionAttributeNames:            expr.Names(),
-				ExpressionAttributeValues:           expr.Values(),
-				ConditionExpression:                 expr.Condition(),
-				UpdateExpression:                    expr.Update(),
-				ReturnValuesOnConditionCheckFailure: types.ReturnValuesOnConditionCheckFailureAllOld,
-				TableName:                           aws.String(Table),
-			},
-		}
-		deleteTagItem := types.TransactWriteItem{
-			Delete: &types.Delete{
-				Key:       tagItemKey,
-				TableName: aws.String(Table),
-			},
-		}
-		items = append(items, updateSyncItem)
-		items = append(items, deleteTagItem)
-
-		_, err = dynamo.TransactWriteItems(ctx,
-			&dynamodb.TransactWriteItemsInput{TransactItems: items})
-		if err != nil {
-			// Return conflict if the update condition fails.
-			var canceledException *types.TransactionCanceledException
-			if errors.As(err, &canceledException) {
-				for _, reason := range canceledException.CancellationReasons {
-					if reason.Code != nil && *reason.Code == conditionalCheckFailed {
-						return true, false, nil
-					}
-				}
-			}
-
-			return false, false, fmt.Errorf("error deleting sync item and tag item in a transaction: %w", err)
-		}
-
-		// Successfully soft-delete the sync item and delete the tag item.
-		return false, true, nil
+		return dynamo.softDeleteSyncEntityWithClientTag(ctx, entity, key, expr)
 	}
 
 	// Not deleting a sync item with a client tag, do a normal update on sync
@@ -631,14 +617,61 @@ func (dynamo *Dynamo) UpdateSyncEntity(ctx context.Context, entity *SyncEntity, 
 		return false, false, fmt.Errorf("error unmarshalling old sync entity: %w", err)
 	}
 	var deleted bool
-	if entity.Deleted == nil { // No updates on Deleted this time.
+	switch {
+	case entity.Deleted == nil: // No updates on Deleted this time.
 		deleted = false
-	} else if oldEntity.Deleted == nil { // Consider it as Deleted = false.
+	case oldEntity.Deleted == nil: // Consider it as Deleted = false.
 		deleted = *entity.Deleted
-	} else {
+	default:
 		deleted = !*oldEntity.Deleted && *entity.Deleted
 	}
 	return false, deleted, nil
+}
+
+func (dynamo *Dynamo) softDeleteSyncEntityWithClientTag(
+	ctx context.Context,
+	entity *SyncEntity,
+	key map[string]types.AttributeValue,
+	expr expression.Expression,
+) (bool, bool, error) {
+	pk := PrimaryKey{
+		ClientID: entity.ClientID, ID: clientTagItemPrefix + *entity.ClientDefinedUniqueTag}
+	tagItemKey, err := attributevalue.MarshalMap(pk)
+	if err != nil {
+		return false, false, fmt.Errorf("error marshalling key to update sync entity: %w", err)
+	}
+
+	updateSyncItem := types.TransactWriteItem{
+		Update: &types.Update{
+			Key:                                 key,
+			ExpressionAttributeNames:            expr.Names(),
+			ExpressionAttributeValues:           expr.Values(),
+			ConditionExpression:                 expr.Condition(),
+			UpdateExpression:                    expr.Update(),
+			ReturnValuesOnConditionCheckFailure: types.ReturnValuesOnConditionCheckFailureAllOld,
+			TableName:                           aws.String(Table),
+		},
+	}
+	deleteTagItem := types.TransactWriteItem{
+		Delete: &types.Delete{
+			Key:       tagItemKey,
+			TableName: aws.String(Table),
+		},
+	}
+
+	_, err = dynamo.TransactWriteItems(ctx,
+		&dynamodb.TransactWriteItemsInput{
+			TransactItems: []types.TransactWriteItem{updateSyncItem, deleteTagItem},
+		})
+	if err != nil && isTransactConditionalCheckFailed(err) {
+		return true, false, nil
+	}
+	if err != nil {
+		return false, false, fmt.Errorf("error deleting sync item and tag item in a transaction: %w", err)
+	}
+
+	// Successfully soft-delete the sync item and delete the tag item.
+	return false, true, nil
 }
 
 // GetUpdatesForType returns sync entities of a data type where it's mtime is
@@ -718,9 +751,9 @@ func (dynamo *Dynamo) GetUpdatesForType(
 		// Use paginator to automatically handle UnprocessedKeys
 		paginator := dynamodb.NewBatchGetItemPaginator(dynamo.Client, batchInput)
 		for paginator.HasMorePages() {
-			batchOut, err := paginator.NextPage(ctx)
-			if err != nil {
-				return false, syncEntities, fmt.Errorf("error getting update items in a batch: %w", err)
+			batchOut, batchErr := paginator.NextPage(ctx)
+			if batchErr != nil {
+				return false, syncEntities, fmt.Errorf("error getting update items in a batch: %w", batchErr)
 			}
 			outAv = append(outAv, batchOut.Responses[Table]...)
 		}

@@ -4,10 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brave/go-sync/command"
-	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/brave/go-sync/command"
+	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 )
 
 func makeEntity(size int) *sync_pb.SyncEntity {

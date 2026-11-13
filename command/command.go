@@ -31,6 +31,249 @@ const (
 	normalCountTypeStr  string = "normal"
 )
 
+func setupNewClient(
+	ctx context.Context,
+	db datastore.Datastore,
+	clientID string,
+) (*sync_pb.SyncEnums_ErrorType, error) {
+	// Reject the request if client has >= 50 devices in the chain.
+	activeDevices := 0
+	for {
+		hasChangesRemaining, syncEntities, err := db.GetUpdatesForType(
+			ctx,
+			deviceInfoTypeID,
+			0,
+			false,
+			clientID,
+			maxGUBatchSize,
+		)
+		if err != nil {
+			log.Error().Err(err).Msgf("db.GetUpdatesForType failed for type %v", deviceInfoTypeID)
+			errCode := sync_pb.SyncEnums_TRANSIENT_ERROR
+			return &errCode,
+				fmt.Errorf("error getting updates for type %v: %w", deviceInfoTypeID, err)
+		}
+
+		for _, entity := range syncEntities {
+			if !*entity.Deleted {
+				activeDevices++
+			}
+
+			// Error out when device limit has been reached.
+			if hasReachedDeviceLimit(activeDevices, clientID) {
+				errCode := sync_pb.SyncEnums_THROTTLED
+				return &errCode, errors.New("exceed limit of active devices in a chain")
+			}
+		}
+
+		// Run until all device records are checked.
+		if !hasChangesRemaining {
+			break
+		}
+	}
+
+	// Insert initial records if needed.
+	err := InsertServerDefinedUniqueEntities(ctx, db, clientID)
+	if err != nil {
+		log.Error().Err(err).Msg("Create server defined unique entities failed")
+		errCode := sync_pb.SyncEnums_TRANSIENT_ERROR
+		return &errCode, fmt.Errorf("error creating server defined unique entities: %w", err)
+	}
+	success := sync_pb.SyncEnums_SUCCESS
+	return &success, nil
+}
+
+func isNewClientOrigin(guMsg *sync_pb.GetUpdatesMessage) bool {
+	return guMsg.GetUpdatesOrigin != nil && *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_NEW_CLIENT
+}
+
+func isPollOrigin(guMsg *sync_pb.GetUpdatesMessage) bool {
+	return guMsg.GetUpdatesOrigin != nil && *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_PERIODIC
+}
+
+func maybeSetupNewClient(
+	ctx context.Context,
+	db datastore.Datastore,
+	clientID string,
+	isNewClient bool,
+) (*sync_pb.SyncEnums_ErrorType, error) {
+	if !isNewClient {
+		return nil, nil //nolint:nilnil // no proto error code when setup is skipped
+	}
+	return setupNewClient(ctx, db, clientID)
+}
+
+func shouldFetchFolders(guMsg *sync_pb.GetUpdatesMessage) bool {
+	if guMsg.FetchFolders != nil {
+		return *guMsg.FetchFolders
+	}
+	return true
+}
+
+func progressMarkerToken(fromProgressMarker *sync_pb.DataTypeProgressMarker) []byte {
+	// Default token value is client's token, otherwise 0.
+	// This token will be updated when we return the updated entities.
+	if len(fromProgressMarker.Token) > 0 {
+		return fromProgressMarker.Token
+	}
+	token := make([]byte, binary.MaxVarintLen64)
+	binary.PutVarint(token, int64(0))
+	return token
+}
+
+func maybeSetNigoriEncryptionKeys(guRsp *sync_pb.GetUpdatesResponse, dataTypeID int32, isNewClient bool) {
+	if dataTypeID != nigoriTypeID || !isNewClient {
+		return
+	}
+	// Bypassing chromium's restriction here, our server won't provide the
+	// initial encryption keys like chromium does, this will be overwritten
+	// by our client.
+	guRsp.EncryptionKeys = make([][]byte, 1)
+	guRsp.EncryptionKeys[0] = []byte("1234")
+}
+
+func nigoriRootNotReady(isNewClient bool, dataTypeID int32, token int64, entities []datastore.SyncEntity) bool {
+	// Due to eventually read consistency, it is possible that we cannot get
+	// the nigori root folder entity for this NEW_CLIENT GetUpdates request,
+	// which is essential for clients when initializing sync engine with nigori
+	// type. Return a transient error for clients to re-request in this case.
+	return isNewClient && dataTypeID == nigoriTypeID && token == 0 && len(entities) == 0
+}
+
+func appendGetUpdatesEntities(
+	guRsp *sync_pb.GetUpdatesResponse,
+	markerIndex int,
+	entities []datastore.SyncEntity,
+) (int, *sync_pb.SyncEnums_ErrorType, error) {
+	// Fill the PB entry from above DB entries until maxSize is reached.
+	j := 0
+	for ; j < len(entities) && len(guRsp.Entries) < cap(guRsp.Entries); j++ {
+		entity, createErr := datastore.CreatePBSyncEntity(&entities[j])
+		if createErr != nil {
+			errCode := sync_pb.SyncEnums_TRANSIENT_ERROR
+			return 0, &errCode, fmt.Errorf("error creating protobuf sync entity from DB entity: %w", createErr)
+		}
+		guRsp.Entries = append(guRsp.Entries, entity)
+	}
+	// If entities are appended, use the lastest mtime as returned token.
+	if j != 0 {
+		guRsp.NewProgressMarker[markerIndex].Token = make([]byte, binary.MaxVarintLen64)
+		binary.PutVarint(guRsp.NewProgressMarker[markerIndex].Token, *entities[j-1].Mtime)
+	}
+	return j, nil, nil
+}
+
+func maybeSetTypeMtime(
+	ctx context.Context,
+	cache *cache.Cache,
+	clientID string,
+	dataTypeID int,
+	changesRemaining int64,
+	appendedCount int,
+	token int64,
+	entities []datastore.SyncEntity,
+) {
+	// Save (clientID#dataType, mtime) into cache after querying from DB.
+	// If changes_remaining = 1 in the response, client will send another poll
+	// request immediately, we do not save mtime into cache in this iteration
+	// because the client token in the subsequent poll request will be equal to
+	// this mtime and we will wrongly think there are no updates when we
+	// process that subsequent poll request. The cache will be updated in a
+	// subsequent poll request where changes_remaining = 0.
+	if changesRemaining == 1 {
+		return
+	}
+	mtime := token
+	if appendedCount != 0 {
+		mtime = *entities[appendedCount-1].Mtime
+	}
+	cache.SetTypeMtime(ctx, clientID, dataTypeID, mtime)
+}
+
+func processGetUpdatesForType(
+	ctx context.Context,
+	cache *cache.Cache,
+	db datastore.Datastore,
+	clientID string,
+	fromProgressMarker *sync_pb.DataTypeProgressMarker,
+	guRsp *sync_pb.GetUpdatesResponse,
+	markerIndex int,
+	maxSize int,
+	fetchFolders bool,
+	isNewClient bool,
+	isPoll bool,
+	changesRemaining *int64,
+) (*sync_pb.SyncEnums_ErrorType, error) {
+	guRsp.NewProgressMarker[markerIndex] = &sync_pb.DataTypeProgressMarker{
+		DataTypeId: fromProgressMarker.DataTypeId,
+		Token:      progressMarkerToken(fromProgressMarker),
+	}
+
+	maybeSetNigoriEncryptionKeys(guRsp, *fromProgressMarker.DataTypeId, isNewClient)
+
+	// No need to get updates for this type because we already reach the
+	// maximum GetUpdates size for this request. Continue to next type instead
+	// of break because we need to prepare NewProgressMarker for all entries in
+	// FromProgressMarker, where the returned token stays the same as the one
+	// passed in FromProgressMarker.
+	if len(guRsp.Entries) >= maxSize {
+		return nil, nil //nolint:nilnil // continue to next type; no proto error
+	}
+
+	token, n := binary.Varint(guRsp.NewProgressMarker[markerIndex].Token)
+	if n <= 0 {
+		return nil, fmt.Errorf("failed at decoding token value %v", token)
+	}
+
+	// Check cache to short circuit with 0 updates for polling requests.
+	if isPoll &&
+		!cache.IsTypeMtimeUpdated(ctx, clientID, int(*fromProgressMarker.DataTypeId), token) {
+		return nil, nil //nolint:nilnil // cache hit; no proto error
+	}
+
+	curMaxSize := maxSize - len(guRsp.Entries)
+	hasChangesRemaining, entities, err := db.GetUpdatesForType(
+		ctx,
+		int(*fromProgressMarker.DataTypeId),
+		token,
+		fetchFolders,
+		clientID,
+		curMaxSize,
+	)
+	if err != nil {
+		log.Error().Err(err).Msgf("db.GetUpdatesForType failed for type %v", *fromProgressMarker.DataTypeId)
+		errCode := sync_pb.SyncEnums_TRANSIENT_ERROR
+		return &errCode,
+			fmt.Errorf("error getting updates for type %v: %w", *fromProgressMarker.DataTypeId, err)
+	}
+
+	if nigoriRootNotReady(isNewClient, *fromProgressMarker.DataTypeId, token, entities) {
+		errCode := sync_pb.SyncEnums_TRANSIENT_ERROR
+		return &errCode, errors.New("nigori root folder entity is not ready yet")
+	}
+
+	if hasChangesRemaining {
+		*changesRemaining = 1 // Chromium uses 1 instead of actual count of update entries remaining.
+	}
+
+	j, errCode, err := appendGetUpdatesEntities(guRsp, markerIndex, entities)
+	if err != nil {
+		return errCode, err
+	}
+
+	maybeSetTypeMtime(
+		ctx,
+		cache,
+		clientID,
+		int(*fromProgressMarker.DataTypeId),
+		*changesRemaining,
+		j,
+		token,
+		entities,
+	)
+	return nil, nil //nolint:nilnil // type processed; no proto error
+}
+
 // handleGetUpdatesRequest handles GetUpdatesMessage and fills
 // GetUpdatesResponse. Target sync entities in the database will be updated or
 // deleted based on the client's requests.
@@ -43,52 +286,10 @@ func handleGetUpdatesRequest(
 	clientID string,
 ) (*sync_pb.SyncEnums_ErrorType, error) {
 	errCode := sync_pb.SyncEnums_SUCCESS // default value, might be changed later
-	isNewClient := guMsg.GetUpdatesOrigin != nil && *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_NEW_CLIENT
-	isPoll := guMsg.GetUpdatesOrigin != nil && *guMsg.GetUpdatesOrigin == sync_pb.SyncEnums_PERIODIC
-	if isNewClient {
-		// Reject the request if client has >= 50 devices in the chain.
-		activeDevices := 0
-		for {
-			hasChangesRemaining, syncEntities, err := db.GetUpdatesForType(
-				ctx,
-				deviceInfoTypeID,
-				0,
-				false,
-				clientID,
-				maxGUBatchSize,
-			)
-			if err != nil {
-				log.Error().Err(err).Msgf("db.GetUpdatesForType failed for type %v", deviceInfoTypeID)
-				errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-				return &errCode,
-					fmt.Errorf("error getting updates for type %v: %w", deviceInfoTypeID, err)
-			}
-
-			for _, entity := range syncEntities {
-				if !*entity.Deleted {
-					activeDevices++
-				}
-
-				// Error out when device limit has been reached.
-				if hasReachedDeviceLimit(activeDevices, clientID) {
-					errCode = sync_pb.SyncEnums_THROTTLED
-					return &errCode, errors.New("exceed limit of active devices in a chain")
-				}
-			}
-
-			// Run until all device records are checked.
-			if !hasChangesRemaining {
-				break
-			}
-		}
-
-		// Insert initial records if needed.
-		err := InsertServerDefinedUniqueEntities(ctx, db, clientID)
-		if err != nil {
-			log.Error().Err(err).Msg("Create server defined unique entities failed")
-			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-			return &errCode, fmt.Errorf("error creating server defined unique entitiies: %w", err)
-		}
+	isNewClient := isNewClientOrigin(guMsg)
+	isPoll := isPollOrigin(guMsg)
+	if setupErrCode, err := maybeSetupNewClient(ctx, db, clientID, isNewClient); err != nil {
+		return setupErrCode, err
 	}
 
 	changesRemaining := int64(0)
@@ -98,118 +299,29 @@ func handleGetUpdatesRequest(
 		return &errCode, nil
 	}
 
-	fetchFolders := true
-	if guMsg.FetchFolders != nil {
-		fetchFolders = *guMsg.FetchFolders
-	}
-
+	fetchFolders := shouldFetchFolders(guMsg)
 	maxSize := maxGUBatchSize
 
 	// Process from_progress_marker
 	guRsp.NewProgressMarker = make([]*sync_pb.DataTypeProgressMarker, len(guMsg.FromProgressMarker))
 	guRsp.Entries = make([]*sync_pb.SyncEntity, 0, maxSize)
 	for i, fromProgressMarker := range guMsg.FromProgressMarker {
-		guRsp.NewProgressMarker[i] = &sync_pb.DataTypeProgressMarker{}
-		guRsp.NewProgressMarker[i].DataTypeId = fromProgressMarker.DataTypeId
-
-		// Default token value is client's token, otherwise 0.
-		// This token will be updated when we return the updated entities.
-		if len(fromProgressMarker.Token) > 0 {
-			guRsp.NewProgressMarker[i].Token = fromProgressMarker.Token
-		} else {
-			guRsp.NewProgressMarker[i].Token = make([]byte, binary.MaxVarintLen64)
-			binary.PutVarint(guRsp.NewProgressMarker[i].Token, int64(0))
-		}
-
-		if *fromProgressMarker.DataTypeId == nigoriTypeID && isNewClient {
-			// Bypassing chromium's restriction here, our server won't provide the
-			// initial encryption keys like chromium does, this will be overwritten
-			// by our client.
-			guRsp.EncryptionKeys = make([][]byte, 1)
-			guRsp.EncryptionKeys[0] = []byte("1234")
-		}
-
-		// No need to get updates for this type because we already reach the
-		// maximum GetUpdates size for this request. Continue to next type instead
-		// of break because we need to prepare NewProgressMarker for all entries in
-		// FromProgressMarker, where the returned token stays the same as the one
-		// passed in FromProgressMarker.
-		if len(guRsp.Entries) >= maxSize {
-			continue
-		}
-
-		token, n := binary.Varint(guRsp.NewProgressMarker[i].Token)
-		if n <= 0 {
-			return nil, fmt.Errorf("failed at decoding token value %v", token)
-		}
-
-		// Check cache to short circuit with 0 updates for polling requests.
-		if isPoll &&
-			!cache.IsTypeMtimeUpdated(ctx, clientID, int(*fromProgressMarker.DataTypeId), token) {
-			continue
-		}
-
-		curMaxSize := maxSize - len(guRsp.Entries)
-		hasChangesRemaining, entities, err := db.GetUpdatesForType(
+		typeErrCode, err := processGetUpdatesForType(
 			ctx,
-			int(*fromProgressMarker.DataTypeId),
-			token,
-			fetchFolders,
+			cache,
+			db,
 			clientID,
-			curMaxSize,
+			fromProgressMarker,
+			guRsp,
+			i,
+			maxSize,
+			fetchFolders,
+			isNewClient,
+			isPoll,
+			&changesRemaining,
 		)
 		if err != nil {
-			log.Error().Err(err).Msgf("db.GetUpdatesForType failed for type %v", *fromProgressMarker.DataTypeId)
-			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-			return &errCode,
-				fmt.Errorf("error getting updates for type %v: %w", *fromProgressMarker.DataTypeId, err)
-		}
-
-		// Due to eventually read consistency, it is possible that we cannot get
-		// the nigori root folder entity for this NEW_CLIENT GetUpdates request,
-		// which is essential for clients when initializing sync engine with nigori
-		// type. Return a transient error for clients to re-request in this case.
-		if isNewClient && *fromProgressMarker.DataTypeId == nigoriTypeID &&
-			token == 0 && len(entities) == 0 {
-			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-			return &errCode, errors.New("nigori root folder entity is not ready yet")
-		}
-
-		if hasChangesRemaining {
-			changesRemaining = 1 // Chromium uses 1 instead of actual count of update entries remaining.
-		}
-
-		// Fill the PB entry from above DB entries until maxSize is reached.
-		j := 0
-		for ; j < len(entities) && len(guRsp.Entries) < cap(guRsp.Entries); j++ {
-			entity, err := datastore.CreatePBSyncEntity(&entities[j])
-			if err != nil {
-				errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-				return &errCode, fmt.Errorf("error creating protobuf sync entity from DB entity: %w", err)
-			}
-			guRsp.Entries = append(guRsp.Entries, entity)
-		}
-		// If entities are appended, use the lastest mtime as returned token.
-		if j != 0 {
-			guRsp.NewProgressMarker[i].Token = make([]byte, binary.MaxVarintLen64)
-			binary.PutVarint(guRsp.NewProgressMarker[i].Token, *entities[j-1].Mtime)
-		}
-
-		// Save (clientID#dataType, mtime) into cache after querying from DB.
-		// If changes_remaining = 1 in the response, client will send another poll
-		// request immediately, we do not save mtime into cache in this iteration
-		// because the client token in the subsequent poll request will be equal to
-		// this mtime and we will wrongly think there are no updates when we
-		// process that subsequent poll request. The cache will be updated in a
-		// subsequent poll request where changes_remaining = 0.
-		if changesRemaining != 1 {
-			var mtime int64
-			if j == 0 {
-				mtime = token
-			} else {
-				mtime = *entities[j-1].Mtime
-			}
-			cache.SetTypeMtime(ctx, clientID, int(*fromProgressMarker.DataTypeId), mtime)
+			return typeErrCode, err
 		}
 	}
 
@@ -245,6 +357,230 @@ func getInterimItemCounts(ctx context.Context, cache *cache.Cache, clientID stri
 	return newNormalCount, newHistoryCount, nil
 }
 
+type commitCountState struct {
+	currentNormal  int
+	currentHistory int
+	newNormal      int
+	newHistory     int
+	boostedQuota   int
+}
+
+func adjustInterimCount(
+	ctx context.Context,
+	cache *cache.Cache,
+	clientID string,
+	isHistoryRelatedItem bool,
+	subtract bool,
+	counts *commitCountState,
+) error {
+	countType := normalCountTypeStr
+	if isHistoryRelatedItem {
+		countType = historyCountTypeStr
+	}
+	newCount, err := cache.AdjustInterimCount(ctx, clientID, countType, subtract)
+	if isHistoryRelatedItem {
+		counts.newHistory = newCount
+	} else {
+		counts.newNormal = newCount
+	}
+	return err
+}
+
+func insertCommitEntity(
+	ctx context.Context,
+	db datastore.Datastore,
+	cache *cache.Cache,
+	clientID string,
+	entity *datastore.SyncEntity,
+	entryRsp *sync_pb.CommitResponse_EntryResponse,
+	idMap map[string]string,
+	counts *commitCountState,
+	isHistoryRelatedItem bool,
+) (bool, error) {
+	total := counts.currentNormal + counts.currentHistory + counts.newNormal + counts.newHistory
+	if total >= maxClientObjectQuota+counts.boostedQuota {
+		rspType := sync_pb.CommitResponse_OVER_QUOTA
+		entryRsp.ResponseType = &rspType
+		entryRsp.ErrorMessage = aws.String(
+			fmt.Sprintf(
+				"There are already %v non-deleted objects in store",
+				counts.currentNormal+counts.currentHistory,
+			),
+		)
+		return true, nil
+	}
+
+	// Insert all non-history items. For history items, ignore any items above history quota
+	// and lie to the client about the objects being synced instead of returning OVER_QUOTA
+	// so the client can continue to sync other entities.
+	if isHistoryRelatedItem && counts.currentHistory+counts.newHistory >= maxClientHistoryObjectQuota {
+		return false, nil
+	}
+
+	conflict, err := db.InsertSyncEntity(ctx, entity)
+	if err != nil {
+		log.Error().Err(err).Msg("Insert sync entity failed")
+		rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
+		if conflict {
+			rspType = sync_pb.CommitResponse_CONFLICT
+		}
+		entryRsp.ResponseType = &rspType
+		entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Insert sync entity failed: %v", err.Error()))
+		return true, nil
+	}
+
+	// Save client-generated to server-generated ID mapping when committing
+	// a new entry with OriginatorClientItemID (client-generated ID).
+	if entity.OriginatorClientItemID != nil {
+		idMap[*entity.OriginatorClientItemID] = entity.ID
+	}
+
+	return false, adjustInterimCount(ctx, cache, clientID, isHistoryRelatedItem, false, counts)
+}
+
+func updateCommitEntity(
+	ctx context.Context,
+	db datastore.Datastore,
+	cache *cache.Cache,
+	clientID string,
+	entity *datastore.SyncEntity,
+	oldVersion int64,
+	entryRsp *sync_pb.CommitResponse_EntryResponse,
+	counts *commitCountState,
+	isHistoryRelatedItem bool,
+) (bool, error) {
+	conflict, deleted, err := db.UpdateSyncEntity(ctx, entity, oldVersion)
+	if err != nil {
+		log.Error().Err(err).Msg("Update sync entity failed")
+		rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
+		entryRsp.ResponseType = &rspType
+		entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Update sync entity failed: %v", err.Error()))
+		return true, nil
+	}
+	if conflict {
+		rspType := sync_pb.CommitResponse_CONFLICT
+		entryRsp.ResponseType = &rspType
+		return true, nil
+	}
+	if deleted {
+		return false, adjustInterimCount(ctx, cache, clientID, isHistoryRelatedItem, true, counts)
+	}
+	return false, nil
+}
+
+func applyBoostedHistoryQuota(counts *commitCountState) {
+	if counts.currentHistory <= maxClientHistoryObjectQuota {
+		return
+	}
+	// Sync chains with history entities stored before the history count fix
+	// may have history counts greater than the new history item quota.
+	// "Boost" the quota with the difference between the history quota and count,
+	// so users can start syncing other entities immediately, instead of waiting for the
+	// history TTL to get rid of the excess items.
+	counts.boostedQuota = min(
+		maxClientObjectQuota-maxClientHistoryObjectQuota,
+		counts.currentHistory-maxClientHistoryObjectQuota,
+	)
+}
+
+func replaceClientGeneratedParentID(entity *datastore.SyncEntity, idMap map[string]string) {
+	// Check if ParentID is a client-generated ID which appears in previous
+	// commit entries, if so, replace with corresponding server-generated ID.
+	if entity.ParentID == nil {
+		return
+	}
+	serverParentID, ok := idMap[*entity.ParentID]
+	if !ok {
+		return
+	}
+	entity.ParentID = &serverParentID
+}
+
+func resolveHistoryUpdateOp(
+	ctx context.Context,
+	db datastore.Datastore,
+	clientID string,
+	entity *datastore.SyncEntity,
+	entryRsp *sync_pb.CommitResponse_EntryResponse,
+) (bool, bool) {
+	// Check if item exists using client_unique_tag
+	isUpdateOp, err := db.HasItem(ctx, clientID, *entity.ClientDefinedUniqueTag)
+	if err != nil {
+		log.Error().Err(err).Msg("Insert history sync entity failed")
+		rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
+		entryRsp.ResponseType = &rspType
+		entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Insert history sync entity failed: %v", err.Error()))
+		return false, true
+	}
+	return isUpdateOp, false
+}
+
+func commitEntry(
+	ctx context.Context,
+	cache *cache.Cache,
+	db datastore.Datastore,
+	clientID string,
+	pbEntity *sync_pb.SyncEntity,
+	cacheGUID *string,
+	entryRsp *sync_pb.CommitResponse_EntryResponse,
+	idMap map[string]string,
+	typeMtimeMap map[int]int64,
+	counts *commitCountState,
+	sizeMonitor *ItemSizeMonitor,
+) error {
+	entityToCommit, createErr := datastore.CreateDBSyncEntity(pbEntity, cacheGUID, clientID)
+	if createErr != nil { // Can't unmarshal & marshal the message from PB into DB format
+		rspType := sync_pb.CommitResponse_INVALID_MESSAGE
+		entryRsp.ResponseType = &rspType
+		entryRsp.ErrorMessage = aws.String(
+			fmt.Sprintf("Cannot convert protobuf sync entity to DB format: %v", createErr.Error()),
+		)
+		return nil
+	}
+
+	sizeMonitor.Observe(*entityToCommit.DataType, pbEntity)
+	replaceClientGeneratedParentID(entityToCommit, idMap)
+
+	oldVersion := *entityToCommit.Version
+	isUpdateOp := oldVersion != 0
+	isHistoryRelatedItem := *entityToCommit.DataType == datastore.HistoryTypeID ||
+		*entityToCommit.DataType == datastore.HistoryDeleteDirectiveTypeID
+	*entityToCommit.Version = *entityToCommit.Mtime
+	if *entityToCommit.DataType == datastore.HistoryTypeID {
+		var skip bool
+		isUpdateOp, skip = resolveHistoryUpdateOp(ctx, db, clientID, entityToCommit, entryRsp)
+		if skip {
+			return nil
+		}
+	}
+
+	var skipEntry bool
+	var err error
+	if isUpdateOp {
+		skipEntry, err = updateCommitEntity(
+			ctx, db, cache, clientID, entityToCommit, oldVersion, entryRsp, counts, isHistoryRelatedItem,
+		)
+	} else {
+		skipEntry, err = insertCommitEntity(
+			ctx, db, cache, clientID, entityToCommit, entryRsp, idMap, counts, isHistoryRelatedItem,
+		)
+	}
+	if err != nil {
+		return err
+	}
+	if skipEntry {
+		return nil
+	}
+
+	typeMtimeMap[*entityToCommit.DataType] = *entityToCommit.Mtime
+	rspType := sync_pb.CommitResponse_SUCCESS
+	entryRsp.ResponseType = &rspType
+	entryRsp.IdString = aws.String(entityToCommit.ID)
+	entryRsp.Version = entityToCommit.Version
+	entryRsp.Mtime = entityToCommit.Mtime
+	return nil
+}
+
 // handleCommitRequest handles the commit message and fills the commit response.
 // For each commit entry:
 //   - new sync entity is created and inserted into the database if version is 0.
@@ -272,21 +608,13 @@ func handleCommitRequest(
 		errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
 		return &errCode, fmt.Errorf("error getting client's item count: %w", err)
 	}
-	currentNormalItemCount := itemCounts.ItemCount
-	currentHistoryItemCount := itemCounts.SumHistoryCounts()
-
-	boostedQuotaAddition := 0
-	if currentHistoryItemCount > maxClientHistoryObjectQuota {
-		// Sync chains with history entities stored before the history count fix
-		// may have history counts greater than the new history item quota.
-		// "Boost" the quota with the difference between the history quota and count,
-		// so users can start syncing other entities immediately, instead of waiting for the
-		// history TTL to get rid of the excess items.
-		boostedQuotaAddition = min(
-			maxClientObjectQuota-maxClientHistoryObjectQuota,
-			currentHistoryItemCount-maxClientHistoryObjectQuota,
-		)
+	counts := commitCountState{
+		currentNormal:  itemCounts.ItemCount,
+		currentHistory: itemCounts.SumHistoryCounts(),
+		newNormal:      newNormalCount,
+		newHistory:     newHistoryCount,
 	}
+	applyBoostedHistoryQuota(&counts)
 
 	commitRsp.Entryresponse = make([]*sync_pb.CommitResponse_EntryResponse, len(commitMsg.Entries))
 
@@ -298,121 +626,14 @@ func handleCommitRequest(
 	for i, v := range commitMsg.Entries {
 		entryRsp := &sync_pb.CommitResponse_EntryResponse{}
 		commitRsp.Entryresponse[i] = entryRsp
-
-		entityToCommit, err := datastore.CreateDBSyncEntity(v, commitMsg.CacheGuid, clientID)
-		if err != nil { // Can't unmarshal & marshal the message from PB into DB format
-			rspType := sync_pb.CommitResponse_INVALID_MESSAGE
-			entryRsp.ResponseType = &rspType
-			entryRsp.ErrorMessage = aws.String(
-				fmt.Sprintf("Cannot convert protobuf sync entity to DB format: %v", err.Error()),
-			)
-			continue
-		}
-
-		sizeMonitor.Observe(*entityToCommit.DataType, v)
-
-		// Check if ParentID is a client-generated ID which appears in previous
-		// commit entries, if so, replace with corresponding server-generated ID.
-		if entityToCommit.ParentID != nil {
-			if serverParentID, ok := idMap[*entityToCommit.ParentID]; ok {
-				entityToCommit.ParentID = &serverParentID
-			}
-		}
-
-		oldVersion := *entityToCommit.Version
-		isUpdateOp := oldVersion != 0
-		isHistoryRelatedItem := *entityToCommit.DataType == datastore.HistoryTypeID ||
-			*entityToCommit.DataType == datastore.HistoryDeleteDirectiveTypeID
-		*entityToCommit.Version = *entityToCommit.Mtime
-		if *entityToCommit.DataType == datastore.HistoryTypeID {
-			// Check if item exists using client_unique_tag
-			isUpdateOp, err = db.HasItem(ctx, clientID, *entityToCommit.ClientDefinedUniqueTag)
-			if err != nil {
-				log.Error().Err(err).Msg("Insert history sync entity failed")
-				rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
-				entryRsp.ResponseType = &rspType
-				entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Insert history sync entity failed: %v", err.Error()))
-				continue
-			}
-		}
-
-		var interimErr error
-		if !isUpdateOp { // Create
-			if currentNormalItemCount+currentHistoryItemCount+newNormalCount+newHistoryCount >= maxClientObjectQuota+boostedQuotaAddition {
-				rspType := sync_pb.CommitResponse_OVER_QUOTA
-				entryRsp.ResponseType = &rspType
-				entryRsp.ErrorMessage = aws.String(
-					fmt.Sprintf(
-						"There are already %v non-deleted objects in store",
-						currentNormalItemCount+currentHistoryItemCount,
-					),
-				)
-				continue
-			}
-
-			if !isHistoryRelatedItem || currentHistoryItemCount+newHistoryCount < maxClientHistoryObjectQuota {
-				// Insert all non-history items. For history items, ignore any items above history quoto
-				// and lie to the client about the objects being synced instead of returning OVER_QUOTA
-				// so the client can continue to sync other entities.
-				conflict, err := db.InsertSyncEntity(ctx, entityToCommit)
-				if err != nil {
-					log.Error().Err(err).Msg("Insert sync entity failed")
-					rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
-					if conflict {
-						rspType = sync_pb.CommitResponse_CONFLICT
-					}
-					entryRsp.ResponseType = &rspType
-					entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Insert sync entity failed: %v", err.Error()))
-					continue
-				}
-
-				// Save client-generated to server-generated ID mapping when committing
-				// a new entry with OriginatorClientItemID (client-generated ID).
-				if entityToCommit.OriginatorClientItemID != nil {
-					idMap[*entityToCommit.OriginatorClientItemID] = entityToCommit.ID
-				}
-
-				if isHistoryRelatedItem {
-					newHistoryCount, interimErr = cache.IncrementInterimCount(ctx, clientID, historyCountTypeStr, false)
-				} else {
-					newNormalCount, interimErr = cache.IncrementInterimCount(ctx, clientID, normalCountTypeStr, false)
-				}
-			}
-		} else { // Update
-			conflict, deleted, err := db.UpdateSyncEntity(ctx, entityToCommit, oldVersion)
-			if err != nil {
-				log.Error().Err(err).Msg("Update sync entity failed")
-				rspType := sync_pb.CommitResponse_TRANSIENT_ERROR
-				entryRsp.ResponseType = &rspType
-				entryRsp.ErrorMessage = aws.String(fmt.Sprintf("Update sync entity failed: %v", err.Error()))
-				continue
-			}
-			if conflict {
-				rspType := sync_pb.CommitResponse_CONFLICT
-				entryRsp.ResponseType = &rspType
-				continue
-			}
-			if deleted {
-				if isHistoryRelatedItem {
-					newHistoryCount, interimErr = cache.IncrementInterimCount(ctx, clientID, historyCountTypeStr, true)
-				} else {
-					newNormalCount, interimErr = cache.IncrementInterimCount(ctx, clientID, normalCountTypeStr, true)
-				}
-			}
-		}
-		if interimErr != nil {
-			log.Error().Err(interimErr).Msg("Interim count update failed")
+		commitErr := commitEntry(
+			ctx, cache, db, clientID, v, commitMsg.CacheGuid, entryRsp, idMap, typeMtimeMap, &counts, sizeMonitor,
+		)
+		if commitErr != nil {
+			log.Error().Err(commitErr).Msg("Interim count update failed")
 			errCode = sync_pb.SyncEnums_TRANSIENT_ERROR
-			return &errCode, fmt.Errorf("interim count update failed: %w", interimErr)
+			return &errCode, fmt.Errorf("interim count update failed: %w", commitErr)
 		}
-
-		typeMtimeMap[*entityToCommit.DataType] = *entityToCommit.Mtime
-		// Prepare success response
-		rspType := sync_pb.CommitResponse_SUCCESS
-		entryRsp.ResponseType = &rspType
-		entryRsp.IdString = aws.String(entityToCommit.ID)
-		entryRsp.Version = entityToCommit.Version
-		entryRsp.Mtime = entityToCommit.Mtime
 	}
 
 	sizeMonitor.LogWarnings()
@@ -492,6 +713,20 @@ func handleClearServerDataRequest(
 	return &errCode, nil
 }
 
+func applyHandlerError(pbRsp *sync_pb.ClientToServerResponse, err error, wrapMsg string) error {
+	if err == nil {
+		return nil
+	}
+	if pbRsp.ErrorCode != nil {
+		pbRsp.ErrorMessage = aws.String(err.Error())
+		return nil
+	}
+	// In seldom error cases which are not temporary and will not go away
+	// when clients retry, we will not use defined sync error in the proto
+	// response, but use internal server error.
+	return fmt.Errorf("%s: %w", wrapMsg, err)
+}
+
 // HandleClientToServerMessage handles the protobuf ClientToServerMessage and
 // fills the protobuf ClientToServerResponse.
 func HandleClientToServerMessage(
@@ -509,40 +744,27 @@ func HandleClientToServerMessage(
 		SetSyncPollInterval: aws.Int32(setSyncPollInterval),
 		MaxCommitBatchSize:  aws.Int32(maxCommitBatchSize)}
 
-	var err error
 	if pb.MessageContents == nil {
 		return errors.New("nil pb.MessageContents received")
-	} else if *pb.MessageContents == sync_pb.ClientToServerMessage_GET_UPDATES {
+	}
+
+	switch *pb.MessageContents {
+	case sync_pb.ClientToServerMessage_GET_UPDATES:
 		guRsp := &sync_pb.GetUpdatesResponse{}
 		pbRsp.GetUpdates = guRsp
+		var err error
 		pbRsp.ErrorCode, err = handleGetUpdatesRequest(ctx, cache, pb.GetUpdates, guRsp, db, clientID)
-		if err != nil {
-			if pbRsp.ErrorCode != nil {
-				pbRsp.ErrorMessage = aws.String(err.Error())
-				return nil
-			}
-			// In seledom error cases which are not temporary and will not go away
-			// when clients retry, we will not use defined sync error in the proto
-			// response, but use internal server error.
-			return fmt.Errorf("error handling GetUpdates request: %w", err)
-		}
-	} else if *pb.MessageContents == sync_pb.ClientToServerMessage_COMMIT {
+		return applyHandlerError(pbRsp, err, "error handling GetUpdates request")
+	case sync_pb.ClientToServerMessage_COMMIT:
 		commitRsp := &sync_pb.CommitResponse{}
 		pbRsp.Commit = commitRsp
+		var err error
 		pbRsp.ErrorCode, err = handleCommitRequest(context.TODO(), cache, pb.Commit, commitRsp, db, clientID)
-		if err != nil {
-			if pbRsp.ErrorCode != nil {
-				pbRsp.ErrorMessage = aws.String(err.Error())
-				return nil
-			}
-			// In seledom error cases which are not temporary and will not go away
-			// when clients retry, we will not use defined sync error in the proto
-			// response, but use internal server error.
-			return fmt.Errorf("error handling Commit request: %w", err)
-		}
-	} else if *pb.MessageContents == sync_pb.ClientToServerMessage_CLEAR_SERVER_DATA {
+		return applyHandlerError(pbRsp, err, "error handling Commit request")
+	case sync_pb.ClientToServerMessage_CLEAR_SERVER_DATA:
 		csdRsp := &sync_pb.ClearServerDataResponse{}
 		pbRsp.ClearServerData = csdRsp
+		var err error
 		pbRsp.ErrorCode, err = handleClearServerDataRequest(
 			context.Background(),
 			cache,
@@ -550,19 +772,10 @@ func HandleClientToServerMessage(
 			pb.ClearServerData,
 			clientID,
 		)
-		if err != nil {
-			if pbRsp.ErrorCode != nil {
-				pbRsp.ErrorMessage = aws.String(err.Error())
-				return nil
-			}
-			// In seldom error cases which are not temporary and will not go away
-			// when clients retry, we will not use defined sync error in the proto
-			// response, but use internal server error.
-			return fmt.Errorf("error handling ClearServerData request: %w", err)
-		}
-	} else {
+		return applyHandlerError(pbRsp, err, "error handling ClearServerData request")
+	case sync_pb.ClientToServerMessage_DEPRECATED_3, sync_pb.ClientToServerMessage_DEPRECATED_4:
+		fallthrough
+	default:
 		return errors.New("unsupported message type of ClientToServerMessage")
 	}
-
-	return nil
 }

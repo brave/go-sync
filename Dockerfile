@@ -1,4 +1,4 @@
-FROM public.ecr.aws/docker/library/golang:1.26 as builder
+FROM public.ecr.aws/docker/library/golang:1.27 as builder
 
 ARG VERSION
 ARG BUILD_TIME
@@ -13,7 +13,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags "-X github.com/brave/go-sync/server.version=${VERSION} -X github.com/brave/go-sync/server.buildTime=${BUILD_TIME} -X github.com/brave/go-sync/server.commit=${COMMIT}" \
     -o main .
 
-FROM alpine:3.23 as artifact
+FROM alpine:3.24 as artifact
 RUN apk add --update ca-certificates # Certificates for SSL
 COPY --from=builder /src/main main
 

@@ -21,7 +21,7 @@ var (
 
 func TestMain(m *testing.M) {
 	testCtx, logger := server.SetupLogger(context.Background())
-	serverCtx, mux = server.SetupRouter(testCtx, logger)
+	serverCtx, mux = server.SetupRouter(testCtx, logger) //nolint:fatcontext // TestMain assigns shared context once
 	m.Run()
 }
 

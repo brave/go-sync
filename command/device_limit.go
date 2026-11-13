@@ -8,22 +8,22 @@ import (
 const (
 	maxActiveDevices     int = 50
 	highMaxActiveDevices int = 100
+
+	highDeviceLimitClientIDsEnv = "HIGH_DEVICE_LIMIT_CLIENT_IDS"
 )
 
 var (
-	highDeviceLimitClientIDs map[string]bool
+	highDeviceLimitClientIDs = make(map[string]bool)
 )
 
-func init() {
-	clientIDsEnv := os.Getenv("HIGH_DEVICE_LIMIT_CLIENT_IDS")
-	LoadHighDeviceLimitClientIDs(clientIDsEnv)
+func LoadHighDeviceLimitClientIDsFromEnv() {
+	LoadHighDeviceLimitClientIDs(os.Getenv(highDeviceLimitClientIDsEnv))
 }
 
 func LoadHighDeviceLimitClientIDs(clientIDList string) {
 	highDeviceLimitClientIDs = make(map[string]bool)
 	if clientIDList != "" {
-		ids := strings.Split(clientIDList, ",")
-		for _, id := range ids {
+		for id := range strings.SplitSeq(clientIDList, ",") {
 			highDeviceLimitClientIDs[strings.ToLower(strings.TrimSpace(id))] = true
 		}
 	}

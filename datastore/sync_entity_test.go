@@ -3,7 +3,6 @@ package datastore_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -11,8 +10,10 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/testing/protocmp"
 
 	"github.com/brave/go-sync/datastore"
 	"github.com/brave/go-sync/datastore/datastoretest"
@@ -26,7 +27,7 @@ type SyncEntityTestSuite struct {
 }
 
 func (suite *SyncEntityTestSuite) SetupSuite() {
-	datastore.Table = "client-entity-test-datastore"
+	datastore.Table = "client-entity-test-datastore" //nolint:reassign // acceptable for tests
 	var err error
 	suite.dynamo, err = datastore.NewDynamo()
 	suite.Require().NoError(err, "Failed to get dynamoDB session")
@@ -678,13 +679,13 @@ func (suite *SyncEntityTestSuite) TestGetUpdatesForType() {
 
 	mtime := time.Now().UnixMilli()
 	for i := 1; i <= 250; i++ {
-		mtime = mtime + 1
+		mtime++
 		entity := entity1
 		entity.ID = "id" + strconv.Itoa(i)
 		entity.Mtime = aws.Int64(mtime)
 		entity.DataTypeMtime = aws.String("123#" + strconv.FormatInt(*entity.Mtime, 10))
-		_, err := suite.dynamo.InsertSyncEntity(context.Background(), &entity)
-		suite.Require().NoError(err, "InsertSyncEntity should succeed")
+		_, insertErr := suite.dynamo.InsertSyncEntity(context.Background(), &entity)
+		suite.Require().NoError(insertErr, "InsertSyncEntity should succeed")
 		expectedSyncItems = append(expectedSyncItems, entity)
 	}
 
@@ -899,12 +900,7 @@ func (suite *SyncEntityTestSuite) TestCreatePBSyncEntity() {
 	pbEntity, err := datastore.CreatePBSyncEntity(&dbEntity)
 	suite.Require().NoError(err, "CreatePBSyncEntity should succeed")
 
-	// Marshal to json to ignore protobuf internal fields when checking equality.
-	s1, err := json.Marshal(pbEntity)
-	suite.Require().NoError(err, "json.Marshal should succeed")
-	s2, err := json.Marshal(&expectedPBEntity)
-	suite.Require().NoError(err, "json.Marshal should succeed")
-	suite.Equal(s1, s2)
+	suite.Empty(cmp.Diff(&expectedPBEntity, pbEntity, protocmp.Transform()))
 
 	// Nil UniquePosition should be unmarshalled as nil without error.
 	dbEntity.UniquePosition = nil
@@ -1036,7 +1032,7 @@ func (suite *SyncEntityTestSuite) TestClearServerDataPagination() {
 	otherClientID := "client-other"
 
 	insert := func(cid string, count int, specifics []byte) {
-		for i := 0; i < count; i++ {
+		for i := range count {
 			entity := datastore.SyncEntity{
 				ClientID:      cid,
 				ID:            fmt.Sprintf("id-%04d", i),
@@ -1077,6 +1073,40 @@ func (suite *SyncEntityTestSuite) TestClearServerDataPagination() {
 	for _, item := range remaining {
 		suite.Equal(otherClientID, item.ClientID, "only the other chain's items should remain")
 	}
+}
+
+// Production clear-data always DisableSyncChain first, leaving a disabled_chain
+// marker that ClearServerData must skip so IsSyncChainDisabled stays true.
+func (suite *SyncEntityTestSuite) TestClearServerDataSkipsDisabledChainMarker() {
+	entity := datastore.SyncEntity{
+		ClientID:      "client1",
+		ID:            "id1",
+		Version:       aws.Int64(1),
+		Ctime:         aws.Int64(12345678),
+		Mtime:         aws.Int64(12345678),
+		DataType:      aws.Int(123),
+		Folder:        aws.Bool(false),
+		Deleted:       aws.Bool(false),
+		DataTypeMtime: aws.String("123#12345678"),
+	}
+	_, err := suite.dynamo.InsertSyncEntity(context.Background(), &entity)
+	suite.Require().NoError(err, "InsertSyncEntity should succeed")
+
+	suite.Require().NoError(
+		suite.dynamo.DisableSyncChain(context.Background(), entity.ClientID),
+		"DisableSyncChain should succeed")
+
+	cleared, err := suite.dynamo.ClearServerData(context.Background(), entity.ClientID)
+	suite.Require().NoError(err, "ClearServerData should succeed")
+	suite.GreaterOrEqual(len(cleared), 1)
+
+	remaining, err := datastoretest.ScanSyncEntities(suite.dynamo)
+	suite.Require().NoError(err, "ScanSyncEntities should succeed")
+	suite.Empty(remaining, "sync entities should be deleted")
+
+	disabled, err := suite.dynamo.IsSyncChainDisabled(context.Background(), entity.ClientID)
+	suite.Require().NoError(err, "IsSyncChainDisabled should succeed")
+	suite.True(disabled, "disabled_chain marker must not be deleted")
 }
 
 // Some entries have a nil Mtime; ClearServerData must handle them without panicking.
