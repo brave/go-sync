@@ -47,15 +47,26 @@ func createServerDefinedUniqueEntity(
 	return datastore.CreateDBSyncEntity(pbEntity, nil, clientID)
 }
 
+// IsSyncChainInitialized reports whether the server defined unique tag
+// entities have already been inserted for a specific client, which happens
+// when the first device of a sync chain is set up.
+func IsSyncChainInitialized(ctx context.Context, db datastore.Datastore, clientID string) (bool, error) {
+	ready, err := db.HasServerDefinedUniqueTag(ctx, clientID, nigoriTag)
+	if err != nil {
+		return false, fmt.Errorf("error checking if entity with a server tag existed: %w", err)
+	}
+	return ready, nil
+}
+
 // InsertServerDefinedUniqueEntities inserts the server defined unique tag
 // entities if it is not in the DB yet for a specific client.
 func InsertServerDefinedUniqueEntities(ctx context.Context, db datastore.Datastore, clientID string) error {
 	var entities []*datastore.SyncEntity
 	// Check if they're existed already for this client.
 	// If yes, just return directly.
-	ready, err := db.HasServerDefinedUniqueTag(ctx, clientID, nigoriTag)
+	ready, err := IsSyncChainInitialized(ctx, db, clientID)
 	if err != nil {
-		return fmt.Errorf("error checking if entity with a server tag existed: %w", err)
+		return err
 	}
 	if ready {
 		return nil

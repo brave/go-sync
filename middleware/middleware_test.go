@@ -10,10 +10,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/brave/go-sync/auth/authtest"
 	"github.com/brave/go-sync/datastore/datastoretest"
 	"github.com/brave/go-sync/middleware"
+	"github.com/brave/go-sync/schema/protobuf/sync_pb"
 	syncContext "github.com/brave/go-sync/synccontext"
 )
 
@@ -51,6 +53,9 @@ func (suite *MiddlewareTestSuite) TestDisabledChainMiddleware() {
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusOK, rr.Code)
+	rsp := &sync_pb.ClientToServerResponse{}
+	suite.Require().NoError(proto.Unmarshal(rr.Body.Bytes(), rsp), "Unmarshal response should succeed")
+	suite.Require().Equal(sync_pb.SyncEnums_DISABLED_BY_ADMIN, rsp.GetErrorCode())
 
 	// DB error
 	datastore = new(datastoretest.MockDatastore)
@@ -64,6 +69,51 @@ func (suite *MiddlewareTestSuite) TestDisabledChainMiddleware() {
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusInternalServerError, rr.Code)
+}
+
+func (suite *MiddlewareTestSuite) TestDisallowNewChainsMiddleware() {
+	clientID := "0"
+	newRequest := func(isInitialized bool, err error) (*http.Request, *datastoretest.MockDatastore) {
+		datastore := new(datastoretest.MockDatastore)
+		ctx := context.WithValue(context.Background(), syncContext.ContextKeyClientID, clientID)
+		ctx = context.WithValue(ctx, syncContext.ContextKeyDatastore, datastore)
+		datastore.On("HasServerDefinedUniqueTag", ctx, clientID, "google_chrome_nigori").Return(isInitialized, err)
+		req, reqErr := http.NewRequestWithContext(ctx, "POST", "v2/command/", bytes.NewBuffer([]byte{}))
+		suite.Require().NoError(reqErr, "NewRequestWithContext should succeed")
+		return req, datastore
+	}
+
+	// Initialized chain
+	req, datastore := newRequest(true, nil)
+	nextCalled := false
+	next := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		nextCalled = true
+	})
+	rr := httptest.NewRecorder()
+	middleware.DisallowNewChains(next).ServeHTTP(rr, req)
+	suite.Require().Equal(http.StatusOK, rr.Code)
+	suite.Require().True(nextCalled, "Request for an initialized chain should be passed on")
+	datastore.AssertExpectations(suite.T())
+
+	// New chain
+	req, datastore = newRequest(false, nil)
+	next = http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		suite.Fail("Should not reach this point")
+	})
+	rr = httptest.NewRecorder()
+	middleware.DisallowNewChains(next).ServeHTTP(rr, req)
+	suite.Require().Equal(http.StatusOK, rr.Code)
+	rsp := &sync_pb.ClientToServerResponse{}
+	suite.Require().NoError(proto.Unmarshal(rr.Body.Bytes(), rsp), "Unmarshal response should succeed")
+	suite.Require().Equal(sync_pb.SyncEnums_DISABLED_BY_ADMIN, rsp.GetErrorCode())
+	datastore.AssertExpectations(suite.T())
+
+	// DB error
+	req, datastore = newRequest(false, errors.New("unable to query db"))
+	rr = httptest.NewRecorder()
+	middleware.DisallowNewChains(next).ServeHTTP(rr, req)
+	suite.Require().Equal(http.StatusInternalServerError, rr.Code)
+	datastore.AssertExpectations(suite.T())
 }
 
 func (suite *MiddlewareTestSuite) TestAuthMiddleware() {

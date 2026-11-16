@@ -36,25 +36,31 @@ func DisabledChain(next http.Handler) http.Handler {
 		}
 
 		if disabled {
-			errCode := sync_pb.SyncEnums_DISABLED_BY_ADMIN
-			csRsp := sync_pb.ClientToServerResponse{
-				ErrorCode: &errCode,
-			}
-			out, marshalErr := proto.Marshal(&csRsp)
-			if marshalErr != nil {
-				log.Error().Err(marshalErr).Msg("Marshall ClientToServerResponse failed")
-				http.Error(w, "Marshal Error", http.StatusInternalServerError)
-				return
-			}
-
-			w.WriteHeader(http.StatusOK)
-			_, err = w.Write(out)
-			if err != nil {
-				log.Error().Err(err).Msg("Write HTTP response body failed")
-			}
+			writeErrorCodeResponse(w, sync_pb.SyncEnums_DISABLED_BY_ADMIN)
 			return
 		}
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// writeErrorCodeResponse ends the request with a ClientToServerResponse that
+// only carries the given sync error code, so that clients handle it the same
+// way as an error returned while processing the command.
+func writeErrorCodeResponse(w http.ResponseWriter, errCode sync_pb.SyncEnums_ErrorType) {
+	csRsp := sync_pb.ClientToServerResponse{
+		ErrorCode: &errCode,
+	}
+	out, err := proto.Marshal(&csRsp)
+	if err != nil {
+		log.Error().Err(err).Msg("Marshall ClientToServerResponse failed")
+		http.Error(w, "Marshal Error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(out)
+	if err != nil {
+		log.Error().Err(err).Msg("Write HTTP response body failed")
+	}
 }
