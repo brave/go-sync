@@ -24,6 +24,9 @@ Currently we use dynamoDB as the datastore, the schema could be found in `schema
 4. To connect to your local server from a Brave browser client use `--sync-url="http://localhost:8295/v2"`
 5. For running unit tests, run `make docker-test`
 
+## Disallowing new sync chains
+Self-hosted servers can stop accepting new sync chains by setting the `DISALLOW_NEW_SYNC_CHAINS` environment variable to `true`. Sync chains that already exist on the server keep working as usual, including adding new devices to them, while requests made against any other sync chain are answered with a `DISABLED_BY_ADMIN` error. To set up your own sync chains, start the server without this variable, create the chains, and then restart the server with it enabled.
+
 # Updating protocol definitions
 1. Copy the `.proto` files from `components/sync/protocol` in `chromium` to `schema/protobuf/sync_pb` in `go-sync`.
 2. Copy the `.proto` files from `components/sync/protocol` in `brave-core` to `schema/protobuf/sync_pb` in `go-sync`.

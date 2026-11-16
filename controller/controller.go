@@ -4,6 +4,8 @@ import (
 	"compress/gzip"
 	"io"
 	"net/http"
+	"os"
+	"strconv"
 
 	"github.com/brave-intl/bat-go/libs/closers"
 	"github.com/brave-intl/bat-go/libs/middleware"
@@ -21,6 +23,8 @@ import (
 
 const (
 	payloadLimit10MB = 1024 * 1024 * 10
+
+	disallowNewSyncChainsEnv = "DISALLOW_NEW_SYNC_CHAINS"
 )
 
 // SyncRouter add routers for command and auth endpoint requests.
@@ -28,6 +32,9 @@ func SyncRouter(cache *cache.Cache, datastore datastore.Datastore) chi.Router {
 	r := chi.NewRouter()
 	r.Use(syncMiddleware.Auth)
 	r.Use(syncMiddleware.DisabledChain)
+	if disallow, _ := strconv.ParseBool(os.Getenv(disallowNewSyncChainsEnv)); disallow {
+		r.Use(syncMiddleware.DisallowNewChains)
+	}
 	r.Method("POST", "/command/", middleware.InstrumentHandler("Command", Command(cache, datastore)))
 	return r
 }
